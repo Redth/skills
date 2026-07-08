@@ -8,30 +8,57 @@ invoke a skill by name.
 
 ## Plugins
 
-| Plugin | What it does |
-|---|---|
-| **[`skill-reflect`](./skills/skill-reflect/)** | Post-session reflection on how well the **distributed skills** you used actually performed. Detects friction, proposes a concrete fix **and** a verifiable eval, scrubs PII, writes a local Markdown report, and (only on an explicit second consent) files a GitHub issue to the skill's source repo. |
+Each plugin gets its own section below with an elevator pitch, a **consumer**
+quick start (using it), and an **author** quick start (shipping it with your own
+skills).
 
-## Install (Claude Code)
+| Plugin | Elevator pitch | Jump to |
+|---|---|---|
+| **`skill-reflect`** | A privacy-first feedback loop that reflects on how the **distributed skills** you used actually performed, then routes scrubbed, actionable findings (plus verifiable evals) back to their authors. | [↓ skill-reflect](#skill-reflect) |
+
+---
+
+# skill-reflect
+
+**Skills shipped via plugins and marketplaces have no feedback loop once
+deployed.** When an agent follows stale guidance, retries a broken command, or
+works around a missing case, that signal normally disappears. `skill-reflect`
+captures it — with your consent — scrubs every trace of PII, and turns it into a
+structured, actionable report for the skill's author, complete with a proposed
+fix and a machine-checkable eval.
+
+- 🔒 **Consent-gated & local-first.** Default output is a Markdown file on your
+  machine. Nothing is sent anywhere without a second, explicit approval.
+- 🕵️ **No PII, ever.** Names, emails, tokens, keys, paths, machine names, private
+  URLs, and verbatim excerpts are never included — a deterministic scrubber runs
+  as a backstop under the model.
+- 🌐 **Portable.** One prompt-driven skill that runs on Claude Code, Copilot CLI,
+  Gemini CLI, opencode, Amp, and Tier C hosts like Cursor/Codex/Windsurf.
+
+## For consumers — using skill-reflect
+
+Install once, then let it review the skills you use.
+
+**Claude Code:**
 
 ```text
 /plugin marketplace add Redth/skills
 /plugin install skill-reflect@redth-skills
 ```
 
-Installing the plugin also wires two **opt-in, local-only** lifecycle hooks
+Installing also wires two **opt-in, local-only** lifecycle hooks
 (`SessionStart` / `SessionEnd`) that cheaply stage a "pending review" marker when
 a distributed skill hit friction, and offer a non-blocking nudge next session.
 **No AI and no network calls run in the hook** — the actual review only happens
 when you explicitly ask for it. Disable anytime with
-`"nudge": {"enabled": false}` in `skill-reflect.config.json`, or by uninstalling
-the plugin.
+`"nudge": {"enabled": false}` in `skill-reflect.config.json`, or by uninstalling.
 
-## Use on other agents
+**Any agent** — just say:
 
-`skill-reflect` is a portable, prompt-driven skill — the hook layer is a
-progressive enhancement. The core skill runs anywhere via explicit or nudged
-invocation:
+> reflect on the skills I used this session.
+
+**Other agents** use the same portable skill; the hook layer is a progressive
+enhancement:
 
 | Agent | How | Path |
 |---|---|---|
@@ -40,15 +67,36 @@ invocation:
 | **Gemini CLI / opencode / Amp** | Per-agent hook adapters (Tier A/B) | [`integrations/adapters/`](./integrations/adapters/) |
 | **Cursor / Codex / Windsurf** | Explicit invocation + static `AGENTS.md` nudge (Tier C) | [`integrations/adapters/static/`](./integrations/adapters/static/) |
 
-Or just say to any agent: *"reflect on the skills I used this session."*
+## For authors — shipping skill-reflect with your own skills
 
-## For skill authors
+Want privacy-safe field feedback for the skills *you* publish? The recommended
+path is **vendoring**: bundle a copy of `skill-reflect` inside your own plugin,
+pre-scoped to your skills and routed to your repo, so every user who installs
+your plugin gets the feedback loop — no dependency on them installing anything
+extra.
 
-Want privacy-safe feedback for your own plugin's skills? See
-**[AUTHORS.md](./AUTHORS.md)** for the canonical adoption and maintenance guide.
-The recommended path is vendoring with the dev-time `skill-reflect-maintainer`
-skill (bundled in this plugin): manual, author-approved updates; no CI; no
-telemetry; no scheduled network checks.
+The workflow, in short:
+
+1. **Install** the `skill-reflect` plugin in your dev environment. It bundles the
+   dev-time **`skill-reflect-maintainer`** skill (never shipped to your users).
+2. **Adopt** — ask your agent *"adopt skill-reflect into this plugin"*. The
+   maintainer copies the review skill + hooks into your plugin, merges your
+   `hooks.json`, scopes it to your skills, pins the upstream version in
+   `.skill-reflect-vendor.json`, and appends an "Improve This Skill" block to each
+   in-scope `SKILL.md`.
+3. **Stay current** — a local-only, no-network, no-AI `SessionStart` check nudges
+   you when your vendored copy falls behind. Ask *"update skill-reflect"* to
+   re-sync (your config and wording are preserved; drift is flagged).
+4. **Pairs with [skill-creator](https://github.com/anthropics/skills/tree/main/skills/skill-creator).**
+   skill-creator writes *synthetic, author-side* evals before you ship;
+   skill-reflect emits *real-world* evals in the same `evals.json` shape, so field
+   findings drop straight into skill-creator's loop and re-run.
+
+📘 **Full setup, install, and update/maintenance guide:
+[AUTHORS.md](./AUTHORS.md)** (adoption models, the `adopt`/`update`/`doctor`
+engine, wiring reflection into more skills, and dedupe behavior). Binding spec:
+[`docs/CONTRACT.md` §11](./docs/CONTRACT.md). Interop details:
+[`docs/skill-creator-interop.md`](./docs/skill-creator-interop.md).
 
 ## Non-negotiables
 
@@ -60,11 +108,14 @@ telemetry; no scheduled network checks.
 - 🌐 **Local-first.** Default output is a Markdown file. GitHub filing is an explicit
   `gh` action you approve. The hooks never touch the network.
 
+---
+
 ## Repository layout
 
 ```
 .claude-plugin/marketplace.json   # marketplace manifest (this repo)
 skills/skill-reflect/             # the portable core skill (SKILL.md + references/ scripts/ evals/ templates/)
+skills/skill-reflect-maintainer/  # dev-time author tooling: vendor/update/doctor skill-reflect
 hooks/                            # Claude Code plugin hooks (auto-wired on install)
 integrations/
   copilot-cli/skill-reflect-auto/ # Copilot CLI automation extension (reference)
@@ -85,14 +136,6 @@ and a privacy-guard job). Run the same gates locally:
 tools/validate.sh                 # repo-wide: py_compile, unit tests, JSON/shell/node checks
 python3 tools/validate_marketplace.py   # marketplace <-> plugin <-> skill consistency + privacy invariants
 ```
-
-## Relationship to skill-creator
-
-`skill-reflect` is the **field-feedback complement** to Anthropic's
-[skill-creator](https://github.com/anthropics/skills/tree/main/skills/skill-creator):
-skill-creator improves skills with *synthetic, author-side* evals; `skill-reflect`
-produces the *real-world inputs* — friction observed in actual sessions — and emits
-them as `evals.json`-shaped proposed evals that drop straight into skill-creator's loop.
 
 ## License
 
