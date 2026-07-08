@@ -110,6 +110,11 @@ skill across multiple runs and reports a trigger rate.
   Do not write a test assertion or a description of the problem.
 - Must be **self-contained**: no placeholders, no assumed context.
 - Strip all PII: fictional service names, synthetic paths, generic role descriptions.
+- **Invent an analogous domain.** The prompt must exercise the skill's friction without
+  revealing the real product/app/project, its type or purpose, or its implementation. Move
+  the scenario into a neutral, made-up context that shares none of the original specifics
+  (CONTRACT §0.3; `references/privacy-scrub.md` §2a). Example: a payments-portal bug becomes
+  a generic "scaffold a data model with a foreign key" task.
 
 ### 5.2 `expectations` strings (task evals)
 
@@ -129,6 +134,8 @@ skill across multiple runs and reports a trigger rate.
 - `prompt`, `expected_output`, `files`, and all expectation strings must be
   synthetic/paraphrased.
 - Never embed real file paths, hostnames, user aliases, or token values.
+- Never embed product/app/project names, the app's type or purpose, or domain-specific
+  entity/feature names — use invented, analogous stand-ins (`references/privacy-scrub.md` §2a).
 - The scrubber (`scripts/scrub.py`) runs as a backstop; author-side caution is primary.
 
 ---

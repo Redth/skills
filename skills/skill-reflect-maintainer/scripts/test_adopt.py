@@ -53,7 +53,7 @@ class AdoptEngineTests(unittest.TestCase):
         pin = json.loads((self.to / ".skill-reflect-vendor.json").read_text(encoding="utf-8"))
         first_hash = pin["contentHash"]
         self.assertEqual(pin["schema"], 1)
-        self.assertEqual(pin["upstreamVersion"], "1.0.0")
+        self.assertEqual(pin["upstreamVersion"], "1.1.0")
         self.assertEqual(pin["scope"], ["demo-skill"])
         self.assertEqual(pin["destinationRepo"], "acme/widgets")
         self.assertRegex(first_hash, r"^sha256:[0-9a-f]{64}$")
@@ -90,7 +90,7 @@ class AdoptEngineTests(unittest.TestCase):
         code, _, err = self.run_cli("adopt", "--to", str(self.to), "--from", str(self.repo))
         self.assertEqual(code, 0, err)
 
-        code, out, err = self.run_cli("doctor", "--to", str(self.to), "--reference-version", "1.0.0")
+        code, out, err = self.run_cli("doctor", "--to", str(self.to), "--reference-version", "1.1.0")
         self.assertEqual(code, 0, err + out)
 
         code, out, _ = self.run_cli("doctor", "--to", str(self.to), "--reference-version", "9.9.9")
@@ -99,7 +99,7 @@ class AdoptEngineTests(unittest.TestCase):
 
         skill_md = self.to / "skills" / "skill-reflect" / "SKILL.md"
         skill_md.write_text(skill_md.read_text(encoding="utf-8") + "\nlocal edit\n", encoding="utf-8")
-        code, out, _ = self.run_cli("doctor", "--to", str(self.to), "--reference-version", "1.0.0")
+        code, out, _ = self.run_cli("doctor", "--to", str(self.to), "--reference-version", "1.1.0")
         self.assertEqual(code, 11, out)
         self.assertIn("local drift: yes", out)
 
