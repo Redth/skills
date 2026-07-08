@@ -1,6 +1,6 @@
 # Redth/skills
 
-**Jonathan Dick's cross-agent skills marketplace.** A [Claude Code plugin
+**Redth's cross-agent skills marketplace.** A [Claude Code plugin
 marketplace](https://code.claude.com/docs/en/plugin-marketplaces) of portable,
 privacy-respecting [Agent Skills](https://code.claude.com/docs/en/skills) that
 also work on Copilot CLI, Gemini CLI, opencode, Amp, and any agent that can
