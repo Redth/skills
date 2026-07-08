@@ -2,7 +2,7 @@
 
 **Redth's cross-agent skills marketplace.** A [Claude Code plugin
 marketplace](https://code.claude.com/docs/en/plugin-marketplaces) of portable,
-privacy-respecting [Agent Skills](https://code.claude.com/docs/en/skills) that
+privacy-conscious [Agent Skills](https://code.claude.com/docs/en/skills) that
 also work on Copilot CLI, Gemini CLI, opencode, Amp, and any agent that can
 invoke a skill by name.
 
@@ -14,7 +14,7 @@ skills).
 
 | Plugin | Elevator pitch | Jump to |
 |---|---|---|
-| **`skill-reflect`** | A privacy-first feedback loop that reflects on how the **distributed skills** you used actually performed, then routes scrubbed, actionable findings (plus verifiable evals) back to their authors. | [↓ skill-reflect](#skill-reflect) |
+| **`skill-reflect`** | A privacy-conscious feedback loop that reflects on how the **distributed skills** you used actually performed, then routes scrubbed, actionable findings (plus verifiable evals) back to their authors. | [↓ skill-reflect](#skill-reflect) |
 
 ---
 
@@ -23,15 +23,15 @@ skills).
 **Skills shipped via plugins and marketplaces have no feedback loop once
 deployed.** When an agent follows stale guidance, retries a broken command, or
 works around a missing case, that signal normally disappears. `skill-reflect`
-captures it — with your consent — scrubs every trace of PII, and turns it into a
+captures it — with your consent — scrubs PII, and turns it into a
 structured, actionable report for the skill's author, complete with a proposed
 fix and a machine-checkable eval.
 
 - 🔒 **Consent-gated & local-first.** Default output is a Markdown file on your
   machine. Nothing is sent anywhere without a second, explicit approval.
-- 🕵️ **No PII, ever.** Names, emails, tokens, keys, paths, machine names, private
-  URLs, and verbatim excerpts are never included — a deterministic scrubber runs
-  as a backstop under the model.
+- 🕵️ **PII-conscious.** Names, emails, tokens, keys, paths, machine names, private
+  URLs, and verbatim excerpts are paraphrased and scrubbed, with a deterministic
+  scrubber running as a backstop under the model.
 - 🌐 **Portable.** One prompt-driven skill that runs on Claude Code, Copilot CLI,
   Gemini CLI, opencode, Amp, and Tier C hosts like Cursor/Codex/Windsurf.
 
@@ -69,7 +69,7 @@ enhancement:
 
 ## For authors — shipping skill-reflect with your own skills
 
-Want privacy-safe field feedback for the skills *you* publish? The recommended
+Want privacy-conscious field feedback for the skills *you* publish? The recommended
 path is **vendoring**: bundle a copy of `skill-reflect` inside your own plugin,
 pre-scoped to your skills and routed to your repo, so every user who installs
 your plugin gets the feedback loop — no dependency on them installing anything
@@ -102,8 +102,8 @@ engine, wiring reflection into more skills, and dedupe behavior). Binding spec:
 
 - 🔒 **Consent-gated.** Nothing leaves your machine without explicit approval — two
   gates: consent to *review*, then consent to *send* (per destination).
-- 🕵️ **No PII, ever.** Names, emails, tokens, keys, paths, machine names, private
-  URLs, and verbatim transcript excerpts are never included — values are
+- 🕵️ **PII-conscious.** Names, emails, tokens, keys, paths, machine names, private
+  URLs, and verbatim transcript excerpts are kept out of artifacts — values are
   paraphrased, and a deterministic scrubber runs as a backstop under the model.
 - 🌐 **Local-first.** Default output is a Markdown file. GitHub filing is an explicit
   `gh` action you approve. The hooks never touch the network.
