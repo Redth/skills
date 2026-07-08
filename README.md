@@ -75,6 +75,8 @@ pre-scoped to your skills and routed to your repo, so every user who installs
 your plugin gets the feedback loop — no dependency on them installing anything
 extra.
 
+### Set it up (once)
+
 The workflow, in short:
 
 1. **Install** the `skill-reflect` plugin in your dev environment. It bundles the
@@ -91,6 +93,34 @@ The workflow, in short:
    skill-creator writes *synthetic, author-side* evals before you ship;
    skill-reflect emits *real-world* evals in the same `evals.json` shape, so field
    findings drop straight into skill-creator's loop and re-run.
+
+### Once it's live — the loop from your users
+
+After you ship, the feedback loop runs on your users' machines with no action
+required from you. Here is what a single cycle looks like end to end:
+
+1. **A user hits friction.** During a normal session, one of your skills sends the
+   agent down a stale path, a retried command, or a workaround. The vendored
+   `SessionEnd` hook stages a tiny local marker — **no AI, no network.**
+2. **They get a gentle nudge.** Next session, the `SessionStart` hook offers a
+   non-blocking prompt to review. The user can ignore it; nothing else happens.
+3. **They opt in to a review.** `skill-reflect` reflects on that session locally,
+   drafts a scrubbed Markdown report with a proposed fix and a verifiable eval,
+   and shows the user a redaction preview before writing anything.
+4. **They opt in to send.** Only on a second, explicit consent does it run
+   `gh issue create` against the repo you set as `--destination` at adopt time. If
+   they decline, the report stays a local file and you never see it — that's by
+   design.
+5. **You receive a high-signal issue.** What lands in your repo is a PII-scrubbed
+   issue: the friction pattern, a concrete `proposedFix`, and a ready-to-run eval
+   in both the skill-creator and portable formats.
+6. **You close the loop.** Triage it like any bug report: drop the eval into your
+   suite, confirm it fails, apply the fix, confirm it now passes, and ship the
+   update. Your users pull the fix through your normal plugin update path.
+
+Coverage is opportunistic and consent-gated: you only hear from users who both hit
+friction *and* choose to send. Volume is intentionally low, so treat each issue as
+a concentrated, real-world signal rather than routine noise.
 
 📘 **Full setup, install, and update/maintenance guide:
 [AUTHORS.md](./AUTHORS.md)** (adoption models, the `adopt`/`update`/`doctor`
