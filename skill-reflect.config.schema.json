@@ -71,7 +71,13 @@
           "type": "array",
           "items": { "type": "string" },
           "default": [],
-          "description": "Additional regexes to redact on top of the built-in deterministic scrub list."
+          "description": "Additional regexes to redact on top of the built-in deterministic scrub list (scrub.py --pattern; category 'custom')."
+        },
+        "redactTerms": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Literal confidential terms to redact deterministically as 'domain-term' (scrub.py --term): product/app/brand names, internal project names, or codewords that would reveal the domain or the specific app where friction occurred. Case-insensitive, matched on token boundaries. A backstop under the model's semantic domain-abstraction; it does not replace it."
         },
         "redactionPreview": {
           "type": "boolean",

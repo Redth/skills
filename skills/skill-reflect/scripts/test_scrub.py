@@ -436,5 +436,59 @@ class TestFailOnSecret(unittest.TestCase):
         self.assertFalse(hit)
 
 
+# ---------------------------------------------------------------------------
+# Domain/product terms and custom patterns (confidentiality backstop)
+# ---------------------------------------------------------------------------
+
+class TestDomainTermRedaction(unittest.TestCase):
+    def test_literal_product_name_redacted(self):
+        text, findings = scrub_text(
+            "The AcmePay checkout flow failed.", extra_terms=["AcmePay"]
+        )
+        self.assertIn("[REDACTED:domain-term]", text)
+        self.assertNotIn("AcmePay", text)
+        self.assertEqual(_cats(findings).get("domain-term"), 1)
+
+    def test_term_match_is_case_insensitive(self):
+        text, _ = scrub_text("we shipped acmepay today", extra_terms=["AcmePay"])
+        self.assertNotIn("acmepay", text)
+        self.assertIn("[REDACTED:domain-term]", text)
+
+    def test_multiword_term_redacted(self):
+        text, findings = scrub_text(
+            "Contoso Cloud Sync broke.", extra_terms=["Contoso Cloud Sync"]
+        )
+        self.assertNotIn("Contoso Cloud Sync", text)
+        self.assertEqual(_cats(findings).get("domain-term"), 1)
+
+    def test_term_does_not_match_substring_inside_word(self):
+        # 'pay' must not redact 'payment' / 'repayment'.
+        text, _ = scrub_text("the payment repayment path", extra_terms=["pay"])
+        self.assertNotIn("[REDACTED:domain-term]", text)
+
+    def test_no_terms_leaves_text_intact(self):
+        text, findings = scrub_text("The AcmePay checkout flow failed.")
+        self.assertEqual(text, "The AcmePay checkout flow failed.")
+        self.assertNotIn("domain-term", _cats(findings))
+
+    def test_domain_term_not_a_secret_category(self):
+        """Domain terms are confidential context, not 'secrets' for fail-on-secret."""
+        self.assertNotIn("domain-term", SECRET_CATEGORIES)
+
+    def test_custom_pattern_redacted(self):
+        text, findings = scrub_text(
+            "ticket PROJ-1234 filed", extra_patterns=[r"PROJ-\d+"]
+        )
+        self.assertIn("[REDACTED:custom]", text)
+        self.assertNotIn("PROJ-1234", text)
+        self.assertEqual(_cats(findings).get("custom"), 1)
+
+    def test_invalid_pattern_is_skipped(self):
+        # An unbalanced group must not raise; text is returned unchanged.
+        text, findings = scrub_text("hello world", extra_patterns=["(unterminated"])
+        self.assertEqual(text, "hello world")
+        self.assertNotIn("custom", _cats(findings))
+
+
 if __name__ == "__main__":
     unittest.main()

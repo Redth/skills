@@ -68,8 +68,9 @@ consent: review-only            # becomes "sent:<destination>" after a send
   ```
 
 ## Privacy
-This report was scrubbed of names, paths, secrets, and verbatim excerpts. Values are
-paraphrased. Reviewed by the user before creation.
+This report was scrubbed of names, paths, secrets, product/domain specifics, and
+verbatim excerpts. Values are paraphrased and any reproduction details are recast as
+an invented, analogous scenario. Reviewed by the user before creation.
 
 ## Routing
 Suggested destination: <local | owner/repo issue>. Not sent unless the user approves.
@@ -100,7 +101,9 @@ Write 1–3 sentences that describe:
 2. How many findings were identified and their aggregate severity.
 3. A one-phrase description of the dominant friction pattern observed.
 
-**Do not** name the user, name the project, include any paths, or quote any output verbatim.
+**Do not** name the user, name the project, name the product/app or its type, include any
+paths, or quote any output verbatim. Describe the friction generically, not the domain it
+occurred in.
 
 **Example (synthetic):**
 > Reviewed `my-ci-helper` across one session. Found two Medium findings: one instance of
@@ -125,7 +128,7 @@ The short title is a ≤8-word noun phrase describing the finding (no PII, no va
 | Field | Source in `FrictionFinding` | Notes |
 |---|---|---|
 | **Category** | `category` | One of the 6 values from `references/skill-improvement-taxonomy.md`. |
-| **What happened** | `summary` | 1–2 sentences, paraphrased. Describe what the agent was trying to do and where it stumbled. No tool output values. |
+| **What happened** | `summary` | 1–2 sentences, paraphrased. Describe what the agent was trying to do and where it stumbled. No tool output values, and no product/app names, app type, or domain-specific nouns — recast any repro detail as an invented, analogous scenario (`references/privacy-scrub.md` §2a). |
 | **Signal** | `evidence` | The observable signal that led to this finding (e.g. "the advertised `--foo` flag produced an unknown-flag error; agent retried 3 times then used a manual alternative"). Refer to flag/tool names, not their values. |
 | **Proposed fix** | `proposedFix` | A specific, actionable change the skill author can make. E.g. "Update the `setup` step to remove the `--foo` flag, which is no longer valid in v3+." |
 | **Proposed eval** | `proposedEval` (portable form) | A fenced `json` block containing the portable eval. See `references/eval-format.md` for the format. |
@@ -151,8 +154,9 @@ Use this section verbatim (it is fixed text):
 
 ```markdown
 ## Privacy
-This report was scrubbed of names, paths, secrets, and verbatim excerpts. Values are
-paraphrased. Reviewed by the user before creation.
+This report was scrubbed of names, paths, secrets, product/domain specifics, and
+verbatim excerpts. Values are paraphrased and any reproduction details are recast as
+an invented, analogous scenario. Reviewed by the user before creation.
 ```
 
 Do not add user names, project names, or any identifying information here. If the scrubber

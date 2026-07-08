@@ -102,12 +102,19 @@ For every `FrictionFinding`, write a `proposedFix` (a concrete, actionable chang
 author can make — add a case, correct a command, clarify a step) and a `proposedEval` in
 both the **skill-creator `evals.json`** format and the **portable** `must_contain` /
 `must_not_contain` form. The eval prompt should be a realistic task that exercises the
-proposed fix. See `references/eval-format.md` for authoring rules and worked examples.
+proposed fix — but it must be an **invented, analogous task**, not the real one: it must
+exercise the skill's friction without disclosing the product, app type, or implementation
+where it was originally encountered (CONTRACT §0.3; `references/privacy-scrub.md` §2a). See
+`references/eval-format.md` for authoring rules and worked examples.
 
 ### Step 6 · Scrub → preview → report
 
-Paraphrase all findings (no PII, no verbatim excerpts, no absolute paths, no secrets). Run
-`scripts/scrub.py` as a deterministic backstop if available. Show the **full artifact text
+Paraphrase all findings (no PII, no verbatim excerpts, no absolute paths, no secrets, and
+no product/app/project names, app type, or implementation specifics — recast any
+reproduction detail as an invented, analogous scenario per `references/privacy-scrub.md`
+§2a). Run `scripts/scrub.py` as a deterministic backstop if available, passing any
+`privacy.redactTerms` as `--term` and `privacy.extraScrubPatterns` as `--pattern`. Show the
+**full artifact text
 and a redaction summary** to the user before writing anything; ask for explicit confirmation.
 Resolve the routing for each finding per `references/provenance-routing.md`. Write the local
 artifact to `.skill-feedback/<YYYY-MM-DD>-<skill-slug>.md`. Then, if destination mode is
@@ -135,6 +142,7 @@ until Step 6 confirmation is given.
 | Rule | Detail |
 |---|---|
 | No PII | Names, emails, tokens, keys, absolute paths, machine names, private URLs, verbatim transcript excerpts — never in any artifact |
+| No domain leakage | Never reveal product/app/brand/project names, the app's type or purpose, or implementation specifics. Recast reproduction steps as an invented, analogous scenario (`references/privacy-scrub.md` §2a) |
 | Redaction preview mandatory | Always show the full proposed artifact and a scrub summary before writing. `privacy.redactionPreview` is hard-`true`. |
 | Verbatim excerpts forbidden | `privacy.allowTranscriptExcerpts` is hard-`false`. All content is paraphrased. |
 | Consent before every write | Nothing written to disk; nothing filed as an issue until the relevant gate is passed. |

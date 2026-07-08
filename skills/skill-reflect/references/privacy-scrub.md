@@ -25,6 +25,9 @@ pending marker, eval fixture, or inter-component data:
 | Request / response bodies | Verbatim HTTP request/response content |
 | Screenshots | Images of any user's screen, terminal, or browser |
 | Verbatim transcript excerpts | Any raw text copied from the agent's session transcript |
+| Product / project / brand names | App, product, service, brand, or internal project/codename that identifies what was being built |
+| App type / domain identifiers | Descriptions that give away the app's industry, purpose, or category (e.g. "a fintech payments dashboard", "a medical records portal") |
+| Implementation-revealing details | Repro steps, feature names, data models, screen/route names, or business logic specific enough to fingerprint the real app |
 
 ---
 
@@ -49,6 +52,62 @@ pending marker, eval fixture, or inter-component data:
 5. **Report patterns, not payloads.**  When describing a tool failure, say *what the tool
    was asked to do* and *what the failure pattern was*; never include the actual arguments
    or return values.
+
+---
+
+## 2a. Domain & implementation abstraction
+
+> **Authority:** CONTRACT.md §0.3. This is a semantic scrub the **model** performs — the
+> deterministic backstop can only catch terms someone thought to list, so the model is the
+> primary defense here.
+
+The feedback is about **how a skill behaved**, never **what the user was building**. Two
+sessions that hit the same skill bug should produce interchangeable feedback regardless of
+the app, industry, or company involved.
+
+### Rules
+
+1. **Never name the product, app, brand, or project.** Not the real name, not the internal
+   codename, not a lightly-disguised version of it. Refer to "the project" or "the app".
+2. **Never reveal the app's type, industry, or purpose** when it isn't required to explain
+   the skill's failure. "A web app" is usually enough; "a hospital patient-intake portal" is
+   not.
+3. **Strip domain-specific nouns.** Feature names, entity/table names, route and screen
+   names, and business rules are all fingerprints. Replace them with generic analogues
+   ("a record", "a list view", "a form field").
+4. **Recast reproduction steps as an invented, analogous scenario.** Keep the *shape* of the
+   friction — the sequence that made the skill stumble — but relocate it into a neutral,
+   made-up context that shares none of the original specifics. The reader must be able to
+   reproduce the *skill* problem without learning anything about the real app.
+5. **Preserve only what the author needs to fix the skill:** the tool/flag/step involved,
+   the failure pattern, and the corrected behavior. Everything else is domain noise.
+
+### Repro before / after (all synthetic)
+
+**Before (leaks the domain — never emit this):**
+
+> While wiring the **MediTrack** patient-intake portal, I asked the skill to scaffold a
+> `PatientVisit` model with an `insuranceClaimId` foreign key. It generated a migration
+> using the old `belongs_to` syntax, so the claims-reconciliation screen failed to load.
+
+**After (analogized — safe to emit):**
+
+> Using the skill to scaffold a data model with a foreign key to a related record, it
+> emitted a migration using an outdated association syntax; a view that depended on that
+> relationship then failed to load. Reproduce with any two related models where one
+> references the other.
+
+### What changed and why
+
+| Leaked detail | Action |
+|---|---|
+| `MediTrack` (product name) | Removed — refer to "the skill" / "the app" |
+| "patient-intake portal" (app type/industry) | Generalized to "an app" |
+| `PatientVisit`, `insuranceClaimId`, "claims-reconciliation screen" | Replaced with generic analogues ("a data model", "a foreign key", "a view") |
+| The specific repro walkthrough | Recast as a neutral, reproducible scenario that still exercises the skill bug |
+
+The **friction mechanism** (stale association syntax in a generated migration) is fully
+preserved; the **domain** is gone.
 
 ---
 
@@ -140,8 +199,17 @@ Run on **every** piece of content staged to disk or included in an artifact or i
 always, with no exceptions, even if the model scrub was thorough:
 
 ```bash
-python3 skill-reflect/scripts/scrub.py draft.md --report --fail-on-secret
+python3 skill-reflect/scripts/scrub.py draft.md --report --fail-on-secret \
+  $(printf -- '--term %q ' "${redactTerms[@]}") \
+  $(printf -- '--pattern %q ' "${extraScrubPatterns[@]}")
 ```
+
+Pass any `privacy.redactTerms` (product/app/project names) as `--term` and any
+`privacy.extraScrubPatterns` as `--pattern` so the deterministic layer also catches
+configured domain terms (category `domain-term`) and custom patterns (category `custom`).
+These are a **backstop** for the domain abstraction in §2a — the model's semantic rewrite is
+still the primary defense, because product names and implementation details cannot be fully
+enumerated in advance.
 
 If `--fail-on-secret` exits non-zero, the artifact **must be withheld** and the user
 notified; do not proceed to the preview step.

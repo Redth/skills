@@ -15,11 +15,17 @@ and where it hit friction**, then turns that into **structured, PII-safe feedbac
 for the skill's author** — a local Markdown artifact by default, or a GitHub issue
 on explicit second consent.
 
-Two hard constraints, everywhere, no exceptions:
+Hard constraints, everywhere, no exceptions:
 1. **Nothing leaves the user's machine without explicit consent.**
 2. **No PII, secrets, credentials, tokens, private URLs, file paths, machine names,
    or verbatim transcript excerpts** ever appear in any artifact. Paraphrase; refer
    to variable/tool names, never their values.
+3. **No domain leakage.** Do not reveal product/app/brand names, internal project
+   names, the type or purpose of the app, or its specific functionality. Anything
+   that describes *what was being built* — including reproduction steps and
+   challenges — must be recast as an **invented, analogous scenario** that
+   preserves the friction mechanism (what the skill got wrong) without disclosing
+   the real domain, implementation, or where it was encountered.
 
 Design shape: **one portable core skill** (works on every agent via explicit or
 nudged invocation) **+ a progressive automation layer** (opt-in per-agent hooks).
@@ -71,7 +77,8 @@ pointer and nudges; the core skill does the real (model-driven) work, on consent
     "neverForRepos": []
   },
   "privacy": {
-    "extraScrubPatterns": [],            // extra regexes to redact
+    "extraScrubPatterns": [],            // extra regexes to redact (category "custom")
+    "redactTerms": [],                   // literal product/app/project names to redact ("domain-term")
     "redactionPreview": true,            // ALWAYS true; cannot be disabled
     "allowTranscriptExcerpts": false     // ALWAYS false
   },
@@ -201,8 +208,9 @@ consent: review-only            # becomes "sent:<destination>" after a send
   ```
 
 ## Privacy
-This report was scrubbed of names, paths, secrets, and verbatim excerpts. Values are
-paraphrased. Reviewed by the user before creation.
+This report was scrubbed of names, paths, secrets, product/domain specifics, and
+verbatim excerpts. Values are paraphrased and any reproduction details are recast as
+an invented, analogous scenario. Reviewed by the user before creation.
 
 ## Routing
 Suggested destination: <local | owner/repo issue>. Not sent unless the user approves.
@@ -225,17 +233,24 @@ Suggested destination: <local | owner/repo issue>. Not sent unless the user appr
 
 Deterministic, dependency-light (Python 3 stdlib only). Two uses:
 
-- **CLI:** `python3 scrub.py <infile> [--out <outfile>] [--report] [--fail-on-secret]`
+- **CLI:** `python3 scrub.py <infile> [--out <outfile>] [--report] [--fail-on-secret] [--term TERM ...] [--terms-file FILE] [--pattern REGEX ...]`
   - Reads text/markdown/json; redacts; writes to `--out` (or stdout).
   - `--report` prints a summary of what categories were redacted (counts, not values).
   - `--fail-on-secret` exits non-zero if a high-entropy/known-token secret remains.
-- **Importable:** `scrub_text(s: str) -> tuple[str, list[dict]]` returns
-  `(scrubbed_text, findings)` where each finding is `{ "category": str, "count": int }`.
+  - `--term` / `--terms-file` redact literal confidential terms (product/app/project
+    names, codewords) as `domain-term`; `--pattern` redacts extra regexes as `custom`.
+    Populate these from config `privacy.redactTerms` and `privacy.extraScrubPatterns`.
+- **Importable:** `scrub_text(s, extra_terms=None, extra_patterns=None) -> tuple[str, list[dict]]`
+  returns `(scrubbed_text, findings)` where each finding is `{ "category": str, "count": int }`.
 
 Must detect at minimum: emails, common tokens/keys (AWS, GitHub `ghp_/gho_/ghs_`,
 Slack, Google API, PEM blocks, JWTs, bearer tokens), high-entropy strings, absolute
 file paths (`/Users/...`, `/home/...`, `C:\...`), machine/user names in paths, and
-IP addresses. This is the **deterministic backstop** layered under the model's scrub.
+IP addresses, plus any configured `domain-term`/`custom` values. This is the
+**deterministic backstop** layered under the model's scrub. The `domain-term`
+denylist is a backstop for domain/product leakage — the model's semantic
+abstraction (CONTRACT §0.3) remains the primary defense, since product names and
+implementation details are open-ended and cannot be fully enumerated.
 
 ---
 
