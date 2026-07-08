@@ -1,0 +1,22 @@
+{
+  "name": "redth-skills",
+  "owner": {
+    "name": "Jonathan Dick (Redth)",
+    "url": "https://github.com/Redth"
+  },
+  "metadata": {
+    "description": "Jonathan Dick's collection of portable, cross-agent skills for Claude Code, Copilot CLI, and friends.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "skill-reflect",
+      "description": "Post-session reflection on distributed skill performance. Detects friction, classifies it, proposes a concrete fix plus a verifiable eval, scrubs PII, and writes a local Markdown report. Filing a GitHub issue requires an explicit second consent. Ships opt-in SessionStart/SessionEnd hooks that stage a tiny local marker (no AI, no network) and offer a non-blocking review nudge.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/skill-reflect"
+      ]
+    }
+  ]
+}

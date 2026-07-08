@@ -1,0 +1,85 @@
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Marketplace / plugin / skill manifest consistency ──────────────────────
+  marketplace:
+    name: Marketplace & manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate marketplace <-> plugin <-> skill + privacy invariants
+        run: |
+          python3 tools/validate_marketplace.py | tee "$GITHUB_STEP_SUMMARY"
+
+  # ── Skill unit tests + syntax gates (py_compile, node --check, JSON, shell) ─
+  test:
+    name: Skill tests & syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Repo-wide validation gate
+        run: bash tools/validate.sh
+
+  # ── Privacy guard: the scrubber must catch secrets and pass clean content ───
+  privacy-guard:
+    name: Privacy guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Scrubber flags a known-dirty fixture (must exit non-zero)
+        run: |
+          set +e
+          python3 skills/skill-reflect/scripts/scrub.py --fail-on-secret \
+            skills/skill-reflect/evals/files/pdf-forms-session.md > /dev/null 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::scrub.py did NOT flag the known-dirty fixture (expected non-zero exit)"
+            exit 1
+          fi
+          echo "scrubber flagged the dirty fixture (exit $rc) -- OK"
+      - name: A scrubbed artifact stays clean (must exit zero)
+        run: |
+          python3 skills/skill-reflect/scripts/scrub.py --fail-on-secret \
+            examples/dogfood/2026-01-01-pdf-forms.md > /dev/null
+          echo "scrubbed artifact passed with no secrets -- OK"
+      - name: Privacy invariants across every config
+        run: python3 tools/validate_marketplace.py
+
+  # ── Optional community SKILL.md linter (non-blocking, informational) ────────
+  skill-lint:
+    name: Skill lint (community, non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint SKILL.md structure & references
+        uses: Flash-Brew-Digital/validate-skill@v1
+        with:
+          path: skills/skill-reflect
+          fail-on-warning: "false"
+          validate-references: "true"

@@ -1,0 +1,25 @@
+{
+  "_comment": "MANUAL install only. Preferred path: install the skill-reflect plugin from this marketplace, which wires these hooks automatically via hooks/hooks.json. For a manual install, replace <REPO> with the absolute path to your clone of Redth/skills and merge this 'hooks' block into ~/.claude/settings.json.",
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 <REPO>/hooks/stage_pending.py"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 <REPO>/hooks/nudge_start.py"
+          }
+        ]
+      }
+    ]
+  }
+}

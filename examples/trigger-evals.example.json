@@ -1,0 +1,6 @@
+[
+  { "query": "Publish the latest build artifact to the container registry using container-toolkit.", "should_trigger": true },
+  { "query": "Deploy the staging container image to the eu-west zone.", "should_trigger": true },
+  { "query": "List all files in the current working directory.", "should_trigger": false },
+  { "query": "Explain the history of containerisation technology.", "should_trigger": false }
+]

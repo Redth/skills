@@ -1,0 +1,35 @@
+{
+  "skill_name": "container-toolkit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Deploy the staging container image to the eu-west zone using container-toolkit.",
+      "expected_output": "Agent invokes container-toolkit with the current '--region' flag and successfully queues the deployment.",
+      "files": [],
+      "expectations": [
+        "The output uses the '--region' flag",
+        "The output does not use the deprecated '--deploy-region' flag"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Using container-toolkit, push an image to the registry. Assume the current session auth token has already expired mid-workflow. Show how to recover and complete the push.",
+      "expected_output": "Agent detects the expired token, follows the skill's re-auth guidance to refresh credentials, and successfully completes the push without restarting the session.",
+      "files": [],
+      "expectations": [
+        "The output describes a token refresh or re-authentication step",
+        "The output does not end the workflow without completing the push"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Using container-toolkit, build and tag an image for the staging environment, then list available tags.",
+      "expected_output": "Agent uses the correct tagging convention from the skill guidance and successfully lists the image tags for the staging environment.",
+      "files": ["evals/files/sample-dockerfile.txt"],
+      "expectations": [
+        "The output includes a valid image tag for the staging environment",
+        "The output does not apply a production tag in a staging context"
+      ]
+    }
+  ]
+}

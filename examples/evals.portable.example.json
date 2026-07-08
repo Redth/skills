@@ -1,0 +1,14 @@
+[
+  {
+    "id": "ct-7e2a1f",
+    "prompt": "Deploy the staging container image to the eu-west zone using container-toolkit.",
+    "must_contain":     ["--region"],
+    "must_not_contain": ["--deploy-region"]
+  },
+  {
+    "id": "ct-4b8d3c",
+    "prompt": "Using container-toolkit, push an image to the registry. Assume the current session auth token has already expired mid-workflow. Show how to recover and complete the push.",
+    "must_contain":     ["re-auth"],
+    "must_not_contain": ["permission denied"]
+  }
+]

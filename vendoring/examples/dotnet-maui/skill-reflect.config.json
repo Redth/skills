@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "mode": "vendored",
+  "scope": {
+    "skills": [
+      "dotnet-maui-doctor",
+      "maui-app-lifecycle",
+      "maui-data-binding",
+      "maui-dependency-injection",
+      "maui-safe-area",
+      "maui-shell-navigation",
+      "maui-collectionview",
+      "maui-theming",
+      "binlog-failure-analysis",
+      "native-library-bindings"
+    ],
+    "excludeSkills": ["skill-reflect", "skill-reflect-auto"]
+  },
+  "destination": {
+    "mode": "issue",
+    "repo": "dotnet/maui-labs"
+  },
+  "nudge": {
+    "enabled": true,
+    "frictionThreshold": 3,
+    "throttleHours": 24,
+    "neverForSkills": [],
+    "neverForRepos": []
+  },
+  "privacy": {
+    "extraScrubPatterns": [
+      "\\bMaui[A-Z]\\w*Token\\b",
+      "\\bXamarin\\w*Key\\b"
+    ],
+    "redactionPreview": true,
+    "allowTranscriptExcerpts": false
+  },
+  "eval": {
+    "emitFormats": ["skill-creator", "portable"],
+    "evalsOutPath": ".skill-feedback/evals"
+  },
+  "artifactDir": ".skill-feedback"
+}

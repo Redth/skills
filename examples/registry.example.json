@@ -1,0 +1,15 @@
+{
+  "_comment": "Illustrative registry — copy to ~/.skill-reflect/registry.json and edit.",
+
+  "maui-shell-navigation": "dotnet/maui",
+
+  "code-testing-agent": {
+    "repo": "redth/dotnet-code-testing-agent",
+    "ref": "main"
+  },
+
+  "mise-v2-standard-agent": {
+    "repo": "microsoft/s360-breeze-toolkit",
+    "ref": "release/v2"
+  }
+}

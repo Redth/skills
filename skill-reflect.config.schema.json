@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/redth/skill-reflect/skill-reflect.config.schema.json",
+  "title": "skill-reflect configuration",
+  "description": "Configuration for the skill-reflect universal skill-feedback reviewer. All fields optional; the skill works with no config file using these defaults.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "integer", "const": 1, "default": 1 },
+    "mode": {
+      "type": "string",
+      "enum": ["standalone", "vendored"],
+      "default": "standalone",
+      "description": "standalone = installed by an end user to review any distributed skill; vendored = copied into a plugin, pre-scoped to that plugin's skills with a hardcoded destination."
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "skills": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Allowlist of skill names or globs to reflect on. Empty = all DISTRIBUTED skills."
+        },
+        "excludeSkills": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["skill-reflect", "skill-reflect-auto"]
+        }
+      }
+    },
+    "destination": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["local", "issue", "ask"],
+          "default": "ask",
+          "description": "local = only write a Markdown artifact; issue = offer to file a GitHub issue after second consent; ask = decide per run."
+        },
+        "repo": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "owner/repo used for vendored/hardcoded routing when provenance can't be auto-resolved."
+        },
+        "registryMapPath": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Path to a JSON map of skill-name -> owner/repo. Overrides $SKILL_REFLECT_HOME/registry.json."
+        }
+      }
+    },
+    "nudge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "frictionThreshold": { "type": "integer", "minimum": 1, "default": 2 },
+        "throttleHours": { "type": "number", "minimum": 0, "default": 12 },
+        "neverForSkills": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "neverForRepos": { "type": "array", "items": { "type": "string" }, "default": [] }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extraScrubPatterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Additional regexes to redact on top of the built-in deterministic scrub list."
+        },
+        "redactionPreview": {
+          "type": "boolean",
+          "const": true,
+          "default": true,
+          "description": "Always true. The exact artifact is shown for review before anything is written or sent."
+        },
+        "allowTranscriptExcerpts": {
+          "type": "boolean",
+          "const": false,
+          "default": false,
+          "description": "Always false. Verbatim transcript excerpts are never included; content is paraphrased."
+        }
+      }
+    },
+    "eval": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "emitFormats": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["skill-creator", "portable"] },
+          "default": ["skill-creator", "portable"]
+        },
+        "evalsOutPath": { "type": "string", "default": ".skill-feedback/evals" }
+      }
+    },
+    "artifactDir": { "type": "string", "default": ".skill-feedback" }
+  }
+}

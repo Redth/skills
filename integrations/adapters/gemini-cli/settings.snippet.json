@@ -1,0 +1,11 @@
+{
+  "_comment": "ASSUMPTION: Gemini CLI hook config shape. Verify field names (hooks/session_end vs SessionEnd, command vs script) against Gemini CLI documentation. Replace placeholder paths before use.",
+  "hooks": {
+    "session_end": {
+      "command": "python3 /REPLACE/WITH/FULL/PATH/skill-reflect/adapters/gemini-cli/stage_pending.py"
+    },
+    "session_start": {
+      "command": "python3 /REPLACE/WITH/FULL/PATH/skill-reflect/adapters/gemini-cli/nudge_start.py"
+    }
+  }
+}

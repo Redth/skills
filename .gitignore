@@ -1,0 +1,19 @@
+# skill-reflect writes local feedback artifacts here by default. They are
+# scrubbed of PII/secrets, but are private and should not be committed unless
+# you explicitly choose to. Remove this line if you want to track them.
+.skill-feedback/
+
+# skill-reflect runtime state (pending markers, config) lives outside the repo
+# (~/.skill-reflect/) but ignore any local copy just in case.
+.skill-reflect/
+
+# Node (skill-reflect-auto extension dev)
+node_modules/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store

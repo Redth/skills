@@ -1,0 +1,50 @@
+name: New skill proposal
+description: Propose a new skill for this marketplace (open before sending a PR).
+title: "[skill] <proposed-skill-name>"
+labels: ["new-skill"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please propose new skills **before** opening a PR so we can align on
+        scope. One skill per proposal.
+  - type: input
+    id: name
+    attributes:
+      label: Proposed skill name
+      placeholder: kebab-case, e.g. release-notes-writer
+    validations:
+      required: true
+  - type: textarea
+    id: purpose
+    attributes:
+      label: Purpose
+      description: What does it do, and what are its non-goals?
+    validations:
+      required: true
+  - type: textarea
+    id: triggers
+    attributes:
+      label: When should it trigger?
+      description: Natural-language phrases a user would say to invoke it (these become the SKILL.md description).
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Rough workflow
+      description: The main steps the skill would walk the agent through.
+  - type: textarea
+    id: evals
+    attributes:
+      label: How would you eval it?
+      description: A sketch of 1-3 evals (prompt + what the output must / must not contain).
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: The skill will be self-contained (no references outside its own directory).
+          required: true
+        - label: Any scripts will be stdlib Python 3.8+ or POSIX shell, cross-platform, no network by default.
+          required: true
