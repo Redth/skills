@@ -17,6 +17,12 @@
       "skills": [
         "./skills/skill-reflect"
       ]
+    },
+    {
+      "name": "skill-reflect-maintainer",
+      "description": "Dev-time author tooling to adopt, update, doctor, and wire a vendored copy of skill-reflect into your own plugin's skills. Ships a deterministic adopt/update/doctor engine (no AI, no network unless you pass --from-github) and a LOCAL-only SessionStart update-check nudge. Not intended for redistribution to end users.",
+      "source": "./plugins/skill-reflect-maintainer",
+      "strict": false
     }
   ]
 }

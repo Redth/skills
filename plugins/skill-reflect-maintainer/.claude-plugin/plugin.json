@@ -1,0 +1,9 @@
+{
+  "name": "skill-reflect-maintainer",
+  "version": "1.0.0",
+  "description": "Dev-time author tooling to adopt, update, doctor, and wire vendored skill-reflect copies into plugin skill repositories.",
+  "author": {
+    "name": "Jonathan Dick (Redth)",
+    "url": "https://github.com/Redth"
+  }
+}

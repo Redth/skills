@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/redth/skill-reflect/vendor_pin.schema.json",
+  "title": "skill-reflect vendor pin",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "upstreamVersion",
+    "sourceRepo",
+    "sourceRef",
+    "vendoredAt",
+    "targets",
+    "contentHash",
+    "scope",
+    "destinationRepo"
+  ],
+  "properties": {
+    "schema": { "type": "integer", "const": 1 },
+    "upstreamVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$" },
+    "sourceRepo": { "type": "string", "minLength": 1 },
+    "sourceRef": { "type": "string", "minLength": 1 },
+    "vendoredAt": { "type": "string", "format": "date-time" },
+    "targets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skill", "hooks", "autoExtension"],
+      "properties": {
+        "skill": { "type": "string", "minLength": 1 },
+        "hooks": { "type": "string", "minLength": 1 },
+        "autoExtension": { "type": ["string", "null"] }
+      }
+    },
+    "contentHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "scope": { "type": "array", "items": { "type": "string" } },
+    "destinationRepo": { "type": ["string", "null"] }
+  }
+}

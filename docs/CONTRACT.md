@@ -295,3 +295,119 @@ and `skill-reflect-auto` are always excluded (§2 `excludeSkills`).
 
 Every adapter stages the SAME marker shape (§8) into `$SKILL_REFLECT_HOME/pending/`
 and defers all real work to the portable core skill.
+
+---
+
+## 11. Adoption & maintenance (author-side)
+
+This section governs the **author-adoption** workstream: how a skill/plugin author
+**vendors** `skill-reflect` into their own plugin and **keeps that copy up to date**.
+Every component in this workstream binds to the names, paths, shapes, and exit codes
+here. User-chosen constraints for v1: **vendoring-first**, a **maintainer skill +
+SessionStart nudge**, **manual (author-approved) updates**, and **no CI**.
+
+### 11.1 Versioning anchor (the thing "check for updates" compares against)
+- `skills/skill-reflect/VERSION` — a single semver line (e.g. `1.0.0`). The canonical
+  version of the core skill; bump when the core skill changes.
+- `CHANGELOG.md` (repo root) — Keep-a-Changelog format, newest first, one section per
+  released core-skill version.
+- The maintainer plugin ships `plugins/skill-reflect-maintainer/VENDORED_SKILL_VERSION`
+  = the `skills/skill-reflect/VERSION` value it bundles/knows (equal at build time).
+  This file is the **local** reference the update-check compares a vendored pin against,
+  so the check needs **no network**.
+
+### 11.2 Vendor pin file — `.skill-reflect-vendor.json`
+Written into the author's plugin at the parent of the vendored skill dir. Shape:
+```jsonc
+{
+  "schema": 1,
+  "upstreamVersion": "1.0.0",          // skills/skill-reflect/VERSION at vendor time
+  "sourceRepo": "Redth/skills",
+  "sourceRef": "main",                 // branch/tag/sha adopted from
+  "vendoredAt": "ISO8601",
+  "targets": {                         // relative paths inside the author's plugin
+    "skill": "skills/skill-reflect",
+    "hooks": "hooks",
+    "autoExtension": null              // e.g. "extensions/skill-reflect-auto" or null
+  },
+  "contentHash": "sha256:…",           // hash of the vendored skill tree at adopt time -> drift detection
+  "scope": ["their-skill-a", "their-skill-b"], // author skills to collect feedback for
+  "destinationRepo": "owner/their-repo"        // hardcoded routing for vendored mode
+}
+```
+
+### 11.3 Engine CLI — `plugins/skill-reflect-maintainer/tools/adopt.py`
+Python 3 **stdlib only**, deterministic, **no AI**. Network **only** when `--from-github`
+is explicitly passed (and it prints a notice first). Refuses to write outside `--to`.
+Supports `--dry-run` on `adopt`/`update`. Subcommands:
+
+- `adopt --to <plugin-dir> [--from <redth-skills-checkout> | --from-github Redth/skills[@ref]]
+   [--skill-target <rel>] [--hooks-target <rel>] [--with-auto] [--scope a,b]
+   [--destination owner/repo]`
+  - Copies `skills/skill-reflect/` → `<to>/<skill-target default: skills/skill-reflect>`.
+  - Copies the marketplace-level `hooks/stage_pending.py` + `hooks/nudge_start.py` →
+    `<to>/<hooks-target default: hooks>/`.
+  - **Merges** the SessionStart/SessionEnd command entries into an existing
+    `<to>/hooks/hooks.json` (creates it if absent) **without clobbering** the author's
+    other hooks; commands use `${CLAUDE_PLUGIN_ROOT}`.
+  - Optionally copies `integrations/copilot-cli/skill-reflect-auto/` when `--with-auto`.
+  - Writes `.skill-reflect-vendor.json` (§11.2) with a computed `contentHash`, `scope`,
+    `destinationRepo`.
+  - Scaffolds `<to>/skill-reflect.config.json` (`mode:"vendored"`, `scope`,
+    `destination.repo`, `destination.mode:"ask"`) **only if absent**; NEVER overwrites an
+    existing config.
+  - Idempotent; safe to re-run.
+- `update --to <plugin-dir> [--from … | --from-github …] [--to-version <semver|ref>] [--force]`
+  - Re-syncs the skill + hook scripts, **preserving** `<to>/skill-reflect.config.json` and
+    any author edits to their own skills' nudge wording. Re-merges hooks.json. Re-stamps
+    the pin (new `upstreamVersion`/`sourceRef`/`vendoredAt`/`contentHash`).
+  - **Refuses (exit 3)** if local drift is detected (see `doctor`) unless `--force`, so
+    author edits are never silently clobbered; prints what drifted.
+- `doctor --to <plugin-dir> [--reference-version <semver>]`
+  - Reports, changing nothing: (a) **update available?** `pin.upstreamVersion` vs the
+    reference (default: the maintainer plugin's `VENDORED_SKILL_VERSION`, else
+    `--reference-version`); (b) **local drift?** recomputed hash vs `pin.contentHash`;
+    (c) config valid vs `skill-reflect.config.schema.json`; (d) both hook commands present
+    in `<to>/hooks/hooks.json`; (e) the reference/nudge block present in each scoped
+    skill's `SKILL.md`.
+  - Exit codes: `0` healthy & current; `10` update available; `11` drift; `12`
+    config/hooks/nudge problem. A human-readable summary prints regardless of exit code.
+
+### 11.4 Maintainer skill — `skills/skill-reflect-maintainer` (dev-time; NOT redistributed)
+A **portable core skill for the plugin author** (audience differs from `skill-reflect`,
+whose audience is the end user). The author keeps it in their dev environment / repo
+tooling; it **never ships to the author's end users**. It is a thin conversational wrapper
+over §11.3 — it orchestrates the deterministic engine and edits files; it does not
+re-implement the engine. Responsibilities:
+- **"adopt skill-reflect into this plugin"** → runs `adopt`, helps pick targets/scope/
+  destination, then appends the "Improve This Skill" reference block (from
+  `skill-reflect/templates/improve-this-skill.md`) to each in-scope `SKILL.md`.
+- **"check for updates" / "is my copy current"** → runs `doctor`; only does a live GitHub
+  check if the author explicitly asks.
+- **"update skill-reflect"** → runs `update` (author-approved), summarizes the CHANGELOG
+  delta, and surfaces any drift for the author to resolve.
+- **"wire reflection into `<skill>`"** → injects the reference block + adds the skill to the
+  vendored config `scope`.
+- Always excluded from reflection. Its `SKILL.md` MUST state it is dev-time / not for
+  redistribution to end users.
+
+### 11.5 Maintainer update-check hook (Tier A; LOCAL-ONLY, no network)
+`plugins/skill-reflect-maintainer/hooks/` — a SessionStart hook `check_updates.py` +
+`hooks.json`. Mirrors `hooks/nudge_start.py`'s home/throttle discipline.
+- On SessionStart: if the cwd (walking up) contains a `.skill-reflect-vendor.json`,
+  compare its `upstreamVersion` to `${CLAUDE_PLUGIN_ROOT}/VENDORED_SKILL_VERSION`
+  (**local read; NO network**). If behind, print **one** non-blocking nudge naming the
+  vendored version vs available and saying: ask the `skill-reflect-maintainer` skill to
+  "update skill-reflect" — and that nothing changes without approval.
+- Throttle via `$SKILL_REFLECT_HOME/maintainer-throttle.json` (a **distinct** key from the
+  review nudge's `throttle.json`), default **24h**, written BEFORE printing.
+- Stdlib only; never raises into the host; always `exit 0`. **No AI, no network, no
+  auto-update.** MUST NOT interfere with the review staging/nudge hooks (different files,
+  throttle, and purpose).
+
+### 11.6 Double-fire / dedupe
+All hooks share `$SKILL_REFLECT_HOME`. If a user has BOTH a central `skill-reflect` and a
+vendored copy active, the **review** nudge dedupes by skill name at the marker level
+(existing §8 behavior). The maintainer **update-check** is per-vendored-pin and
+independent of the review nudge. The author guide documents this so authors don't fear
+double-nudging their users.

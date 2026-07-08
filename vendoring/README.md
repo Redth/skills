@@ -1,47 +1,64 @@
 # vendoring/
 
-This directory contains everything a **plugin or marketplace author** needs to vendor
-`skill-reflect` into their own plugin — pre-scoped to their skills, with feedback
-routed to their repository.
+This directory supports authors who vendor `skill-reflect` into their own plugin.
+The canonical entry point is **[AUTHORS.md](../AUTHORS.md)**.
 
 ## Contents
 
 | File / Dir | Purpose |
 |---|---|
-| [`vendor.md`](vendor.md) | **Start here.** Full step-by-step vendoring guide: when to vendor, what to copy, how to configure, provenance in vendored mode, custom nudge wording, keeping in sync, privacy reminder. |
-| [`skill-reflect.config.vendored.example.json`](skill-reflect.config.vendored.example.json) | A fully-filled, schema-valid vendored config example (host: `dotnet/maui-labs`). Copy and adapt for your plugin. |
-| [`sync_vendor.sh`](sync_vendor.sh) | POSIX shell helper to copy `skill-reflect/` (and optionally `skill-reflect-auto/`) from a source checkout into your plugin directory. Never overwrites your `skill-reflect.config.json`. |
-| [`examples/dotnet-maui/`](examples/dotnet-maui/) | Worked example: vendoring into the `dotnet/maui-labs` plugin. Shows the post-vendoring directory layout, the per-host config, and how to embed the "Improve This Skill" nudge in each skill. |
+| [`../AUTHORS.md`](../AUTHORS.md) | Start here: canonical author workflow. |
+| [`vendor.md`](vendor.md) | Deep reference for vendored layout, config, hooks, and the minimal copy helper. |
+| [`skill-reflect.config.vendored.example.json`](skill-reflect.config.vendored.example.json) | Config example. |
+| [`sync_vendor.sh`](sync_vendor.sh) | Minimal POSIX copy helper. |
+| [`examples/dotnet-maui/`](examples/dotnet-maui/) | Worked example of a vendored plugin layout. |
 
-## Quick start
+## Recommended path
+
+Use the dev-time **`skill-reflect-maintainer`** plugin and ask it to:
+
+> adopt skill-reflect into this plugin
+
+It runs `plugins/skill-reflect-maintainer/tools/adopt.py adopt`, writes the
+`.skill-reflect-vendor.json` pin, merges SessionStart/SessionEnd hooks, scaffolds
+vendored config if absent, and wires the Improve This Skill blocks into scoped
+skills.
+
+Equivalent CLI:
 
 ```sh
-# 1. Clone skill-reflect
-git clone https://github.com/redth/skill-reflect /tmp/skill-reflect-src
-
-# 2. Copy core (and optional automation extension) into your plugin
-/tmp/skill-reflect-src/vendoring/sync_vendor.sh \
-  --from /tmp/skill-reflect-src \
-  --to   /path/to/your-plugin \
-  --with-auto
-
-# 3. Copy and adapt the vendored config
-cp /tmp/skill-reflect-src/vendoring/skill-reflect.config.vendored.example.json \
-   /path/to/your-plugin/skill-reflect.config.json
-# Edit: set destination.repo, scope.skills, nudge thresholds, any extraScrubPatterns
-
-# 4. Add "Improve This Skill" nudge blocks to your skills' SKILL.md files
-#    (see vendor.md §Custom nudge wording)
+python3 plugins/skill-reflect-maintainer/tools/adopt.py adopt \
+  --to <your-plugin> \
+  --from <redth-skills-checkout> \
+  --scope skill-a,skill-b \
+  --destination you/your-repo
 ```
 
-## Vendored safety model
+## Manual updates, no CI
 
-Vendoring **does not** weaken skill-reflect's privacy or consent guarantees. The vendor
-config changes only the default *destination* (`destination.repo`) and *scope*
-(`scope.skills`) — nothing else. The two mandatory consent gates (Gate 1: review
-consent; Gate 2: send consent) remain in force, the deterministic scrubber always runs
-as a backstop, `privacy.redactionPreview` is hard-enforced as `true`, and
-`privacy.allowTranscriptExcerpts` is hard-enforced as `false`. Nothing leaves the
-user's machine without their explicit approval. A local `.skill-feedback/` Markdown
-artifact is always created first; GitHub issue filing is an additive, user-approved
-step only.
+The maintainer plugin's SessionStart hook performs a local-only version check:
+`.skill-reflect-vendor.json` `upstreamVersion` versus its bundled
+`VENDORED_SKILL_VERSION`. It makes no network calls and never updates anything by
+itself. When it nudges, ask the maintainer skill to `update skill-reflect`, review
+`CHANGELOG.md`, and approve the file changes manually.
+
+## No-frills fallback
+
+If you only need a basic copy, run:
+
+```sh
+vendoring/sync_vendor.sh \
+  --from <redth-skills-checkout> \
+  --to <your-plugin> \
+  --with-auto
+```
+
+The fallback copies:
+
+- `skills/skill-reflect/` to `<your-plugin>/skills/skill-reflect/`;
+- `hooks/stage_pending.py` and `hooks/nudge_start.py` to `<your-plugin>/hooks/`;
+- `hooks/hooks.json` only when the target has none;
+- optionally `integrations/copilot-cli/skill-reflect-auto/` to
+  `<your-plugin>/extensions/skill-reflect-auto/`.
+
+It never overwrites an existing `<your-plugin>/skill-reflect.config.json`.
