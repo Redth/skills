@@ -47,8 +47,10 @@ dependency instead of vendoring it.
 
 ## Vendoring, the easy way
 
-Install the **`skill-reflect-maintainer`** plugin in your development
-environment only. Do **not** redistribute it to your end users. Then ask your
+Install the **`skill-reflect`** plugin in your development environment; it
+bundles the dev-time **`skill-reflect-maintainer`** skill. The `adopt` engine
+copies only the review skill and its hooks into your plugin, so the maintainer
+skill and its update-check hook never reach your end users. Then ask your
 agent:
 
 > adopt skill-reflect into this plugin
@@ -56,7 +58,7 @@ agent:
 The maintainer skill is a conversational wrapper over the deterministic engine:
 
 ```text
-plugins/skill-reflect-maintainer/tools/adopt.py
+skills/skill-reflect-maintainer/scripts/adopt.py
 ```
 
 For adoption it runs `adopt`, then:
@@ -73,7 +75,7 @@ For adoption it runs `adopt`, then:
 Equivalent manual CLI:
 
 ```sh
-python3 plugins/skill-reflect-maintainer/tools/adopt.py adopt \
+python3 skills/skill-reflect-maintainer/scripts/adopt.py adopt \
   --to <your-plugin> \
   --from <redth-skills-checkout> \
   --scope skill-a,skill-b \
@@ -89,10 +91,10 @@ merge hooks intelligently.
 Updates are **manual in v1**. There is **no CI requirement**, no telemetry, and
 no scheduled network check.
 
-The maintainer plugin includes a `SessionStart` hook. When you work inside a
-plugin that contains `.skill-reflect-vendor.json`, it walks up from the current
-working directory, reads that pin, and compares `upstreamVersion` to the locally
-installed maintainer plugin's `VENDORED_SKILL_VERSION`.
+The `skill-reflect` plugin includes a `SessionStart` update-check hook. When you
+work inside a plugin that contains `.skill-reflect-vendor.json`, it walks up from
+the current working directory, reads that pin, and compares `upstreamVersion` to
+the locally installed plugin's `skills/skill-reflect/VERSION`.
 
 That check is local-only:
 
@@ -108,7 +110,7 @@ When nudged, ask:
 The maintainer runs:
 
 ```sh
-python3 plugins/skill-reflect-maintainer/tools/adopt.py update --to <your-plugin>
+python3 skills/skill-reflect-maintainer/scripts/adopt.py update --to <your-plugin>
 ```
 
 `update` re-syncs the skill and hook scripts, preserves your
@@ -123,7 +125,7 @@ versions.
 For health checks, the engine also provides:
 
 ```sh
-python3 plugins/skill-reflect-maintainer/tools/adopt.py doctor --to <your-plugin>
+python3 skills/skill-reflect-maintainer/scripts/adopt.py doctor --to <your-plugin>
 ```
 
 Per `docs/CONTRACT.md` §11.3, `doctor` exits `0` when healthy and current, `10`
@@ -161,11 +163,11 @@ copy is behind. It is not an end-user feedback nudge.
 ## Checklist
 
 - [ ] Choose vendored mode unless you have a strong reason not to.
-- [ ] Install `skill-reflect-maintainer` in your author/dev environment only.
+- [ ] Install the `skill-reflect` plugin (it bundles the `skill-reflect-maintainer` skill) in your author/dev environment.
 - [ ] Run `adopt` with your plugin path, skill scope, and destination repo.
 - [ ] Review `.skill-reflect-vendor.json`, `skill-reflect.config.json`, hooks, and
       the inserted Improve This Skill blocks.
-- [ ] Do not redistribute the maintainer plugin to end users.
+- [ ] Confirm `adopt` vendored only the review skill + hooks (the maintainer skill and update-check hook stay in your dev plugin).
 - [ ] On update nudges, run `update`, read `CHANGELOG.md`, review the diff, and
       approve manually.
 

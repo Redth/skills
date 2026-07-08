@@ -304,17 +304,18 @@ This section governs the **author-adoption** workstream: how a skill/plugin auth
 **vendors** `skill-reflect` into their own plugin and **keeps that copy up to date**.
 Every component in this workstream binds to the names, paths, shapes, and exit codes
 here. User-chosen constraints for v1: **vendoring-first**, a **maintainer skill +
-SessionStart nudge**, **manual (author-approved) updates**, and **no CI**.
+SessionStart nudge** (both bundled in the single `skill-reflect` plugin),
+**manual (author-approved) updates**, and **no CI**.
 
 ### 11.1 Versioning anchor (the thing "check for updates" compares against)
 - `skills/skill-reflect/VERSION` — a single semver line (e.g. `1.0.0`). The canonical
   version of the core skill; bump when the core skill changes.
 - `CHANGELOG.md` (repo root) — Keep-a-Changelog format, newest first, one section per
   released core-skill version.
-- The maintainer plugin ships `plugins/skill-reflect-maintainer/VENDORED_SKILL_VERSION`
-  = the `skills/skill-reflect/VERSION` value it bundles/knows (equal at build time).
-  This file is the **local** reference the update-check compares a vendored pin against,
-  so the check needs **no network**.
+- The `skill-reflect` plugin bundles both the core skill and the maintainer skill, so
+  `skills/skill-reflect/VERSION` is the single source of truth. The installed plugin's own
+  `skills/skill-reflect/VERSION` is the **local** reference the update-check compares a
+  vendored pin against, so the check needs **no network**.
 
 ### 11.2 Vendor pin file — `.skill-reflect-vendor.json`
 Written into the author's plugin at the parent of the vendored skill dir. Shape:
@@ -336,7 +337,7 @@ Written into the author's plugin at the parent of the vendored skill dir. Shape:
 }
 ```
 
-### 11.3 Engine CLI — `plugins/skill-reflect-maintainer/tools/adopt.py`
+### 11.3 Engine CLI — `skills/skill-reflect-maintainer/scripts/adopt.py`
 Python 3 **stdlib only**, deterministic, **no AI**. Network **only** when `--from-github`
 is explicitly passed (and it prints a notice first). Refuses to write outside `--to`.
 Supports `--dry-run` on `adopt`/`update`. Subcommands:
@@ -365,7 +366,7 @@ Supports `--dry-run` on `adopt`/`update`. Subcommands:
     author edits are never silently clobbered; prints what drifted.
 - `doctor --to <plugin-dir> [--reference-version <semver>]`
   - Reports, changing nothing: (a) **update available?** `pin.upstreamVersion` vs the
-    reference (default: the maintainer plugin's `VENDORED_SKILL_VERSION`, else
+    reference (default: the plugin's own `skills/skill-reflect/VERSION`, else
     `--reference-version`); (b) **local drift?** recomputed hash vs `pin.contentHash`;
     (c) config valid vs `skill-reflect.config.schema.json`; (d) both hook commands present
     in `<to>/hooks/hooks.json`; (e) the reference/nudge block present in each scoped
@@ -375,8 +376,10 @@ Supports `--dry-run` on `adopt`/`update`. Subcommands:
 
 ### 11.4 Maintainer skill — `skills/skill-reflect-maintainer` (dev-time; NOT redistributed)
 A **portable core skill for the plugin author** (audience differs from `skill-reflect`,
-whose audience is the end user). The author keeps it in their dev environment / repo
-tooling; it **never ships to the author's end users**. It is a thin conversational wrapper
+whose audience is the end user). It is bundled alongside the core skill in the single
+`skill-reflect` plugin, but the `adopt` engine vendors **only** the core skill + review
+hooks into an author's plugin (§11.3 `HOOK_SCRIPTS` allowlist), so this skill **never
+ships to the author's end users**. It is a thin conversational wrapper
 over §11.3 — it orchestrates the deterministic engine and edits files; it does not
 re-implement the engine. Responsibilities:
 - **"adopt skill-reflect into this plugin"** → runs `adopt`, helps pick targets/scope/
@@ -392,10 +395,12 @@ re-implement the engine. Responsibilities:
   redistribution to end users.
 
 ### 11.5 Maintainer update-check hook (Tier A; LOCAL-ONLY, no network)
-`plugins/skill-reflect-maintainer/hooks/` — a SessionStart hook `check_updates.py` +
-`hooks.json`. Mirrors `hooks/nudge_start.py`'s home/throttle discipline.
+`hooks/check_updates.py` in the `skill-reflect` plugin — a SessionStart hook registered in
+the plugin's `hooks/hooks.json` alongside the review hooks. Mirrors `hooks/nudge_start.py`'s
+home/throttle discipline. The `adopt` engine does NOT vendor this hook to authors (only
+`stage_pending.py` + `nudge_start.py`), so an author's end users never receive it.
 - On SessionStart: if the cwd (walking up) contains a `.skill-reflect-vendor.json`,
-  compare its `upstreamVersion` to `${CLAUDE_PLUGIN_ROOT}/VENDORED_SKILL_VERSION`
+  compare its `upstreamVersion` to `${CLAUDE_PLUGIN_ROOT}/skills/skill-reflect/VERSION`
   (**local read; NO network**). If behind, print **one** non-blocking nudge naming the
   vendored version vs available and saying: ask the `skill-reflect-maintainer` skill to
   "update skill-reflect" — and that nothing changes without approval.

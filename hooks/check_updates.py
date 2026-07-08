@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-skill-reflect-maintainer — Claude Code SessionStart update-check hook.
+skill-reflect maintainer — Claude Code SessionStart update-check hook.
 
 Compares the vendored skill-reflect version pinned in the current plugin with
-this maintainer plugin's local VENDORED_SKILL_VERSION file and prints a short,
-non-blocking nudge when an update is available.
+the version shipped by this installed plugin (skills/skill-reflect/VERSION) and
+prints a short, non-blocking nudge when an update is available.
 
 Hard constraints:
   - Local-only: no AI, no network calls, no auto-update.
@@ -187,7 +187,7 @@ def main() -> None:
         return
 
     vendored_raw = pin.get("upstreamVersion")
-    available_raw = _read_text(plugin_root() / "VENDORED_SKILL_VERSION")
+    available_raw = _read_text(plugin_root() / "skills" / "skill-reflect" / "VERSION")
     vendored = _parse_semver(vendored_raw)
     available = _parse_semver(available_raw)
     if vendored is None or available is None or vendored >= available:

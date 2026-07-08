@@ -16,11 +16,11 @@ The privacy model is unchanged:
 
 ## Preferred author workflow
 
-Use the dev-time **`skill-reflect-maintainer`** plugin, not this directory's
+Use the dev-time **`skill-reflect-maintainer`** skill, not this directory's
 fallback script, for normal adoption and maintenance.
 
 ```sh
-python3 plugins/skill-reflect-maintainer/tools/adopt.py adopt \
+python3 skills/skill-reflect-maintainer/scripts/adopt.py adopt \
   --to <your-plugin> \
   --from <redth-skills-checkout> \
   --scope skill-a,skill-b \
@@ -150,13 +150,13 @@ This block is only a consent-first nudge. To add a skill later, add it to
 Updates are manual and author-approved. There is no CI requirement and no
 scheduled network check in v1.
 
-The maintainer SessionStart hook compares your local `.skill-reflect-vendor.json`
-`upstreamVersion` to the maintainer plugin's local `VENDORED_SKILL_VERSION`. If
+The SessionStart update-check hook compares your local `.skill-reflect-vendor.json`
+`upstreamVersion` to the installed plugin's `skills/skill-reflect/VERSION`. If
 you are behind, it prints one throttled nudge. Nothing changes until you ask the
 maintainer skill to update.
 
 ```sh
-python3 plugins/skill-reflect-maintainer/tools/adopt.py update --to <your-plugin>
+python3 skills/skill-reflect-maintainer/scripts/adopt.py update --to <your-plugin>
 ```
 
 `update` preserves `skill-reflect.config.json`, preserves your own skills' nudge
@@ -166,7 +166,7 @@ Read `CHANGELOG.md`, review the diff, and approve manually.
 For diagnostics:
 
 ```sh
-python3 plugins/skill-reflect-maintainer/tools/adopt.py doctor --to <your-plugin>
+python3 skills/skill-reflect-maintainer/scripts/adopt.py doctor --to <your-plugin>
 ```
 
 `doctor` exits `0` healthy/current, `10` update available, `11` drift, or `12`

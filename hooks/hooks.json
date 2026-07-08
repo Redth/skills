@@ -18,6 +18,14 @@
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/nudge_start.py\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/check_updates.py\""
+          }
+        ]
       }
     ]
   }

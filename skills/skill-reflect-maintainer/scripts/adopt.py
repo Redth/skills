@@ -63,10 +63,6 @@ def _read_json(path: Path, default: Any) -> Any:
         raise AdoptError(f"Invalid JSON in {path}: {exc}") from exc
 
 
-def _plugin_root() -> Path:
-    return Path(__file__).resolve().parents[1]
-
-
 def _normalize_rel(rel: str) -> PurePosixPath:
     rel = rel.replace("\\", "/").strip("/")
     if not rel or rel.startswith("../") or "/../" in f"/{rel}/" or rel == "..":
@@ -399,10 +395,13 @@ def _update(args: argparse.Namespace) -> int:
 def _reference_version(args: argparse.Namespace) -> str:
     if args.reference_version:
         return args.reference_version
-    version_file = _plugin_root() / "VENDORED_SKILL_VERSION"
+    # Folded single-plugin layout: the core skill's VERSION is the single source of
+    # truth. This engine lives at skills/skill-reflect-maintainer/scripts/adopt.py, so
+    # the reference is the sibling skill's VERSION at skills/skill-reflect/VERSION.
+    version_file = Path(__file__).resolve().parents[2] / "skill-reflect" / "VERSION"
     if version_file.is_file():
         return version_file.read_text(encoding="utf-8").strip()
-    raise AdoptError("Missing VENDORED_SKILL_VERSION; pass --reference-version")
+    raise AdoptError("Missing skills/skill-reflect/VERSION; pass --reference-version")
 
 
 def _validate_config(to_root: Path) -> list[str]:

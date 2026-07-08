@@ -47,8 +47,8 @@ Or just say to any agent: *"reflect on the skills I used this session."*
 Want privacy-safe feedback for your own plugin's skills? See
 **[AUTHORS.md](./AUTHORS.md)** for the canonical adoption and maintenance guide.
 The recommended path is vendoring with the dev-time `skill-reflect-maintainer`
-plugin: manual, author-approved updates; no CI; no telemetry; no scheduled
-network checks.
+skill (bundled in this plugin): manual, author-approved updates; no CI; no
+telemetry; no scheduled network checks.
 
 ## Non-negotiables
 

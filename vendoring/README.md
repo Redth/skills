@@ -15,11 +15,11 @@ The canonical entry point is **[AUTHORS.md](../AUTHORS.md)**.
 
 ## Recommended path
 
-Use the dev-time **`skill-reflect-maintainer`** plugin and ask it to:
+Use the dev-time **`skill-reflect-maintainer`** skill and ask it to:
 
 > adopt skill-reflect into this plugin
 
-It runs `plugins/skill-reflect-maintainer/tools/adopt.py adopt`, writes the
+It runs `skills/skill-reflect-maintainer/scripts/adopt.py adopt`, writes the
 `.skill-reflect-vendor.json` pin, merges SessionStart/SessionEnd hooks, scaffolds
 vendored config if absent, and wires the Improve This Skill blocks into scoped
 skills.
@@ -27,7 +27,7 @@ skills.
 Equivalent CLI:
 
 ```sh
-python3 plugins/skill-reflect-maintainer/tools/adopt.py adopt \
+python3 skills/skill-reflect-maintainer/scripts/adopt.py adopt \
   --to <your-plugin> \
   --from <redth-skills-checkout> \
   --scope skill-a,skill-b \
@@ -36,9 +36,9 @@ python3 plugins/skill-reflect-maintainer/tools/adopt.py adopt \
 
 ## Manual updates, no CI
 
-The maintainer plugin's SessionStart hook performs a local-only version check:
-`.skill-reflect-vendor.json` `upstreamVersion` versus its bundled
-`VENDORED_SKILL_VERSION`. It makes no network calls and never updates anything by
+The `skill-reflect` plugin's SessionStart update-check hook performs a local-only
+version check: `.skill-reflect-vendor.json` `upstreamVersion` versus the installed
+plugin's `skills/skill-reflect/VERSION`. It makes no network calls and never updates anything by
 itself. When it nudges, ask the maintainer skill to `update skill-reflect`, review
 `CHANGELOG.md`, and approve the file changes manually.
 

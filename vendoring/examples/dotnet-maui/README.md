@@ -5,7 +5,7 @@ plugin: `skill-reflect` is bundled, scoped to MAUI skills, and routed to the
 plugin's issue tracker.
 
 For the canonical author workflow, see [AUTHORS.md](../../../AUTHORS.md). Use
-the dev-time `skill-reflect-maintainer` plugin for adoption and manual updates.
+the dev-time `skill-reflect-maintainer` skill for adoption and manual updates.
 
 ## Post-vendoring directory layout
 
@@ -106,12 +106,12 @@ If the user says **yes**, invoke the `skill-reflect` skill:
 Preferred maintenance is manual and author-approved through the maintainer skill:
 
 ```sh
-python3 plugins/skill-reflect-maintainer/tools/adopt.py doctor --to <maui-labs>
-python3 plugins/skill-reflect-maintainer/tools/adopt.py update --to <maui-labs>
+python3 skills/skill-reflect-maintainer/scripts/adopt.py doctor --to <maui-labs>
+python3 skills/skill-reflect-maintainer/scripts/adopt.py update --to <maui-labs>
 ```
 
-The maintainer SessionStart hook checks only local files: the vendored pin's
-`upstreamVersion` against its bundled `VENDORED_SKILL_VERSION`. It does not make
+The SessionStart update-check hook checks only local files: the vendored pin's
+`upstreamVersion` against the installed plugin's `skills/skill-reflect/VERSION`. It does not make
 network calls and never updates automatically.
 
 For a basic copy-only fallback:

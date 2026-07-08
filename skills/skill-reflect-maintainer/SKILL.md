@@ -14,9 +14,14 @@ license: MIT
 It vendors and maintains `skill-reflect` inside an author's plugin repository, and it is
 **always excluded from reflection**.
 
-This skill is intentionally thin: it orchestrates `tools/adopt.py` and edits author-owned
+This skill is intentionally thin: it orchestrates `scripts/adopt.py` and edits author-owned
 `SKILL.md` files. Do not re-implement the deterministic adopt/update/doctor engine in the
 conversation.
+
+**Engine path:** `skills/skill-reflect-maintainer/scripts/adopt.py`, relative to the
+`skill-reflect` plugin root (the installed plugin directory, or a `Redth/skills` checkout).
+When run from there, the engine auto-detects its `--from` source (the bundled
+`skills/skill-reflect/`), so `--from` is only needed to override it.
 
 ## Flows
 
@@ -27,7 +32,7 @@ Follow `references/adopt-workflow.md`: choose `--to`, `--scope`, `--destination`
 `--with-auto`, then run:
 
 ```bash
-python3 plugins/skill-reflect-maintainer/tools/adopt.py adopt --to <plugin-dir> --from <redth-skills-checkout> --scope <a,b> --destination <owner/repo>
+python3 skills/skill-reflect-maintainer/scripts/adopt.py adopt --to <plugin-dir> --from <redth-skills-checkout> --scope <a,b> --destination <owner/repo>
 ```
 
 After adoption, append the exact reference block from
@@ -39,7 +44,7 @@ Use when the author asks whether their copy is current or healthy. Follow
 `references/update-workflow.md` and run:
 
 ```bash
-python3 plugins/skill-reflect-maintainer/tools/adopt.py doctor --to <plugin-dir>
+python3 skills/skill-reflect-maintainer/scripts/adopt.py doctor --to <plugin-dir>
 ```
 
 Only perform a live GitHub check if the author explicitly asks.
@@ -50,7 +55,7 @@ Use when the author approves an update. Summarize the `CHANGELOG.md` delta, surf
 and run:
 
 ```bash
-python3 plugins/skill-reflect-maintainer/tools/adopt.py update --to <plugin-dir> --from <redth-skills-checkout>
+python3 skills/skill-reflect-maintainer/scripts/adopt.py update --to <plugin-dir> --from <redth-skills-checkout>
 ```
 
 If drift blocks the update, report it. Use `--force` only after explicit author approval.

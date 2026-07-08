@@ -11,18 +11,13 @@
   "plugins": [
     {
       "name": "skill-reflect",
-      "description": "Post-session reflection on distributed skill performance. Detects friction, classifies it, proposes a concrete fix plus a verifiable eval, scrubs PII, and writes a local Markdown report. Filing a GitHub issue requires an explicit second consent. Ships opt-in SessionStart/SessionEnd hooks that stage a tiny local marker (no AI, no network) and offer a non-blocking review nudge.",
+      "description": "Post-session reflection on distributed skill performance. Detects friction, classifies it, proposes a concrete fix plus a verifiable eval, scrubs PII, and writes a local Markdown report. Filing a GitHub issue requires an explicit second consent. Ships opt-in SessionStart/SessionEnd hooks that stage a tiny local marker (no AI, no network) and offer a non-blocking review nudge. Also bundles the dev-time skill-reflect-maintainer skill so plugin authors can vendor, update, and doctor a copy of skill-reflect in their own plugins.",
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/skill-reflect"
+        "./skills/skill-reflect",
+        "./skills/skill-reflect-maintainer"
       ]
-    },
-    {
-      "name": "skill-reflect-maintainer",
-      "description": "Dev-time author tooling to adopt, update, doctor, and wire a vendored copy of skill-reflect into your own plugin's skills. Ships a deterministic adopt/update/doctor engine (no AI, no network unless you pass --from-github) and a LOCAL-only SessionStart update-check nudge. Not intended for redistribution to end users.",
-      "source": "./plugins/skill-reflect-maintainer",
-      "strict": false
     }
   ]
 }

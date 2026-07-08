@@ -9,6 +9,7 @@ documented (for manual installs) in
 |---|---|---|
 | `SessionEnd` | [`stage_pending.py`](./stage_pending.py) | Reads the session transcript, detects distributed-skill usage + friction, and — only if a distributed skill crossed the friction threshold — writes `~/.skill-reflect/pending/<session-id>.json` (a tiny CONTRACT §8 marker). |
 | `SessionStart` | [`nudge_start.py`](./nudge_start.py) | If unresolved markers exist and the nudge isn't throttled, surfaces a one-line, non-blocking offer to review last session's friction. |
+| `SessionStart` | [`check_updates.py`](./check_updates.py) | **Author-only.** If the current working tree contains a `.skill-reflect-vendor.json` pin, compares its `upstreamVersion` to this plugin's `skills/skill-reflect/VERSION` and prints one throttled nudge when the vendored copy is behind. Silent for everyone else. See [`../AUTHORS.md`](../AUTHORS.md). |
 
 ## Guarantees
 
@@ -22,6 +23,10 @@ documented (for manual installs) in
   content, paths, or user data. See [`../docs/CONTRACT.md`](../docs/CONTRACT.md) §§7–9.
 - **Self-excluding.** `skill-reflect` and `skill-reflect-auto` are always excluded
   from tracking.
+- **Author update-check is separate.** `check_updates.py` throttles via
+  `~/.skill-reflect/maintainer-throttle.json` (distinct from the review nudge's
+  `throttle.json`) and is **not** copied into vendoring authors' plugins by the
+  `adopt` engine — only `stage_pending.py` + `nudge_start.py` are vendored.
 
 ## Configuration
 

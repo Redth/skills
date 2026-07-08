@@ -3,8 +3,8 @@
 #
 # For versioned adopt/update/doctor with drift detection, .skill-reflect-vendor.json,
 # hooks.json merging, scoped nudge stamping, and manual author-approved updates, use
-# the skill-reflect-maintainer plugin engine instead:
-#   plugins/skill-reflect-maintainer/tools/adopt.py
+# the skill-reflect-maintainer skill's engine instead:
+#   skills/skill-reflect-maintainer/scripts/adopt.py
 # See AUTHORS.md for the canonical author guide.
 #
 # This helper only copies the current checkout layout into a host plugin directory.
@@ -172,5 +172,5 @@ else
     printf '        %s/vendoring/skill-reflect.config.vendored.example.json\n' "$FROM"
 fi
 
-printf '\nFor versioned maintenance, run the skill-reflect-maintainer plugin (AUTHORS.md).\n'
+printf '\nFor versioned maintenance, run the skill-reflect-maintainer skill (AUTHORS.md).\n'
 printf 'Done.\n'
