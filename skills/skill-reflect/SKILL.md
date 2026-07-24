@@ -133,9 +133,10 @@ See `references/eval-format.md`.
 
 ### Step 6 · Scrub + deliver by mode
 
-Apply the model paraphrase scrub to every output. Run `scripts/scrub.py - --report
---fail-on-secret` as a deterministic backstop, passing configured `--term` and `--pattern`
-values. If a secret category is detected, withhold the output and redraft.
+Apply the model paraphrase scrub to every output. Run `scripts/scrub.py` as a deterministic
+backstop, reading standard input via `-` and enabling `--report` and `--fail-on-secret`;
+pass configured `--term` and `--pattern` values. If a secret category is detected, withhold
+the output and redraft.
 
 - **Analysis:** return the scrubbed summary and findings in chat, then stop. Do not create a
   preview of the answer, write a file, resolve a routing question, or offer GitHub filing
