@@ -6,7 +6,7 @@ model, a new reference file) actually improves things — instead of asserting
 it in prose. The reference instance is
 [`experiments/skill-reflect-v1.1.0-vs-v1.2.0/`](experiments/skill-reflect-v1.1.0-vs-v1.2.0/README.md),
 comparing the released `skill-reflect` v1.1.0 against the in-progress v1.2.0
-using the skill's own 13 task evals + 15 trigger evals.
+using the skill's own 14 task evals + 16 trigger evals.
 
 ## Why this exists (and what it deliberately does NOT do)
 
@@ -77,7 +77,7 @@ python3 summarize.py --run-dir /tmp/ab-run-1 --experiment "$EXP/experiment.json"
 # acceptance gate failed (pass --no-fail-on-gate to only report).
 ```
 
-The reference configuration emits **504 packets** (28 cases × 3 models ×
+The reference configuration emits **540 packets** (30 cases × 3 models ×
 3 repetitions × 2 variants). Do not plan to execute that matrix by hand.
 Use the manual runner walkthrough below to prove the integration on one pair,
 then use Arena or another batch executor for the full run.

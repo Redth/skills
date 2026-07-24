@@ -1167,8 +1167,9 @@ plugin to point to an attacker's endpoint, enabling silent exfiltration of trend
 
 ### 8.8 Proposed eval deduplication across sessions
 
-**Risk:** Multiple distillation runs may emit duplicate `proposedEval` entries with
-different integer `id` values to `.skill-feedback/evals/<slug>.evals.json`.
+**Risk:** Multiple distillation runs followed by separately authorized eval exports may emit
+duplicate `proposedEval` entries with different integer `id` values to
+`.skill-feedback/evals/<slug>.evals.json`.
 
 **Mitigation (reusing `skill-creator-interop.md` guidance):** Each eval's `id` in the
 v2 artifact is derived from the cluster's `cluster_id` short-id (first 8 chars of

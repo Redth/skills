@@ -28,6 +28,10 @@
     "should_trigger": true
   },
   {
+    "query": "Why did the pipeline-auditor skill miss the validation assumption in this session? Analyze only; do not save or send anything.",
+    "should_trigger": true
+  },
+  {
     "query": "Audit this SKILL.md file for clarity, structure, and best practices before I publish it.",
     "should_trigger": false
   },

@@ -9,7 +9,7 @@
 | **Eval origin** | Author-written, synthetic, pre-release | Real-world sessions, post-field |
 | **Who authors** | Skill developer, before shipping | Running agent, during/after a session |
 | **What they test** | "Does this skill do what I intended?" | "Did this skill cover what users actually needed?" |
-| **Input to harness** | `evals/evals.json` (wrapped `{skill_name, evals:[…]}`) in the skill repo | A proposed eval in chat, or `.skill-feedback/evals/<slug>.evals.json` when the user requests artifact output |
+| **Input to harness** | `evals/evals.json` (wrapped `{skill_name, evals:[…]}`) in the skill repo | A proposed eval in chat or a schema-2 report; separately authorized exports may use `.skill-feedback/evals/<slug>.evals.json` |
 | **PII posture** | Synthetic by construction | Scrubbed before emission (see CONTRACT §7) |
 
 Together they form a complete eval lifecycle: skill-creator covers the **author's
@@ -31,8 +31,11 @@ Given the default config:
 }
 ```
 
-Analysis mode includes the proposed eval in chat and writes nothing. When the user explicitly
-requests artifact output, skill-reflect may write:
+Analysis mode includes the proposed eval in chat and writes nothing. Artifact mode embeds the
+configured eval forms in the schema-2 Markdown report. A report request authorizes only that
+announced report; it does not authorize sidecar files under `.skill-feedback/evals/`.
+
+When the user separately requests and authorizes eval export, skill-reflect may write:
 
 ```
 .skill-feedback/evals/
@@ -45,12 +48,12 @@ requests artifact output, skill-reflect may write:
 
 ---
 
-## 3. Feeding emitted evals to skill-creator's harness
+## 3. Feeding separately exported evals to skill-creator's harness
 
 ### 3.1 Merge into the skill repo's eval file
 
-The emitted `<slug>.evals.json` uses the same wrapped shape as the skill's
-`evals/evals.json`. Merge the `evals` arrays with `jq`:
+After a separately authorized export, `<slug>.evals.json` uses the same wrapped shape as the
+skill's `evals/evals.json`. Merge the `evals` arrays with `jq`:
 
 ```bash
 # merge new field evals into the skill's existing eval suite
@@ -95,7 +98,7 @@ python scripts/aggregate_benchmark.py --results grading.json
 python scripts/run_loop.py
 ```
 
-For trigger evals emitted by skill-reflect:
+For separately exported trigger evals:
 ```bash
 python scripts/run_eval.py --eval-set .skill-feedback/evals/container-toolkit.trigger-evals.json
 ```
@@ -165,11 +168,16 @@ Session ends
     ▼
 skill-reflect reflects, classifies findings, and proposes evals in chat
     │
-    │  explicit save request
+    │  explicit report save request
+    ▼
+.skill-feedback/<date>-<slug>.md
+  (schema-2 report with proposed evals embedded)
+    │
+    │  separate eval-export request + local-write authorization
     ├─ trigger-problem findings ──────────────────────────────────────────┐
     │                                                                     ▼
     ▼                                               .skill-feedback/evals/<slug>.trigger-evals.json
-FrictionFinding.proposedEval optionally written to  (trigger eval set [{query, should_trigger}])
+Export FrictionFinding.proposedEval to               (trigger eval set [{query, should_trigger}])
   .skill-feedback/evals/<slug>.evals.json            ↓
   (wrapped: {skill_name, evals:[…]})        run_eval.py --eval-set <file>
   .skill-feedback/evals/<slug>.portable.json
@@ -199,18 +207,19 @@ run_loop.py iterates → history.json records (expectation_pass_rate, grading_re
 
 **Q: Do I have to use skill-creator?**
 
-No. The **portable form** (`.skill-feedback/evals/<slug>.portable.json`) works
-with any harness or even by hand. Each entry is just `{ id, prompt,
-must_contain, must_not_contain }` — you can test it with a simple shell script,
-a pytest parametrize, or a manual read-through. skill-creator is the reference
-harness, not a requirement.
+No. The **portable form**, embedded in the schema-2 report or separately exported to
+`.skill-feedback/evals/<slug>.portable.json`, works with any harness or even by hand.
+Each entry is just `{ id, prompt, must_contain, must_not_contain }` — you can test it
+with a simple shell script, a pytest parametrize, or a manual read-through.
+skill-creator is the reference harness, not a requirement.
 
 ---
 
 **Q: What if I only want one format?**
 
 Set `config.eval.emitFormats` to `["skill-creator"]` or `["portable"]`. The
-skill-reflect core respects the array; the other format simply won't be written.
+skill-reflect core respects the array for embedded report content and separately authorized
+exports; the other format is omitted. A report request still does not authorize a sidecar file.
 
 ---
 
