@@ -131,12 +131,22 @@ skill across multiple runs and reports a trigger rate.
 
 ### 5.4 Content rules (PII / privacy)
 
+For strict analysis, strict artifacts, and every remote candidate:
+
 - `prompt`, `expected_output`, `files`, and all expectation strings must be
   synthetic/paraphrased.
 - Never embed real file paths, hostnames, user aliases, or token values.
 - Never embed product/app/project names, the app's type or purpose, or domain-specific
   entity/feature names — use invented, analogous stand-ins (`references/privacy-scrub.md` §2a).
-- The scrubber (`scripts/scrub.py`) runs as a backstop; author-side caution is primary.
+
+For an explicitly authorized `technical-local` review of a user-owned/local skill, the
+local-only task eval may retain repository-relative paths, symbols, API/flag names, and CI job
+boundaries when those details are required to reproduce the finding. It must still exclude
+PII, secrets, runtime values, absolute paths, private URLs, and raw transcript excerpts. Do
+not copy a technical-local eval into a remote issue; regenerate a strict, synthetic version.
+
+The scrubber (`scripts/scrub.py`) runs as a backstop in every mode; author-side caution is
+primary.
 
 ---
 
@@ -229,4 +239,3 @@ No `evals/evals.json` entry is emitted for `trigger-problem` findings.
 - [ ] At least one negative expectation (`"The output does not …"`) guards the observed regression
 - [ ] Portable form accompanies each task eval (or config disables it)
 - [ ] No PII, real paths, real hostnames, real token values anywhere
-

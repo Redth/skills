@@ -9,9 +9,10 @@ consume them uniformly, regardless of which agent produced them.
 - 🚫 No AI calls, no network calls — adapters only stage a local JSON pointer.
 - 🚫 No transcript content, PII, paths, or values in the marker.
 - ✅ `skill-reflect` and `skill-reflect-auto` are always excluded from
-  "distributed skills" tracking (CONTRACT §9).
+  candidate tracking (CONTRACT §9).
 - ✅ The marker is the same shape everywhere (see §Marker shape below).
-- ✅ The core skill does all real work — on **explicit user consent only**.
+- ✅ Marker skill names are unverified candidates; the core skill confirms provenance.
+- ✅ The core skill does all real work after **explicit review authorization**.
 
 ---
 
@@ -36,8 +37,8 @@ consume them uniformly, regardless of which agent produced them.
 ### Tier A — true SessionEnd + transcript access
 
 The agent fires a real `SessionEnd` hook with a path to the full session
-transcript JSONL.  The adapter reads the transcript, detects distributed-skill
-invocations and friction signals, and writes a marker **once** at session end.
+transcript JSONL. The adapter reads tool metadata, detects skill candidates and nearby
+friction signals, and writes a marker **once** at session end.
 A `SessionStart` hook prints a non-blocking nudge at the next session start.
 
 **Result:** most accurate skill attribution and friction counts; marker is
@@ -74,9 +75,9 @@ Attribution confidence is typically `Possible` (lower than Tier A/B).
 Session ends
     │
     ▼
-Adapter (Tier A/B) detects distributed skills + friction
+Adapter (Tier A/B) detects skill candidates + friction
     │
-    │  Only if: at least one in-scope distributed skill was used
+    │  Only if: at least one in-scope candidate was observed
     │           AND its friction count ≥ frictionThreshold (default 2)
     │
     ▼
@@ -91,7 +92,8 @@ Atomic write: $SKILL_REFLECT_HOME/pending/<session-id>.json
   "endedAt":   "<ISO 8601 timestamp>",
   "skills":    ["skill-a", "skill-b"],
   "friction":  { "skill-a": 3, "skill-b": 1 },
-  "reason":    "complete | error | abort | timeout | user_exit"
+  "reason":    "complete | error | abort | timeout | user_exit",
+  "candidate": true
 }
 ```
 
@@ -106,16 +108,16 @@ by construction.
 At review time (user explicitly runs `skill-reflect`):
 
 1. The skill reads all `*.json` files in `$SKILL_REFLECT_HOME/pending/`.
-2. It uses the `skills` and `friction` fields to determine scope and
-   prioritise which skills to review.
-3. After the user consents to a review, the skill examines the session
-   transcript or conversation (depending on host tier) for detailed friction
-   analysis.
-4. It paraphrases findings, runs them through the scrubber, shows a
-   redaction preview, and writes a local artifact.
-5. On **second explicit consent**, the artifact can be filed as a GitHub issue.
-6. Once consumed, the marker files are left in place (they act as an audit
-   trail); the user can delete them manually or via a future `--clean` command.
+2. It treats `skills` as candidates, confirms provenance/ownership, and uses the
+   counts only to prioritize the announced scope.
+3. An explicit review request or accepted nudge authorizes access to that session
+   evidence; scope expansion still requires authorization.
+4. It paraphrases and scrubs findings, then returns them in chat by default.
+5. A local report is written only on save intent. A remote issue requires strict
+   regeneration, exact-body preview, and fresh destination-specific authorization.
+6. After successful chat analysis or artifact creation, matching reviewed markers
+   are removed with `scripts/consume_pending.py`. Declined or failed reviews leave
+   them pending.
 
 ---
 
@@ -169,9 +171,9 @@ home-level one.
 
 Every adapter is designed so that **a failure to stage a marker is always
 safe** — the session continues normally and the user loses nothing except the
-optional review prompt.  Adapters never read secrets, never make network calls,
-and never write anything outside `$SKILL_REFLECT_HOME/pending/`.
+optional review prompt. Adapters never store transcript values in markers, never
+make network calls, and never write outside `$SKILL_REFLECT_HOME/pending/`.
 
-The heavy work — transcript analysis, paraphrasing, scrubbing, artifact
-writing — happens **inside the core skill**, gated behind two explicit user
-consents.
+The heavy work — provenance, transcript analysis, paraphrasing, scrubbing, and
+optional artifact writing — happens **inside the core skill** after the relevant
+review/write/send authorization.

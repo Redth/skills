@@ -5,11 +5,13 @@ Claude Code plugin or cross-agent skill bundle.
 
 Two guarantees come first:
 
-1. **Nothing leaves the user's machine without explicit consent.** Feedback is
-   reviewed locally first; filing or sending anywhere requires a second approval.
-2. **No PII or secrets ever.** Reports must not contain names, emails,
-   credentials, tokens, private URLs, file paths, machine names, or verbatim
-   transcript excerpts. Values are paraphrased and scrubbed.
+1. **Every side effect is separately authorized.** Explicit reviews return chat
+   findings by default. A local report requires save intent, and every remote filing
+   requires fresh approval for the exact body and destination.
+2. **No PII or secrets ever.** Output must not contain names, emails, credentials,
+   tokens, private URLs, absolute paths, machine names, or verbatim transcript excerpts.
+   A per-run technical review of a confirmed user-owned skill may keep bounded
+   repository-relative paths and symbols locally, but that output is non-sendable.
 
 By adopting `skill-reflect`, you are adopting a privacy-first feedback loop for
 improving skills from real session friction.
@@ -19,7 +21,8 @@ improving skills from real session friction.
 ### A. Central install
 
 The end user installs `skill-reflect` once from this marketplace. It can review
-any distributed skill and route feedback by provenance.
+distributed skills and explicitly named local/user-owned skills, then optionally
+route strict feedback by provenance.
 
 - **Least author work.** You do not vendor or maintain a copy.
 - **Depends on the user having it installed.** Coverage is not guaranteed.
@@ -141,7 +144,7 @@ skills/skill-reflect/templates/improve-this-skill.md
 ```
 
 The block is static guidance for the agent. It offers a review only after
-friction and only with user consent; the actual collection still happens inside
+friction and only with user authorization; the actual collection still happens inside
 `skill-reflect`.
 
 To add another skill later, either:

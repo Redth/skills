@@ -1,7 +1,7 @@
 {
   "name": "skill-reflect-auto",
   "_comment": "Metadata-only. Copilot CLI auto-discovers extension.mjs and registers hooks programmatically via joinSession(); the CLI does NOT read this file. Kept for humans/tooling.",
-  "description": "Tracks distributed-skill friction during Copilot CLI sessions, stages a compact marker at session end, and emits a non-blocking nudge at the next session start. No AI, no network calls — disk-only. Review work is deferred to the skill-reflect core skill on explicit user consent.",
+  "description": "Tracks nearby friction for observed skill candidates during Copilot CLI sessions, stages a compact unverified marker at session end, and emits a non-blocking nudge at the next session start. No AI or network calls. Review and provenance checks are deferred to the skill-reflect core skill after explicit authorization.",
   "entry": "extension.mjs",
   "hooks": [
     "onSessionStart",

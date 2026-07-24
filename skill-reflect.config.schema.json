@@ -21,7 +21,7 @@
           "type": "array",
           "items": { "type": "string" },
           "default": [],
-          "description": "Allowlist of skill names or globs to reflect on. Empty = all DISTRIBUTED skills."
+          "description": "Allowlist of skill names or globs for automatic observed-skill candidates. An empty list tracks all non-excluded candidates; core provenance resolution determines distribution. Explicit user requests may additionally scope a local/user-owned skill."
         },
         "excludeSkills": {
           "type": "array",
@@ -38,7 +38,7 @@
           "type": "string",
           "enum": ["local", "issue", "ask"],
           "default": "ask",
-          "description": "local = only write a Markdown artifact; issue = offer to file a GitHub issue after second consent; ask = decide per run."
+          "description": "local = artifact mode only; issue = permit an explicit remote-send flow; ask = decide from user intent per run. Analysis mode never writes or sends."
         },
         "repo": {
           "type": ["string", "null"],
@@ -83,7 +83,7 @@
           "type": "boolean",
           "const": true,
           "default": true,
-          "description": "Always true. The exact artifact is shown for review before anything is written or sent."
+          "description": "Always true. Local artifacts use a summary-first preview with full text available; remote sends show the exact scrubbed body."
         },
         "allowTranscriptExcerpts": {
           "type": "boolean",

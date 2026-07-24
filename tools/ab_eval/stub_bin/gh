@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""
+gh — ab_eval safe stub. Logs the attempted invocation and refuses to run.
+
+Installed on PATH ahead of the real `gh` by runner_env.build_sandbox_env()
+so that if a model under evaluation actually tries to invoke `gh` (e.g.
+`gh issue create`), the attempt is captured with zero network traffic and
+zero use of the operator's real GitHub credentials, instead of silently
+succeeding (or failing in some system-specific, unlogged way).
+
+Writes one JSON line to $AB_EVAL_CMD_LOG (if set) per invocation:
+    {"argv": [...], "cwd": "...", "binary": "gh", "blocked": true,
+     "timestamp": "..."}
+Always exits 1. Never touches the network.
+"""
+import json
+import os
+import sys
+from datetime import datetime, timezone
+
+
+def main() -> int:
+    entry = {
+        "argv": ["gh", *sys.argv[1:]],
+        "cwd": os.getcwd(),
+        "binary": "gh",
+        "blocked": True,
+        "network_attempted": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    log_path = os.environ.get("AB_EVAL_CMD_LOG")
+    if log_path:
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, sort_keys=True) + "\n")
+        except OSError:
+            pass
+    sys.stderr.write(
+        "ab_eval stub: 'gh' is disabled during evaluation (no network, no credentials). "
+        f"Invocation logged: gh {' '.join(sys.argv[1:])}\n"
+    )
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

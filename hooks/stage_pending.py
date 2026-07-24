@@ -7,9 +7,9 @@ on stdin with fields: session_id, transcript_path, cwd, hook_event_name.
 
 This script:
   1. Reads the transcript JSONL.
-  2. Detects distributed-skill usage (Skill tool calls + SKILL.md loads).
-  3. Counts friction signals (tool errors, repeated calls, correction language).
-  4. If a distributed skill was used AND friction >= threshold, writes
+  2. Detects skill candidates (Skill tool calls + SKILL.md loads).
+  3. Counts nearby friction signals (tool errors and repeated call shapes).
+  4. If a candidate crossed the threshold, writes
      $SKILL_REFLECT_HOME/pending/<session_id>.json  (CONTRACT §8 shape).
 
 Hard constraints (CONTRACT §§7,8,9):
@@ -20,6 +20,7 @@ Hard constraints (CONTRACT §§7,8,9):
   - Wraps everything in try/except; always exits 0.
 """
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -30,16 +31,20 @@ from pathlib import Path
 # ─── CONTRACT §9: always-excluded skills ─────────────────────────────────────
 ALWAYS_EXCLUDE: frozenset[str] = frozenset({"skill-reflect", "skill-reflect-auto"})
 
-# User-correction language heuristic (friction in user messages)
-_CORRECTION_RE = re.compile(
-    r"\b(that['\u2019]?s wrong|try again|didn['\u2019]?t work|not working|"
-    r"failed again|fix this|no[,.]?\s+i meant|that['\u2019]?s not right|"
-    r"incorrect|redo that|start over|wrong (file|approach|command|path)|"
-    r"please fix|that failed|it['\u2019]?s broken)\b",
-    re.IGNORECASE,
-)
-
 # ─── PATHS ────────────────────────────────────────────────────────────────────
+
+ATTRIBUTION_TOOL_WINDOW = 6
+_SAFE_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,160}$")
+
+
+def _opaque_session_id(value) -> str | None:
+    candidate = str(value or "").strip()
+    if not candidate:
+        return None
+    if candidate not in {".", ".."} and _SAFE_SESSION_ID_RE.fullmatch(candidate):
+        return candidate
+    digest = hashlib.sha256(candidate.encode("utf-8")).hexdigest()[:24]
+    return f"session-{digest}"
 
 def sr_home() -> Path:
     """Resolve $SKILL_REFLECT_HOME (default ~/.skill-reflect/)."""
@@ -105,13 +110,13 @@ def load_config(cwd: str | None) -> dict:
 
 
 def is_in_scope(skill_name: str, cfg: dict) -> bool:
-    """Return True if skill_name should be tracked (CONTRACT §9)."""
+    """Return True if a skill candidate should be tracked (CONTRACT §9)."""
     exclude = set(cfg.get("scope", {}).get("excludeSkills", [])) | ALWAYS_EXCLUDE
     if skill_name in exclude:
         return False
     allow: list[str] = cfg.get("scope", {}).get("skills", [])
     if not allow:
-        return True  # empty = all distributed skills
+        return True  # empty = all observed candidates; core later resolves provenance
     return any(
         fnmatch.fnmatch(skill_name, p) if "*" in p else skill_name == p
         for p in allow
@@ -171,32 +176,34 @@ def _extract_content(obj: dict) -> list[dict]:
     return blocks
 
 
-def _get_role_and_text(obj: dict) -> tuple[str, str]:
-    """Return (role, concatenated-text-content) for a JSONL entry."""
-    role = obj.get("role", "")
-    content = obj.get("content")
-    msg = obj.get("message")
-    if isinstance(msg, dict):
-        role = msg.get("role", role) or role
-        content = content or msg.get("content")
-    # Resolve type-based role
-    if not role:
-        t = obj.get("type", "")
-        if t in ("user",):
-            role = "user"
-        elif t in ("assistant",):
-            role = "assistant"
+def _argument_shape(value, depth: int = 0):
+    """Return argument keys/types only; never retain tool argument values."""
+    if depth >= 3:
+        return type(value).__name__
+    if isinstance(value, dict):
+        return {
+            str(key): _argument_shape(child, depth + 1)
+            for key, child in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, list):
+        item_shapes = {
+            json.dumps(_argument_shape(item, depth + 1), sort_keys=True)
+            for item in value
+        }
+        return {"list": sorted(item_shapes)}
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    return type(value).__name__
 
-    texts: list[str] = []
-    if isinstance(content, str):
-        texts.append(content)
-    elif isinstance(content, list):
-        for blk in content:
-            if isinstance(blk, dict) and blk.get("type") == "text":
-                texts.append(blk.get("text") or "")
-            elif isinstance(blk, str):
-                texts.append(blk)
-    return role, " ".join(texts)
+
+def _tool_signature(name: str, inp: dict) -> str:
+    return f"{name}:{json.dumps(_argument_shape(inp), sort_keys=True)}"
 
 
 def detect_skills_and_friction(
@@ -206,21 +213,24 @@ def detect_skills_and_friction(
     Parse the transcript JSONL.
 
     Returns:
-      skill_windows  – set of distributed skill names seen in the session.
-      friction_by_skill – per-skill friction count (attributed to all open
-                          windows at the time of each friction signal, mirroring
-                          the reference extension.mjs logic).
+      skill_windows  – set of unverified skill candidates seen in the session.
+      friction_by_skill – per-skill friction count, attributed only to the most
+                          recently observed skill within a bounded tool window.
 
     No raw text, paths, or values are retained — only names and counts.
     """
-    # skill_windows grows as the session progresses; once a skill is open it
-    # stays open (matching extension.mjs behaviour).
     skill_windows: set[str] = set()
     friction_by_skill: dict[str, int] = {}
+    latest_skill: str | None = None
+    latest_skill_tool_index: int = -1
+    tool_index: int = 0
 
     def _add_friction() -> None:
-        for s in skill_windows:
-            friction_by_skill[s] = friction_by_skill.get(s, 0) + 1
+        if (
+            latest_skill
+            and tool_index - latest_skill_tool_index <= ATTRIBUTION_TOOL_WINDOW
+        ):
+            friction_by_skill[latest_skill] = friction_by_skill.get(latest_skill, 0) + 1
 
     # For repeated-call detection
     last_call_sig: str | None = None
@@ -228,21 +238,23 @@ def detect_skills_and_friction(
 
     for obj in _iter_jsonl(transcript_path):
         blocks = _extract_content(obj)
-        role, text = _get_role_and_text(obj)
 
         for blk in blocks:
             btype = blk.get("type", "")
 
             # ── skill detection ──────────────────────────────────────────────
             if btype == "tool_use":
+                tool_index += 1
                 name: str = blk.get("name") or ""
                 inp: dict = blk.get("input") or {}
+                observed_skill: str | None = None
 
                 # Primary: explicit skill tool call  {"name":"skill","input":{"skill":"..."}}
                 if name == "skill" and isinstance(inp, dict):
                     skill_name = str(inp.get("skill") or "").strip()
                     if skill_name and is_in_scope(skill_name, cfg):
                         skill_windows.add(skill_name)
+                        observed_skill = skill_name
 
                 # Secondary: SKILL.md file-load (InstructionsLoaded / read_file)
                 for key in ("path", "file_path", "filename", "file"):
@@ -254,12 +266,17 @@ def detect_skills_and_friction(
                             skill_dir = parts[-2]
                             if is_in_scope(skill_dir, cfg):
                                 skill_windows.add(skill_dir)
+                                observed_skill = skill_dir
 
-                # Repeated identical tool call → friction
-                sig = f"{name}:{json.dumps(inp, sort_keys=True)}"
+                if observed_skill:
+                    latest_skill = observed_skill
+                    latest_skill_tool_index = tool_index
+
+                # Repeated call shape → friction. Signatures contain keys/types only.
+                sig = _tool_signature(name, inp)
                 if sig == last_call_sig:
                     repeat_count += 1
-                    if repeat_count >= 2 and skill_windows:
+                    if repeat_count >= 2:
                         _add_friction()
                 else:
                     last_call_sig = sig
@@ -267,13 +284,8 @@ def detect_skills_and_friction(
 
             # ── friction: tool error ─────────────────────────────────────────
             elif btype == "tool_result":
-                if (blk.get("is_error") or blk.get("error")) and skill_windows:
+                if blk.get("is_error") or blk.get("error"):
                     _add_friction()
-
-        # ── friction: user correction language ──────────────────────────────
-        if role == "user" and text and skill_windows:
-            if _CORRECTION_RE.search(text):
-                _add_friction()
 
     return skill_windows, {s: c for s, c in friction_by_skill.items() if s in skill_windows}
 
@@ -319,10 +331,9 @@ def main() -> None:
     except Exception:
         hook_input = {}
 
-    session_id: str = (
+    session_id = _opaque_session_id(
         hook_input.get("session_id")
         or hook_input.get("sessionId")
-        or "unknown"
     )
     transcript_path: str | None = (
         hook_input.get("transcript_path")
@@ -339,6 +350,8 @@ def main() -> None:
 
     if not cfg.get("nudge", {}).get("enabled", True):
         return
+    if not session_id:
+        return
     if not transcript_path:
         return
     try:
@@ -352,9 +365,9 @@ def main() -> None:
     threshold: int = int(cfg.get("nudge", {}).get("frictionThreshold", 2))
 
     # Qualifying: in-scope AND per-skill friction >= threshold  (mirrors extension.mjs)
-    qualifying: list[str] = [
+    qualifying: list[str] = sorted(
         s for s in skill_windows if friction_by_skill.get(s, 0) >= threshold
-    ]
+    )
     if not qualifying:
         return
 
@@ -367,6 +380,7 @@ def main() -> None:
         "skills": qualifying,
         "friction": friction_snapshot,
         "reason": _map_reason(stop_reason),
+        "candidate": True,
     }
 
     pending_dir = sr_home() / "pending"

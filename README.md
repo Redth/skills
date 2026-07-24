@@ -14,7 +14,7 @@ skills).
 
 | Plugin | Elevator pitch | Jump to |
 |---|---|---|
-| **`skill-reflect`** | A privacy-conscious feedback loop that reflects on how the **distributed skills** you used actually performed, then routes scrubbed, actionable findings (plus verifiable evals) back to their authors. | [↓ skill-reflect](#skill-reflect) |
+| **`skill-reflect`** | A privacy-conscious feedback loop that analyzes how session skills actually performed, returns actionable findings plus evals in chat, and can optionally save or route them to authors. | [↓ skill-reflect](#skill-reflect) |
 
 ---
 
@@ -23,15 +23,19 @@ skills).
 **Skills shipped via plugins and marketplaces have no feedback loop once
 deployed.** When an agent follows stale guidance, retries a broken command, or
 works around a missing case, that signal normally disappears. `skill-reflect`
-captures it — with your consent — scrubs PII, and turns it into a
-structured, actionable report for the skill's author, complete with a proposed
-fix and a machine-checkable eval.
+captures it after an explicit review request or accepted nudge, scrubs sensitive
+context, and turns it into structured findings with a proposed fix and a
+machine-checkable eval.
 
-- 🔒 **Consent-gated & local-first.** Default output is a Markdown file on your
-  machine. Nothing is sent anywhere without a second, explicit approval.
+- 🔒 **Analysis-first & separately authorized.** Explicit reviews return findings in
+  chat. A local report is written only when requested; every remote send requires an
+  exact-body, destination-specific approval.
 - 🕵️ **PII-conscious.** Names, emails, tokens, keys, paths, machine names, private
   URLs, and verbatim excerpts are paraphrased and scrubbed, with a deterministic
   scrubber running as a backstop under the model.
+- 🛠️ **Actionable for local owners.** An explicitly named user-owned skill can opt in
+  per run to local-only technical detail such as relative paths, symbols, flags, and
+  CI boundaries. That rendering can never be sent directly.
 - 🌐 **Portable.** One prompt-driven skill that runs on Claude Code, Copilot CLI,
   Gemini CLI, opencode, Amp, and Tier C hosts like Cursor/Codex/Windsurf.
 
@@ -47,8 +51,9 @@ Install once, then let it review the skills you use.
 ```
 
 Installing also wires two **opt-in, local-only** lifecycle hooks
-(`SessionStart` / `SessionEnd`) that cheaply stage a "pending review" marker when
-a distributed skill hit friction, and offer a non-blocking nudge next session.
+(`SessionStart` / `SessionEnd`) that cheaply stage an unverified candidate marker
+when a recently used skill hits nearby friction, and offer a non-blocking nudge next
+session.
 **No AI and no network calls run in the hook** — the actual review only happens
 when you explicitly ask for it. Disable anytime with
 `"nudge": {"enabled": false}` in `skill-reflect.config.json`, or by uninstalling.
@@ -56,6 +61,10 @@ when you explicitly ask for it. Disable anytime with
 **Any agent** — just say:
 
 > reflect on the skills I used this session.
+
+That request runs **analysis mode**: a short scope notice followed by scrubbed findings
+in chat, with no file, routing question, or remote call. Ask to **save** for a local
+schema-2 report, or ask to **send** to enter the stricter exact-preview flow.
 
 **Other agents** use the same portable skill; the hook layer is a progressive
 enhancement:
@@ -104,22 +113,23 @@ required from you. Here is what a single cycle looks like end to end:
    `SessionEnd` hook stages a tiny local marker — **no AI, no network.**
 2. **They get a gentle nudge.** Next session, the `SessionStart` hook offers a
    non-blocking prompt to review. The user can ignore it; nothing else happens.
-3. **They opt in to a review.** `skill-reflect` reflects on that session locally,
-   drafts a scrubbed Markdown report with a proposed fix and a verifiable eval,
-   and shows the user a redaction preview before writing anything.
-4. **They opt in to send.** Only on a second, explicit consent does it run
-   `gh issue create` against the repo you set as `--destination` at adopt time. If
-   they decline, the report stays a local file and you never see it — that's by
-   design.
-5. **You receive a high-signal issue.** What lands in your repo is a PII-scrubbed
+3. **They accept the review.** `skill-reflect` shows a short scope notice, confirms
+   candidate provenance, and returns scrubbed findings with a proposed fix and eval
+   in chat. The accepted nudge supplies review authorization; there is no duplicate gate.
+4. **They optionally save.** Only an explicit save/capture request writes a schema-2
+   local report, after a summary-first preview.
+5. **They optionally send.** The skill regenerates strict, domain-abstracted content,
+   shows the exact outbound body and destination, and only then asks for fresh
+   remote-send authorization before `gh issue create`.
+6. **You receive a high-signal issue.** What lands in your repo is a PII-scrubbed
    issue: the friction pattern, a concrete `proposedFix`, and a ready-to-run eval
    in both the skill-creator and portable formats.
-6. **You close the loop.** Triage it like any bug report: drop the eval into your
+7. **You close the loop.** Triage it like any bug report: drop the eval into your
    suite, confirm it fails, apply the fix, confirm it now passes, and ship the
    update. Your users pull the fix through your normal plugin update path.
 
-Coverage is opportunistic and consent-gated: you only hear from users who both hit
-friction *and* choose to send. Volume is intentionally low, so treat each issue as
+Coverage is opportunistic and authorization-gated: you only hear from users who both
+hit friction *and* choose to send. Volume is intentionally low, so treat each issue as
 a concentrated, real-world signal rather than routine noise.
 
 📘 **Full setup, install, and update/maintenance guide:
@@ -130,13 +140,15 @@ engine, wiring reflection into more skills, and dedupe behavior). Binding spec:
 
 ## Non-negotiables
 
-- 🔒 **Consent-gated.** Nothing leaves your machine without explicit approval — two
-  gates: consent to *review*, then consent to *send* (per destination).
-- 🕵️ **PII-conscious.** Names, emails, tokens, keys, paths, machine names, private
-  URLs, and verbatim transcript excerpts are kept out of artifacts — values are
+- 🔒 **Separate authorization.** Review requires an explicit session-performance
+  request or accepted nudge. Local writes require save intent. Remote sends always
+  require fresh approval for the exact body and destination.
+- 🕵️ **PII-conscious.** Names, emails, tokens, keys, absolute paths, machine names,
+  private URLs, and verbatim transcript excerpts are kept out of every output — values are
   paraphrased, and a deterministic scrubber runs as a backstop under the model.
-- 🌐 **Local-first.** Default output is a Markdown file. GitHub filing is an explicit
-  `gh` action you approve. The hooks never touch the network.
+- 🌐 **Local-first.** Default output is scrubbed chat analysis. Technical-local detail
+  remains non-sendable; GitHub filing is an explicit `gh` action you approve. Hooks
+  never touch the network.
 
 ---
 
@@ -153,7 +165,7 @@ integrations/
 vendoring/                        # copy skill-reflect into your own plugin, pre-scoped
 examples/                         # sample artifacts + sample evals
 docs/                             # CONTRACT.md (the interface spec every component honors) + design docs
-tools/                            # local validation gates
+tools/                            # local validation gates + tools/ab_eval/ (A/B skill-change eval harness)
 ```
 
 ## Contributing

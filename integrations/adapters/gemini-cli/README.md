@@ -13,7 +13,7 @@ and offers a non-blocking nudge at session start.  No AI, no network calls.
 
 | Hook | Script | Purpose |
 |---|---|---|
-| `SessionEnd` | `stage_pending.py` | Reads transcript JSONL, detects skill usage + friction, writes `~/.skill-reflect/pending/<session-id>.json` |
+| `SessionEnd` | `stage_pending.py` | Reads transcript tool metadata, attributes nearby friction to the latest skill candidate, and writes `~/.skill-reflect/pending/<session-id>.json` when warranted |
 | `SessionStart` | `nudge_start.py` | Prints a one-line opt-in offer if pending markers exist |
 
 Both scripts are **defensive**: every code path is wrapped in `try/except`;
@@ -87,9 +87,11 @@ Save as `skill-reflect.config.json` in your project root or
 
 ## Privacy
 
-The marker contains **only**: session ID, ISO timestamp, distributed skill
-names, per-skill friction counts, stop reason.  No transcript content, no
-paths, no secrets.  Nothing is sent anywhere without your explicit approval.
+Repeated-call signatures use tool names and argument keys/types only; user prose is not
+scanned. The marker contains **only**: opaque session ID, ISO timestamp, unverified
+skill-candidate names, per-skill friction counts, stop reason, and `candidate: true`.
+No transcript content, paths, or secrets. Nothing is sent anywhere without your explicit
+approval.
 
 ---
 

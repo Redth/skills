@@ -11,6 +11,30 @@ comparison — no telemetry, no phoning home).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-23
+### Added
+- Chat-first analysis mode, explicit artifact mode, and exact-body remote mode with
+  separate review, local-write, and destination-specific remote-send authorization.
+- Guarded `technical-local` reviews for explicitly named user-owned skills, including
+  schema-2 provenance/detail metadata and mandatory strict regeneration before sending.
+- `scope-boundary-blind-spot` classification for silent under-coverage and overclaiming.
+- Bounded marketplace provenance discovery, reviewed-marker consumption, and focused
+  Python/Node regression coverage for automation, routing, and marker lifecycle.
+
+### Changed
+- Explicit session-performance reviews now return scrubbed findings and proposed evals in
+  chat without creating files, asking duplicate questions, or suggesting remote filing.
+- Claude, Gemini, and Copilot automation now stage unverified latest-skill candidates using
+  tool names and argument key/type signatures only; user prose and argument values are not
+  scanned for attribution.
+- Public docs, vendoring guidance, task evals, and trigger evals now reflect chat-first
+  operation, local-skill scope, and the three authorization boundaries.
+
+### Fixed
+- Secret detection now withholds stdout and file output before failing.
+- Provenance frontmatter and manifest metadata are validated without leaking install paths.
+- Skill-creator eval expectations use the required flat string-array shape.
+
 ## [1.1.0] - 2026-07-08
 ### Added
 - **Domain / product abstraction as a hard privacy constraint** (CONTRACT §0.3). Feedback
@@ -36,13 +60,14 @@ comparison — no telemetry, no phoning home).
   (skill-creator `evals.json` + portable must-contain / must-not-contain), a
   deterministic PII/secret scrubber, provenance routing (frontmatter → manifest →
   vendored config → registry → ask), a local Markdown artifact, and explicit
-  second-consent GitHub issue filing.
+  remote-send authorization for GitHub issue filing.
 - Opt-in Claude Code SessionStart/SessionEnd hooks (stage a tiny marker + offer a review
   nudge; no AI, no network).
 - Cross-agent adapters (Claude Code, Gemini CLI, opencode, Amp, static Tier-C) and the
   Copilot CLI `skill-reflect-auto` reference extension.
 - Vendoring kit for authors who want to bundle a copy into their own plugin.
 
-[Unreleased]: https://github.com/Redth/skills/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Redth/skills/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Redth/skills/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Redth/skills/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Redth/skills/releases/tag/v1.0.0

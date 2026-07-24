@@ -1,8 +1,8 @@
 # skill-reflect adapter — Claude Code (Tier A)
 
-Opt-in, local-only adapter that stages a pending-review marker whenever a
-distributed skill was used in the session **and** friction signals crossed the
-configured threshold.  No AI, no network calls; the marker is just a cheap
+Opt-in, local-only adapter that stages a pending-review candidate marker whenever
+nearby friction signals cross the configured threshold after a skill was observed.
+No AI, no network calls; the marker is just a cheap
 JSON pointer.  The actual reflection is done by the `skill-reflect` core skill
 when **you** explicitly ask for it.
 
@@ -100,9 +100,12 @@ See `docs/CONTRACT.md §2` for the full schema.
 
 ## Privacy guarantees
 
+- Repeated-call signatures contain tool names and argument keys/types only; user prose
+  is not scanned. Friction is attributed only to the latest skill candidate within a
+  bounded tool window.
 - The marker stored in `~/.skill-reflect/pending/` contains **only**:
-  session ID, ISO timestamp, list of distributed skill names, per-skill
-  friction counts, and a stop-reason string.
+  opaque session ID, ISO timestamp, unverified skill-candidate names, per-skill
+  friction counts, a stop-reason string, and `candidate: true`.
 - **No transcript content, no file paths, no user data, no secrets** are
   written into the marker.
 - Nothing is sent anywhere.  The marker is read only when you explicitly run
@@ -120,7 +123,8 @@ Or invoke it any time:
 
 > "Please run the skill-reflect skill to review last session's friction."
 
-The skill will walk you through two consent gates before writing anything.
+Accepting the nudge authorizes the announced review. Findings return in chat by default;
+the skill asks separately only if you request a file or remote send.
 
 ---
 

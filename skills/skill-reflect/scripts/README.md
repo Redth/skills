@@ -31,16 +31,19 @@ python3 scrub.py report.md --fail-on-secret
 
 # Common combination — scrub, report, and fail fast on secrets:
 python3 scrub.py draft.md --report --fail-on-secret
+
+# Scrub generated in-memory text without a temporary file:
+printf '%s' "$draft" | python3 scrub.py - --report --fail-on-secret
 ```
 
 **Arguments**
 
 | Argument | Description |
 |---|---|
-| `<infile>` | File to scrub (text, Markdown, or JSON). |
+| `<infile>` | File to scrub (text, Markdown, or JSON), or `-` for stdin. |
 | `--out FILE` | Write scrubbed output to `FILE` (default: stdout). |
 | `--report` | Print per-category redaction counts to stderr (never values). |
-| `--fail-on-secret` | Exit `1` if a high-entropy or known-token secret was found. |
+| `--fail-on-secret` | Exit `1` before emitting output if a high-entropy or known-token secret was found. |
 
 **Redacted categories**
 
@@ -79,3 +82,19 @@ scrubbed, findings = scrub_text(text)
 # Run all tests (from this directory):
 python3 -m unittest -v
 ```
+
+---
+
+## consume_pending.py — marker lifecycle
+
+Removes only reviewed pending markers after successful chat analysis or artifact creation.
+It validates each opaque session id against the marker contents and prints counts only, never
+the ids themselves.
+
+```bash
+python3 consume_pending.py \
+  --session-id <reviewed-session-id> \
+  [--session-id <reviewed-session-id> ...]
+```
+
+Declined, aborted, or failed reviews must not invoke this script.

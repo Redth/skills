@@ -370,7 +370,10 @@ def main(argv: list = None) -> int:
             "Never the sole line of defense; never emits any redacted value."
         ),
     )
-    parser.add_argument("infile", help="File to scrub (text, Markdown, or JSON).")
+    parser.add_argument(
+        "infile",
+        help="File to scrub (text, Markdown, or JSON), or '-' to read stdin.",
+    )
     parser.add_argument(
         "--out", metavar="FILE",
         help="Write scrubbed output to FILE (default: stdout).",
@@ -400,8 +403,11 @@ def main(argv: list = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    with Path(args.infile).open("r", encoding="utf-8", errors="replace") as fh:
-        raw = fh.read()
+    if args.infile == "-":
+        raw = sys.stdin.read()
+    else:
+        with Path(args.infile).open("r", encoding="utf-8", errors="replace") as fh:
+            raw = fh.read()
 
     terms = list(args.term)
     if args.terms_file:
@@ -412,11 +418,6 @@ def main(argv: list = None) -> int:
 
     scrubbed, findings = scrub_text(raw, extra_terms=terms, extra_patterns=args.pattern)
 
-    if args.out:
-        Path(args.out).write_text(scrubbed, encoding="utf-8")
-    else:
-        sys.stdout.write(scrubbed)
-
     if args.report:
         print("\n=== scrub report ===", file=sys.stderr)
         if findings:
@@ -425,14 +426,20 @@ def main(argv: list = None) -> int:
         else:
             print("  (no redactions)", file=sys.stderr)
 
-    if args.fail_on_secret:
-        if any(f["category"] in SECRET_CATEGORIES for f in findings):
-            print(
-                "scrub: FAIL — secret-category content detected "
-                "(use --report to see categories; no values are shown)",
-                file=sys.stderr,
-            )
-            return 1
+    if args.fail_on_secret and any(
+        f["category"] in SECRET_CATEGORIES for f in findings
+    ):
+        print(
+            "scrub: FAIL — secret-category content detected "
+            "(use --report to see categories; no values are shown)",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.out:
+        Path(args.out).write_text(scrubbed, encoding="utf-8")
+    else:
+        sys.stdout.write(scrubbed)
 
     return 0
 

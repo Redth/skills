@@ -1,4 +1,4 @@
-# skill-reflect — Interface Contract (v1)
+# skill-reflect — Interface Contract (v2)
 
 This file is the **single source of truth** that every component in this repo must
 honor so that independently-authored pieces interlock. If you are building any part
@@ -9,28 +9,33 @@ data shapes defined here without updating this file.
 
 ## 0. What this project is
 
-`skill-reflect` is a **universal, cross-agent skill** that, at/near the end of a
-coding session, helps an agent **self-reflect on which distributed skills it used
-and where it hit friction**, then turns that into **structured, PII-safe feedback
-for the skill's author** — a local Markdown artifact by default, or a GitHub issue
-on explicit second consent.
+`skill-reflect` is a **universal, cross-agent skill** that reviews how a skill
+performed in a coding session and turns observed friction into a structured finding,
+an author-side fix, and a regression eval. Explicit review requests return findings
+in chat by default. A local Markdown artifact or GitHub issue is produced only when
+the user asks for that output.
 
 Hard constraints, everywhere, no exceptions:
-1. **Nothing leaves the user's machine without explicit consent.**
+1. **No feedback artifact is written and no remote issue is filed without the
+   corresponding user authorization.** Model/session processing remains governed by
+   the active host; `skill-reflect` itself makes no implicit network call.
 2. **No PII, secrets, credentials, tokens, private URLs, file paths, machine names,
-   or verbatim transcript excerpts** ever appear in any artifact. Paraphrase; refer
-   to variable/tool names, never their values.
-3. **No domain leakage.** Do not reveal product/app/brand names, internal project
-   names, the type or purpose of the app, or its specific functionality. Anything
-   that describes *what was being built* — including reproduction steps and
-   challenges — must be recast as an **invented, analogous scenario** that
-   preserves the friction mechanism (what the skill got wrong) without disclosing
-   the real domain, implementation, or where it was encountered.
+   absolute paths, or verbatim transcript excerpts** ever appear in chat findings,
+   artifacts, evals, previews, or issue bodies. Paraphrase; refer to variable/tool
+   names, never their runtime values.
+3. **Strict outputs have no domain leakage.** Do not reveal product/app/brand names,
+   internal project names, the type or purpose of the app, or its specific
+   functionality. Recast reproduction details as an invented, analogous scenario.
+   A `technical-local` review may retain bounded implementation detail only for a
+   user-confirmed local skill, only after per-run opt-in, and only in local output.
+   Such output is never remotely sendable.
 
 Design shape: **one portable core skill** (works on every agent via explicit or
 nudged invocation) **+ a progressive automation layer** (opt-in per-agent hooks).
 The hook layer never runs AI and never makes network calls — it only stages a cheap
-pointer and nudges; the core skill does the real (model-driven) work, on consent.
+local candidate marker and nudges. Enabling the hook authorizes that minimal local
+metadata processing; the core skill does the real model-driven review only after
+review authorization.
 
 ---
 
@@ -40,7 +45,7 @@ pointer and nudges; the core skill does the real (model-driven) work, on consent
 |---|---|
 | Family / brand | `skill-reflect` |
 | Core skill directory | `skill-reflect/` (contains `SKILL.md`, `references/`, `templates/`, `scripts/`) |
-| Automation extension (Copilot CLI reference) | `skill-reflect-auto/` — required entry `extension.mjs` (auto-discovered by the CLI); `extension.json` is metadata-only, not read by the runtime |
+| Automation extension (Copilot CLI reference) | `skill-reflect-auto/` — required `extension.mjs` entry plus imported sibling `attribution.mjs`; `extension.json` is metadata-only, not read by the runtime |
 | Config file (consumer-provided) | `skill-reflect.config.json` |
 | Config JSON Schema (this repo) | `skill-reflect.config.schema.json` (repo root) |
 | Local feedback artifact dir | `.skill-feedback/` |
@@ -61,7 +66,7 @@ pointer and nudges; the core skill does the real (model-driven) work, on consent
   "version": 1,
   "mode": "standalone",                 // "standalone" | "vendored"
   "scope": {
-    "skills": [],                        // allowlist (names or globs). [] = all DISTRIBUTED skills
+    "skills": [],                        // allowlist. [] = all observed candidates; provenance checked later
     "excludeSkills": ["skill-reflect", "skill-reflect-auto"]
   },
   "destination": {
@@ -98,6 +103,65 @@ Rules:
 
 ---
 
+## 2a. Review modes and authorization
+
+### Metadata preflight
+
+Before reading session evidence, perform a metadata-only preflight and show a short
+notice with:
+
+- what `skill-reflect` does and its version/install scope;
+- the target skill, ownership/install scope, provenance source, and confidence;
+- the session source and selected output mode; and
+- what will not happen (for example, no file or remote issue in analysis mode).
+
+Do not ask the user to resolve unknown provenance unless remote sending is requested.
+Never show an absolute installation path.
+
+### Output modes
+
+| Mode | Entry condition | Output |
+|---|---|---|
+| `analysis` | Default for an explicit request to analyze session skill performance | Scrubbed findings in chat only; no artifact, routing prompt, or remote call |
+| `artifact` | Explicit `save` / `capture` / `create a report` intent, or accepted follow-up | Local Markdown artifact after summary-first preview |
+| `remote` | Explicit intent to send/file feedback | Strict artifact plus exact outbound preview and destination-specific send authorization |
+
+### Authorization
+
+Use these authorization terms consistently:
+
+1. **Review authorization** permits reading the announced session evidence.
+   - An explicit request about how a named skill performed in a stated session is
+     authorization after the short scope notice; do not ask the same yes/no question again.
+   - A passive nudge or ambiguous request must ask once.
+   - An accepted nudge passes authorization into the core skill.
+   - Any expansion to another skill, session, or history requires authorization.
+2. **Local-write authorization** permits one artifact write to the announced path.
+   An explicit save/capture request counts; otherwise ask after showing the summary preview.
+3. **Remote-send authorization** is always fresh, explicit, and scoped to the exact
+   destination and exact scrubbed body. A content or destination change invalidates it.
+
+A static request to inspect or improve a `SKILL.md` is not a session-performance review
+and must route to skill-authoring/training tooling instead.
+
+### Detail levels
+
+`strict` is the default and applies full domain abstraction. `technical-local` is
+available only when all conditions hold:
+
+1. The target is user-confirmed as local/user-owned.
+2. The user opts in for this run.
+3. The output remains chat-only or a local artifact.
+4. PII/secret/absolute-path/private-URL/transcript-excerpt rules remain enforced.
+5. Any later remote request regenerates a separate strict artifact and obtains new
+   remote-send authorization.
+
+Technical-local output may contain repository-relative paths, line ranges, symbols,
+API/flag names, CI job names, scope boundaries, and short skill-source excerpts.
+It must be marked `remote_eligible: false`.
+
+---
+
 ## 3. Core data shape: `FrictionFinding`
 
 Detection → classification → reporting all pass objects of this shape. Every field is
@@ -111,7 +175,7 @@ already-paraphrased and PII-free by the time it exists.
   "severity": "High|Medium|Low|Unknown",
   "confidence": "Confirmed|Likely|Possible",
   "outcome": "Solved|Worked-around|Unresolved",
-  "pattern": "advertised-feature-failed|repeated-command-loop|workaround-chain|stale-guidance|unclear-routing|trigger-miss|false-trigger",
+  "pattern": "advertised-feature-failed|repeated-command-loop|workaround-chain|stale-guidance|scope-boundary-blind-spot|unclear-routing|trigger-miss|false-trigger",
   "category": "missing-case|wrong-or-stale-guidance|missing-detail|missing-or-failing-asset|unclear-routing|trigger-problem",
   "summary": "string",            // paraphrased: what the agent was trying to do and where it stumbled
   "evidence": "string",           // paraphrased signal (e.g. 'the advertised --foo flag errored; agent retried 3x then hand-rolled'). NEVER raw values.
@@ -183,11 +247,17 @@ Full authoring rules + examples: `skill-reflect/references/eval-format.md`.
 ```markdown
 ---
 generated_by: skill-reflect
-schema: 1
+schema: 2
 date: <YYYY-MM-DD>
 skill: <skill-name>
 source_repo: <owner/repo|unknown>
+install_scope: <project|user|vendored|unknown>
+provenance_source: <frontmatter|manifest|marketplace|vendored|registry|unknown>
+provenance_confidence: <Confirmed|Likely|Possible|None>
 sessions_reviewed: <n>
+review_mode: artifact
+detail_level: <strict|technical-local>
+remote_eligible: <true|false>
 consent: review-only            # becomes "sent:<destination>" after a send
 ---
 
@@ -223,9 +293,10 @@ Suggested destination: <local | owner/repo issue>. Not sent unless the user appr
 - **Title:** `[<skill>] Field feedback: <short summary>`
 - **Body:** the findings (same content as the artifact, PII-safe), each proposed eval
   in a fenced ```json block, and a footer:
-  `> Generated by skill-reflect from a real session, with the user's explicit consent. No PII/secrets included.`
-- Filed only via `gh issue create` after the **second** consent gate. The repo never
-  auto-files. See `references/provenance-routing.md`.
+  `> Generated by skill-reflect from a real session with explicit remote-send authorization. No PII/secrets included.`
+- Filed only via `gh issue create` after the exact strict body is shown and the user
+  grants destination-specific remote-send authorization. A technical-local artifact
+  must never be used as the issue body. See `references/provenance-routing.md`.
 
 ---
 
@@ -233,10 +304,12 @@ Suggested destination: <local | owner/repo issue>. Not sent unless the user appr
 
 Deterministic, dependency-light (Python 3 stdlib only). Two uses:
 
-- **CLI:** `python3 scrub.py <infile> [--out <outfile>] [--report] [--fail-on-secret] [--term TERM ...] [--terms-file FILE] [--pattern REGEX ...]`
-  - Reads text/markdown/json; redacts; writes to `--out` (or stdout).
+- **CLI:** `python3 scrub.py <infile|-> [--out <outfile>] [--report] [--fail-on-secret] [--term TERM ...] [--terms-file FILE] [--pattern REGEX ...]`
+  - Reads text/markdown/json from a file, or stdin when `<infile>` is `-`; redacts;
+    writes to `--out` (or stdout).
   - `--report` prints a summary of what categories were redacted (counts, not values).
-  - `--fail-on-secret` exits non-zero if a high-entropy/known-token secret remains.
+  - `--fail-on-secret` exits non-zero before emitting or writing any output if a
+    high-entropy/known-token secret was detected.
   - `--term` / `--terms-file` redact literal confidential terms (product/app/project
     names, codewords) as `domain-term`; `--pattern` redacts extra regexes as `custom`.
     Populate these from config `privacy.redactTerms` and `privacy.extraScrubPatterns`.
@@ -262,22 +335,37 @@ Copilot CLI reference implementation. Rules:
 - Persist everything to `$SKILL_REFLECT_HOME` (extension is reloaded on `/clear`, so
   in-memory state is lost).
 - Hooks:
-  - `onPreToolUse`: when a `skill` tool runs, open/refresh that skill's "active window".
+  - `onPreToolUse`: count every tool call; when a `skill` tool runs, make it the latest
+    attribution candidate.
   - `onPostToolUseFailure` / `onErrorOccurred`: increment the friction counter attributed
-    to the currently-active skill window(s).
-  - `onSessionEnd`: if a **distributed** skill was used **and** friction ≥
+    only to that latest candidate within six subsequent tool calls and ten minutes.
+  - `onSessionEnd`: if an in-scope skill candidate was used **and** friction ≥
     `nudge.frictionThreshold`, write `$SKILL_REFLECT_HOME/pending/<sessionId>.json`
-    (a small marker: session id, skills, counts, timestamp — NO transcript, NO values).
+    (a small candidate marker: session id, skills, counts, timestamp — NO transcript,
+    NO values).
   - `onSessionStart`: if unresolved markers exist and not throttled (`nudge.throttleHours`),
     emit a **non-blocking** `session.log` nudge (+ optional `additionalContext`) offering
     the opt-in review. Only run the review when the user explicitly asks; then
     `session.send({ prompt })` the core skill invocation.
 - Respect `nudge.enabled`, `neverForSkills`, `neverForRepos`, and the throttle.
+- Empty `scope.skills` means "track all observed non-excluded candidates," not "proven
+  distributed." Core provenance resolution decides whether a candidate is distributed.
+- Transcript-backed adapters may form repeated-call signatures from tool name and argument
+  keys/types only. They must not include argument values or scan user prose for corrections
+  before review authorization.
 - Marker file shape:
   ```jsonc
   { "sessionId": "…", "endedAt": "ISO8601", "skills": ["a","b"],
-    "friction": { "a": 3 }, "reason": "complete|error|abort|timeout|user_exit" }
+    "friction": { "a": 3 }, "reason": "complete|error|abort|timeout|user_exit",
+    "candidate": true }
   ```
+- Legacy markers without `candidate` are also unverified candidates.
+- Unsafe/non-filename session identifiers are replaced with a deterministic opaque hash before
+  they enter marker content or filenames.
+- After scrubbed analysis is successfully delivered or an artifact is successfully written,
+  the core skill consumes matching reviewed markers with `scripts/consume_pending.py`.
+  Declined, aborted, or failed reviews leave markers pending. Session ids remain opaque local
+  control-plane state and never enter user-facing output.
 
 **Discovery & registration (verified):** Copilot CLI **auto-discovers** the extension
 by scanning for a subdirectory containing **`extension.mjs`** (project
@@ -291,10 +379,14 @@ CLI runtime; never rely on it for behavior or provenance.
 
 ## 9. "Distributed skill" definition (attribution scope)
 
-Only reflect on **distributed** skills — those installed from a plugin/marketplace/repo,
-i.e. that have resolvable provenance OR live outside the user's own project. Never file
-feedback about the user's own in-repo skills unless explicitly scoped in. `skill-reflect`
-and `skill-reflect-auto` are always excluded (§2 `excludeSkills`).
+Automatic nudges target **distributed** skill candidates — skills installed from a
+plugin/marketplace/repo or living outside the user's project. The core skill may also
+review a user-owned/local skill when the user explicitly names it. Local reviews default
+to strict analysis; `technical-local` requires the per-run opt-in in §2a.
+
+Remote sending requires strict output and provenance confidence of at least `Likely`,
+regardless of ownership. `skill-reflect` and `skill-reflect-auto` are always excluded
+(§2 `excludeSkills`).
 
 ---
 

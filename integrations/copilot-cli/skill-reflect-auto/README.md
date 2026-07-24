@@ -10,7 +10,11 @@ Copilot CLI automation extension for the [`skill-reflect`](../../../skills/skill
 
 ### 1. Stage at session end
 
-While the session runs, the extension watches for invocations of the `skill` tool and tracks any friction signals (tool failures, model errors) attributed to those skills. When the session ends, if any tracked distributed skill accumulated friction at or above `nudge.frictionThreshold`, the extension writes a compact JSON marker to disk:
+While the session runs, the extension watches for invocations of the `skill` tool and
+attributes tool/model failures only to the latest skill candidate within six subsequent
+tool calls and ten minutes. When the session ends, if a candidate accumulated friction at
+or above `nudge.frictionThreshold`, the extension writes a compact JSON marker to disk.
+The core review resolves provenance before describing a candidate as distributed:
 
 ```
 $SKILL_REFLECT_HOME/pending/<session-id>.json
@@ -24,7 +28,8 @@ $SKILL_REFLECT_HOME/pending/<session-id>.json
   "endedAt": "2024-01-15T10:30:00.000Z",
   "skills": ["my-skill"],
   "friction": { "my-skill": 3 },
-  "reason": "complete"
+  "reason": "complete",
+  "candidate": true
 }
 ```
 
@@ -46,10 +51,11 @@ At the start of the next session, if unresolved markers exist and the nudge has 
 | AI | **None** — this extension runs no model calls |
 | Network | **None** — no outbound requests |
 | Storage | Disk only, under `$SKILL_REFLECT_HOME` |
-| Marker content | Session ID, timestamp, skill names, friction counts, end reason only |
+| Marker content | Opaque session ID, timestamp, unverified candidate names, friction counts, end reason, candidate flag |
 | PII | **Never** — no transcript excerpts, no file paths, no user data, no values |
 
-All real analysis (paraphrasing, scrubbing, artifact generation) happens in the `skill-reflect` core skill, on consent.
+All real analysis (provenance, paraphrasing, scrubbing, and optional artifact generation)
+happens in the `skill-reflect` core skill after review authorization.
 
 ---
 
@@ -63,7 +69,9 @@ The CLI discovers extensions in `.github/extensions/<name>/` (project-scoped) or
 cp -r skill-reflect-auto/ /path/to/your-repo/.github/extensions/skill-reflect-auto/
 ```
 
-The directory must contain `extension.mjs` — that is the **only** file the CLI needs; it is auto-discovered and its hooks are registered programmatically. (`extension.json` here is metadata-only and is **not** read by the CLI runtime.) Reload with `/clear` or restart the CLI.
+The CLI discovers `extension.mjs`; the extension imports `attribution.mjs`, so copy the
+whole directory. `extension.json` is metadata-only and is **not** read by the CLI runtime.
+Reload with `/clear` or restart the CLI.
 
 ### User-scoped (all repos)
 
@@ -94,7 +102,7 @@ Full schema: [`skill-reflect.config.schema.json`](../../../skill-reflect.config.
 ```jsonc
 {
   "scope": {
-    "skills": [],                   // allowlist (names or globs). [] = all distributed skills
+    "skills": [],                   // allowlist (names or globs). [] = all observed candidates
     "excludeSkills": ["skill-reflect", "skill-reflect-auto"]  // always excluded
   },
   "nudge": {
@@ -107,7 +115,8 @@ Full schema: [`skill-reflect.config.schema.json`](../../../skill-reflect.config.
 }
 ```
 
-Missing config → uses built-in defaults (all distributed skills, threshold 2, throttle 12 h).
+Missing config → uses built-in defaults (all non-excluded candidates, threshold 2,
+throttle 12 h). Marker candidates remain unverified until core provenance resolution.
 
 ---
 
@@ -146,10 +155,13 @@ User says "run skill-reflect"
   └─ onUserPromptSubmitted: trigger detected?
        └─ yes → session.send({prompt: "invoke skill-reflect"})
                   └─ skill-reflect core skill runs
-                       └─ reviews markers, generates artifact, asks for consent
+                       └─ reviews markers and returns scrubbed chat findings
+                            └─ writes or sends only if separately requested
 ```
 
-The `skill-reflect` core skill handles all model-driven analysis, scrubbing, artifact creation, and the optional GitHub issue filing. This extension only handles the cheap bookkeeping.
+The `skill-reflect` core skill handles all model-driven analysis, scrubbing, optional
+artifact creation, and optional GitHub issue filing. This extension only handles cheap
+candidate bookkeeping.
 
 ---
 
@@ -160,4 +172,6 @@ The `skill-reflect` core skill handles all model-driven analysis, scrubbing, art
 | `$SKILL_REFLECT_HOME/pending/<sessionId>.json` | Session ends with qualifying friction |
 | `$SKILL_REFLECT_HOME/throttle.json` | Nudge is emitted (updates `lastNudgeAt`) |
 
-The `pending/` markers are consumed (and removed) by the `skill-reflect` core skill after a review. The extension itself never deletes them.
+The `pending/` markers are consumed by the core skill after successful chat analysis or
+artifact creation. Declined, aborted, and failed reviews leave them pending. The extension
+itself never deletes them.

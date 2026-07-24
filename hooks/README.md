@@ -7,7 +7,7 @@ documented (for manual installs) in
 
 | Hook | Script | Purpose |
 |---|---|---|
-| `SessionEnd` | [`stage_pending.py`](./stage_pending.py) | Reads the session transcript, detects distributed-skill usage + friction, and — only if a distributed skill crossed the friction threshold — writes `~/.skill-reflect/pending/<session-id>.json` (a tiny CONTRACT §8 marker). |
+| `SessionEnd` | [`stage_pending.py`](./stage_pending.py) | Reads tool metadata from the session transcript, attributes nearby friction to the latest skill candidate, and writes `~/.skill-reflect/pending/<session-id>.json` only when the threshold is crossed. |
 | `SessionStart` | [`nudge_start.py`](./nudge_start.py) | If unresolved markers exist and the nudge isn't throttled, surfaces a one-line, non-blocking offer to review last session's friction. |
 | `SessionStart` | [`check_updates.py`](./check_updates.py) | **Author-only.** If the current working tree contains a `.skill-reflect-vendor.json` pin, compares its `upstreamVersion` to this plugin's `skills/skill-reflect/VERSION` and prints one throttled nudge when the vendored copy is behind. Silent for everyone else. See [`../AUTHORS.md`](../AUTHORS.md). |
 
@@ -18,11 +18,17 @@ documented (for manual installs) in
   explicitly run `skill-reflect`.
 - **Defensive.** Every code path is wrapped in `try/except`; the scripts always exit
   0 and never throw into the host agent.
-- **Privacy.** The marker contains only: session id, ISO timestamp, distributed
-  skill names, per-skill friction counts, and a stop-reason string. No transcript
-  content, paths, or user data. See [`../docs/CONTRACT.md`](../docs/CONTRACT.md) §§7–9.
+- **Privacy.** Repeated-call signatures use tool names and argument keys/types, never
+  values; user prose is not scanned. The marker contains only: opaque session id, ISO
+  timestamp, unverified skill-candidate names, per-skill friction counts, a stop-reason
+  string, and `candidate: true`. No transcript content, paths, or user data. Core review
+  resolves provenance before calling a candidate distributed.
 - **Self-excluding.** `skill-reflect` and `skill-reflect-auto` are always excluded
   from tracking.
+- **Bounded attribution.** Friction is attributed only to the latest skill candidate
+  within six subsequent tool calls, rather than every skill seen earlier in the session.
+- **Lifecycle.** Core review consumes matching markers after successful chat analysis or
+  artifact creation; declined, aborted, and failed reviews leave them pending.
 - **Author update-check is separate.** `check_updates.py` throttles via
   `~/.skill-reflect/maintainer-throttle.json` (distinct from the review nudge's
   `throttle.json`) and is **not** copied into vendoring authors' plugins by the

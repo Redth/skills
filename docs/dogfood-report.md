@@ -220,9 +220,10 @@ author:
    for Tier C (no transcript), but SKILL.md doesn't mention this, creating ambiguity.
    Add a one-line note in SKILL.md Step 2 referencing the `0` case.
 
-6. **`consent` field transition path is not shown in a worked example.** The frontmatter
-   starts as `review-only` and becomes `sent:<destination>` after Gate 2, but no worked
-   example in reporting.md shows the before/after. Add one to reduce author confusion.
+6. **Remote-send metadata transition is not shown in a worked example.** The frontmatter
+   starts as `review-only` and becomes `sent:<destination>` after remote-send authorization,
+   but no worked example in reporting.md shows the before/after. Add one to reduce author
+   confusion.
 
 7. **Scrubber doesn't flag `~/.skill-reflect/...` as a path.** The fixture's marker
    path `~/.skill-reflect/pending/...` was not redacted because `_UNIX_PATH_RE` only

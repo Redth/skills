@@ -1,4 +1,4 @@
-# skill-reflect writes local feedback artifacts here by default. They are
+# skill-reflect writes requested local feedback artifacts here. They are
 # scrubbed of PII/secrets, but are private and should not be committed unless
 # you explicitly choose to. Remove this line if you want to track them.
 .skill-feedback/
@@ -6,6 +6,12 @@
 # skill-reflect runtime state (pending markers, config) lives outside the repo
 # (~/.skill-reflect/) but ignore any local copy just in case.
 .skill-reflect/
+
+# tools/ab_eval run directories are meant to live outside the repo (e.g. /tmp/ab-run-1),
+# but ignore a conventional in-repo location just in case -- these contain a
+# .private/blinding_key.json that should never be committed.
+tools/ab_eval/runs/
+tools/ab_eval/**/*.ab-run/
 
 # Node (skill-reflect-auto extension dev)
 node_modules/

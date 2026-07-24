@@ -1,17 +1,18 @@
 {
   "name": "redth-skills",
+  "repository": "https://github.com/Redth/skills",
   "owner": {
     "name": "Jonathan Dick (Redth)",
     "url": "https://github.com/Redth"
   },
   "metadata": {
     "description": "Jonathan Dick's collection of portable, cross-agent skills for Claude Code, Copilot CLI, and friends.",
-    "version": "1.0.0"
+    "version": "1.2.0"
   },
   "plugins": [
     {
       "name": "skill-reflect",
-      "description": "Post-session reflection on distributed skill performance. Detects friction, classifies it, proposes a concrete fix plus a verifiable eval, scrubs PII, and writes a local Markdown report. Filing a GitHub issue requires an explicit second consent. Ships opt-in SessionStart/SessionEnd hooks that stage a tiny local marker (no AI, no network) and offer a non-blocking review nudge. Also bundles the dev-time skill-reflect-maintainer skill so plugin authors can vendor, update, and doctor a copy of skill-reflect in their own plugins.",
+      "description": "Session-based reflection on distributed skill performance, with explicit local-skill review support. Defaults to scrubbed findings in chat, writes a local report only when requested, and requires destination-specific authorization before filing any GitHub issue. Ships opt-in hooks that stage tiny local candidate markers (no AI, no network) and a maintainer skill for vendoring and drift checks.",
       "source": "./",
       "strict": false,
       "skills": [
