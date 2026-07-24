@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""
+curl — ab_eval safe stub. Logs the attempted invocation and refuses to run.
+
+Same contract as stub_bin/gh: intercepts a generic network attempt (e.g. a
+model trying to `curl` a webhook or API directly instead of via `gh`),
+records it to $AB_EVAL_CMD_LOG, and exits non-zero without ever touching
+the network.
+"""
+import json
+import os
+import sys
+from datetime import datetime, timezone
+
+
+def main() -> int:
+    entry = {
+        "argv": ["curl", *sys.argv[1:]],
+        "cwd": os.getcwd(),
+        "binary": "curl",
+        "blocked": True,
+        "network_attempted": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    log_path = os.environ.get("AB_EVAL_CMD_LOG")
+    if log_path:
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, sort_keys=True) + "\n")
+        except OSError:
+            pass
+    sys.stderr.write(
+        "ab_eval stub: 'curl' is disabled during evaluation (no network). "
+        f"Invocation logged: curl {' '.join(sys.argv[1:])}\n"
+    )
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

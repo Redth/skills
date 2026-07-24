@@ -45,6 +45,7 @@ maui-labs/                                 # root of the host plugin repo
 │       └── templates/
 └── extensions/
     └── skill-reflect-auto/                # optional Copilot CLI automation
+        ├── attribution.mjs
         ├── extension.mjs
         └── extension.json
 ```
@@ -73,7 +74,7 @@ CLI extension is copied from `integrations/copilot-cli/skill-reflect-auto/` to
 ```
 
 `destination.repo: "dotnet/maui-labs"` hardcodes feedback routing to this repo's
-issue tracker. The privacy and consent guarantees are unchanged.
+issue tracker. The privacy and authorization guarantees are unchanged.
 
 ## Improve This Skill block
 
@@ -90,12 +91,12 @@ Each host skill's `SKILL.md` should include the standard block from
 encountered friction, you may offer a brief skill-quality review at a natural
 stopping point:
 
-> "This session used **dotnet-maui-doctor**. Want me to capture privacy-safe feedback
-> for the MAUI Labs team using `skill-reflect`?"
+> "This session used **dotnet-maui-doctor** and encountered some friction. Want a
+> privacy-safe review of how the skill performed?"
 
 If the user says **yes**, invoke the `skill-reflect` skill:
 
-    Run skill-reflect. Skill used this session: dotnet-maui-doctor
+    Run skill-reflect in analysis mode. Skill used this session: dotnet-maui-doctor
     (source repo: dotnet/maui-labs).
 
 <!-- END skill-reflect nudge -->

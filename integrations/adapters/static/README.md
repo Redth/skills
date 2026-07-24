@@ -49,8 +49,9 @@ or:
 
 > "Run skill-reflect."
 
-The core skill (`skill-reflect/SKILL.md`) will walk you through two consent
-gates before writing anything.
+The explicit request authorizes the named review. The core skill returns scrubbed
+findings in chat by default and requests separate authorization only for a local
+write or remote send.
 
 ---
 
@@ -61,7 +62,7 @@ Because there is no transcript or session store available:
 - The skill reflects only on the **visible conversation window**.
 - Findings may be fewer and attribution confidence is typically `Possible`
   (no store corroboration).
-- The skill will note these limitations in the artifact.
+- The skill will note these limitations in its findings and in any requested artifact.
 
 See `skill-reflect/references/session-sources.md §Fallback` for full details.
 

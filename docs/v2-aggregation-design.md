@@ -62,14 +62,14 @@ corroborated across sessions before any model work or network action occurs.
 | **Fingerprint & dedupe** | A deterministic, PII-free fingerprint per finding that enables exact-match deduplication on ingest |
 | **Near-duplicate merge** | FTS5-based similarity search to detect and merge paraphrase variants of the same underlying issue |
 | **Corroboration scoring** | A numeric score (0–1) that rises as the same finding appears in more sessions, enabling prioritization |
-| **Batch distillation** | An explicit, consent-gated "review queue" workflow that runs the model once over the corroborated queue and produces a consolidated multi-session report |
+| **Batch distillation** | An explicit, review-authorized "review queue" workflow that runs the model once over the corroborated queue and produces consolidated chat findings |
 | **Tombstones & pruning** | TTL-based cleanup and explicit "forget" controls so the queue stays bounded and sent findings are never re-reported |
 | **Optional aggregate posture** | An OPT-IN mode for vendored deployments to share k-anonymous trend counts (never raw findings) with a marketplace or skill author |
 
 ### Out of scope for v2
 
-- **Any automatic network send.** The queue is local-first. Nothing leaves the machine
-  without a two-gate explicit consent chain (same as v1, extended to batch).
+- **Any automatic network send.** The queue is local-first. Every remote action requires
+  an exact-body preview and fresh destination-specific send authorization.
 - **Raw telemetry upload.** No per-session data, no transcripts, no verbatim content
   is ever transmitted. The aggregate posture (§5) emits only taxonomy-typed counts.
 - **Changes to v1 adapters or the extension.** The §8 marker shape is the forward-compatible
@@ -194,7 +194,8 @@ CREATE TABLE IF NOT EXISTS findings (
   pattern               TEXT NOT NULL    CHECK (pattern IN (
                                            'advertised-feature-failed','repeated-command-loop',
                                            'workaround-chain','stale-guidance',
-                                           'unclear-routing','trigger-miss','false-trigger')),
+                                           'scope-boundary-blind-spot','unclear-routing',
+                                           'trigger-miss','false-trigger')),
   category              TEXT NOT NULL    CHECK (category IN (
                                            'missing-case','wrong-or-stale-guidance',
                                            'missing-detail','missing-or-failing-asset',
@@ -532,7 +533,7 @@ Likely > Possible).
    ┌─────────┐   ingest    ┌────────────────────────────┐  distill  ┌──────────────┐
    │ STAGED  │ ──────────► │ INGESTED → FINGERPRINTED   │ ────────► │ DISTILLED    │
    └─────────┘             │           → CLUSTERED      │           └──────┬───────┘
-        │                  │           → CORROBORATED   │                  │ (on consent)
+        │                  │           → CORROBORATED   │                  │ (authorized)
         │ (§8 marker or    └────────────────────────────┘                  ▼
         │  §3 finding in                                           ┌──────────────┐
         │  findings.jsonl)            ┌──────────────┐            │ SENT / LOCAL │
@@ -552,8 +553,8 @@ Likely > Possible).
 | `FINGERPRINTED` | Finding | Read from `findings.jsonl`; fingerprint computed; inserted into `findings` with `status='staged'`. |
 | `CLUSTERED` | Finding | Merged into an existing cluster or a new cluster created. Finding row updated: `status='merged'`, `cluster_id` set. |
 | `CORROBORATED` | Cluster | `distinct_session_count ≥ 2` and `corroboration_score ≥ 0.50`. No explicit status change; this is a computed property surfaced in the UX. |
-| `DISTILLED` | Cluster | Model has run on this cluster (on consent) to produce consolidated report text. `clusters.status='distilled'`, `clusters.distilled_at` set. |
-| `SENT` | Cluster | Report filed locally or as GitHub issue (second consent gate). `clusters.status='sent'`, `clusters.sent_at`, `clusters.sent_to` set. Tombstone record created. |
+| `DISTILLED` | Cluster | Model has run on this cluster with review authorization to produce consolidated finding text. `clusters.status='distilled'`, `clusters.distilled_at` set. |
+| `SENT` | Cluster | Strict report filed as a GitHub issue after remote-send authorization. `clusters.status='sent'`, `clusters.sent_at`, `clusters.sent_to` set. Tombstone record created. |
 | `TOMBSTONED` | Cluster | Permanently excluded from future distillation. Reason: sent, user dismissed, user explicitly deleted, or expired. |
 | `PRUNED` | Any | Row deleted (or archived) after TTL or explicit user action. |
 
@@ -565,8 +566,8 @@ Likely > Possible).
 | staged → fingerprinted | Same trigger; processes `findings.jsonl` lines | `INSERT OR IGNORE` on `(fingerprint, session_id)` PK; re-processing a finding line is a no-op |
 | fingerprinted → clustered | Immediately after fingerprinting | Fingerprint lookup + FTS merge is deterministic; running it twice on the same finding produces the same cluster assignment |
 | clustered → corroborated | Implicit; recomputed on every new merge | Score recomputation is monotonically safe (new members only increase score) |
-| active → distilled | Explicit user consent ("distill these findings") | Core skill checks `clusters.status`; already-distilled clusters are skipped |
-| distilled → sent | Explicit second consent (same §6 gate as v1) | Sent clusters are tombstoned; tombstone presence blocks re-send at distillation check time |
+| active → distilled | Explicit review request or accepted nudge for the announced queue scope | Core skill checks `clusters.status`; already-distilled clusters are skipped |
+| distilled → sent | Fresh authorization for the exact strict body and destination | Sent clusters are tombstoned; tombstone presence blocks re-send at distillation check time |
 | any → tombstoned | sent, user "dismiss this finding forever", or expired | `INSERT OR IGNORE` on `tombstones.cluster_id` PK |
 | any → pruned | TTL check at ingest time (configurable; default 365 days for active, 90 days for tombstoned) | Pruning deletes from findings/cluster_members/clusters; tombstone persists for 90 additional days as a re-send guard |
 
@@ -608,9 +609,9 @@ The batch review can be triggered in two ways:
    a batch review to distill them."* This is still non-blocking and subject to the
    existing throttle.
 
-### 4.2 Phase 1 — Queue summary (no model, no consent gate)
+### 4.2 Phase 1 — Queue summary (no model)
 
-Before any model work or consent request, the skill reads `queue.db` and presents a **low-
+Before any model work, the skill reads `queue.db` and presents a **low-
 cost structured summary** of what's in the queue. This is purely a read operation; nothing
 is generated, sent, or modified.
 
@@ -631,9 +632,11 @@ is generated, sent, or modified.
 **Key UX principle:** This phase is cheap. No AI runs. The user can say "not now" with
 zero cost. The queue remains unchanged.
 
-### 4.3 Phase 1 consent gate — distillation consent
+### 4.3 Review authorization and scope
 
-After showing the queue summary, the skill asks:
+An explicit request such as "review my pending skill feedback" authorizes the announced queue
+scope; do not ask the same yes/no question again. An accepted opportunistic nudge also carries
+review authorization. If the queue summary was shown without either signal, ask:
 
 > "I can distill these findings into a consolidated review. This will use the language
 > model to group, summarize, and propose evals for the corroborated issues. No data
@@ -649,7 +652,7 @@ The user may:
 Distillation is intentionally deferred to this explicit consent step. The queue may
 accumulate for weeks or months without incurring any model cost or user interruption.
 
-### 4.4 Phase 2 — Distillation (model-driven, on consent)
+### 4.4 Phase 2 — Distillation (model-driven, review-authorized)
 
 The core skill receives the approved cluster set and performs the following steps (same
 pipeline as v1, extended to multiple clusters):
@@ -666,7 +669,8 @@ pipeline as v1, extended to multiple clusters):
 3. **Scrub** (§7 `scrub_text()`) is applied to all model-generated text as a mandatory
    backstop before any output is written.
 
-4. The result is a **multi-skill consolidated report** in the §5 artifact format (extended):
+4. The default result is **multi-skill consolidated findings in chat**. If the user requested
+   an artifact, render the same findings in the §5 schema after a summary-first preview:
 
 ```markdown
 ---
@@ -700,18 +704,20 @@ N sessions over M days surfaced K distinct findings across 2 skills.
 …
 ```
 
-### 4.5 Phase 2 consent gate — send consent (per destination)
+### 4.5 Optional artifact or remote output
 
-After the user reviews the distilled report, the skill presents the v1-style second
-consent gate, now covering the consolidated multi-skill report:
+After returning the distilled findings in chat, stop. Do not offer a file or GitHub issue
+unless the user asks.
 
-> "Here is the distilled report. To file this as a GitHub issue to `acme/container-toolkit`,
-> say 'file to container-toolkit'. To save it locally only, say 'save locally'.
-> To file some findings but not others, name the ones you want to send."
+- On explicit save intent, show a summary-first local preview and obtain local-write
+  authorization for the announced path.
+- On explicit send intent, route per skill, regenerate strict domain-abstracted content,
+  scrub it, show the exact outbound body, and obtain fresh authorization for that body and
+  destination.
 
 **Per-skill granularity:** Each skill in the report may be routed independently (same v1
 provenance routing, §6 of CONTRACT). One skill's findings may be filed while another's
-are saved locally. The user retains full control per destination.
+remain chat-only or are saved locally. The user retains full control per destination.
 
 On send, affected clusters are updated: `status='sent'`, `sent_at`, `sent_to` set,
 tombstone created.
@@ -856,24 +862,25 @@ Every v1 privacy guarantee (§6) applies to the aggregate posture without except
 
 ---
 
-## 6. Privacy & consent
+## 6. Privacy & authorization
 
 This section restates and extends the v1 non-negotiables (CONTRACT §0) for the v2
 aggregation layer. Every statement here is a design invariant, not a guideline.
 
-### 6.1 Two consent gates, extended to batch
+### 6.1 Separate authorizations, extended to batch
 
-v1 has two gates: (1) consent to review, (2) consent to send. v2 preserves both and
-extends them to cover the batch case:
+v1 distinguishes review, local-write, and remote-send authorization. v2 preserves
+those boundaries for the batch case:
 
-| Gate | v1 trigger | v2 trigger |
+| Authorization | v1 trigger | v2 trigger |
 |---|---|---|
-| Gate 1 (review/distill) | "Would you like to review this session?" | "Would you like to distill the corroborated queue?" |
-| Gate 2 (send) | "Would you like to file this finding to `owner/repo`?" | "Would you like to file these findings? (per-skill)" |
+| Review | Explicit session-performance request or accepted nudge | Explicit queue-review request or accepted batch nudge |
+| Local write | Explicit save/capture intent for an announced path | Explicit save intent for the consolidated artifact path |
+| Remote send | Exact scrubbed body + exact destination | Exact strict per-skill body + exact destination |
 
-Declining Gate 1 leaves the queue exactly as it was. Declining Gate 2 saves the distilled
-report locally (same as v1 local-only mode) and leaves the cluster in `status='distilled'`
-— not `'sent'`, not tombstoned — so the user may re-review later.
+Declining review leaves the queue exactly as it was. Declining a local write creates no
+artifact. Declining a remote send does not implicitly save anything and leaves the cluster
+in `status='distilled'` — not `'sent'`, not tombstoned — so the user may re-review later.
 
 ### 6.2 Mandatory scrub — applied at two points
 
@@ -887,8 +894,8 @@ The §7 scrubber is applied at:
    prose (consolidated summaries, fixes, eval prompts) before writing to the artifact or
    any network payload.
 
-The scrubber is never disabled. Its `--fail-on-secret` mode is run at Gate 2 time; a
-non-zero exit blocks the send.
+The scrubber is never disabled. Its `--fail-on-secret` mode runs before any chat, file, or
+remote output; a non-zero exit withholds all output until the content is redrafted.
 
 ### 6.3 No transcript excerpts, ever
 
@@ -921,7 +928,8 @@ external party.
 
 `queue.db` and `findings.jsonl` are local disk files in `$SKILL_REFLECT_HOME`. No v2
 component opens a network connection unless:
-- Gate 2 is approved for a GitHub-issue send (uses `gh issue create`, same as v1).
+- Remote-send authorization is granted for an exact GitHub issue body and destination
+  (uses `gh issue create`, same as v1).
 - The aggregate posture is enabled AND the user approves a specific send (§5).
 
 There is no background sync, no heartbeat, no crash reporter, no telemetry SDK.

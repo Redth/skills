@@ -1,7 +1,7 @@
 /**
  * skill-reflect-auto — Copilot CLI automation extension
  *
- * Milestone M5 reference implementation. Tracks distributed-skill friction
+ * Milestone M5 reference implementation. Tracks candidate-skill friction
  * during a session, stages a marker at session end, and emits a non-blocking
  * nudge at the next session start. No AI, no network calls — disk I/O only.
  *
@@ -21,6 +21,14 @@ import { joinSession } from "@github/copilot-sdk/extension";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import {
+  createAttributionState,
+  incrementFrictionForLatestSkill,
+  opaqueSessionId,
+  observeSkill,
+  recordTool,
+  resetAttribution,
+} from "./attribution.mjs";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PATHS
@@ -40,7 +48,7 @@ function srHome() {
 const DEFAULT_CONFIG = {
   version: 1,
   scope: {
-    skills: [], // [] = all distributed skills
+    skills: [], // [] = all observed candidates; core resolves provenance later
     excludeSkills: ["skill-reflect", "skill-reflect-auto"],
   },
   nudge: {
@@ -127,9 +135,9 @@ function loadConfig(workingDir) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 /**
- * Returns true if skillName should be tracked for this session.
+ * Returns true if a skill candidate should be tracked for this session.
  * Always excludes skill-reflect and skill-reflect-auto (CONTRACT §2, §9).
- * scope.skills: [] = all distributed skills; non-empty = allowlist (with glob support).
+ * scope.skills: [] = all observed candidates; non-empty = allowlist (with glob support).
  */
 function isInScope(skillName, config) {
   const excludeList =
@@ -137,7 +145,7 @@ function isInScope(skillName, config) {
   if (excludeList.includes(skillName)) return false;
 
   const allowList = config.scope?.skills ?? [];
-  if (allowList.length === 0) return true; // empty = all distributed skills
+  if (allowList.length === 0) return true;
 
   return allowList.some((pattern) => {
     if (pattern.includes("*")) {
@@ -262,18 +270,7 @@ function getRepoName(cwd) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 const state = {
-  /**
-   * Active skill windows.
-   * Map<skillName, { openedAt: Date }>
-   * "Window" = the skill was invoked at least once in this session.
-   */
-  activeSkillWindows: new Map(),
-
-  /**
-   * Friction signal count per skill.
-   * Map<skillName, number>
-   */
-  frictionBySkill: new Map(),
+  attribution: createAttributionState(),
 
   /** Cached config (lazy-loaded on first hook call). */
   config: null,
@@ -296,25 +293,9 @@ function getConfig(workingDir) {
   return state.config;
 }
 
-/** Mark a skill as active (open its tracking window). */
-function openSkillWindow(skillName) {
-  if (!state.activeSkillWindows.has(skillName)) {
-    state.activeSkillWindows.set(skillName, { openedAt: new Date() });
-  }
-}
-
-/** Increment friction count for every currently-open skill window. */
-function incrementFrictionForActiveSkills() {
-  for (const skillName of state.activeSkillWindows.keys()) {
-    const prev = state.frictionBySkill.get(skillName) ?? 0;
-    state.frictionBySkill.set(skillName, prev + 1);
-  }
-}
-
 /** Reset all per-session state (called on session start). */
 function resetState() {
-  state.activeSkillWindows.clear();
-  state.frictionBySkill.clear();
+  resetAttribution(state.attribution);
   state.config = null;
   state.workingDirectory = null;
   state.reviewTriggered = false;
@@ -332,8 +313,8 @@ const session = await joinSession({
   hooks: {
     // ──────────────────────────────────────────────────────────────────────
     // onPreToolUse
-    // Fires before any tool executes. When the tool is "skill", open/refresh
-    // the active window for that skill so friction can be attributed to it.
+    // Fires before any tool executes. When the tool is "skill", make it the
+    // latest bounded attribution candidate.
     //
     // Signature (agent-author.md §onPreToolUse):
     //   input: { toolName, toolArgs, timestamp, workingDirectory, sessionId }
@@ -342,6 +323,7 @@ const session = await joinSession({
     onPreToolUse: async (input, invocation) => {
       try {
         state.workingDirectory ??= input.workingDirectory;
+        recordTool(state.attribution);
 
         // Only track "skill" tool invocations (Copilot CLI skill dispatch)
         if (input.toolName !== "skill") return;
@@ -356,7 +338,7 @@ const session = await joinSession({
         const cfg = getConfig(input.workingDirectory);
         if (!isInScope(skillName, cfg)) return;
 
-        openSkillWindow(skillName);
+        observeSkill(state.attribution, skillName);
       } catch (err) {
         // Never throw into the host
         try {
@@ -371,7 +353,7 @@ const session = await joinSession({
     // ──────────────────────────────────────────────────────────────────────
     // onPostToolUseFailure
     // Fires after a tool returns a "failure" resultType.
-    // Increment friction for all currently-open skill windows.
+    // Increment friction only for the latest nearby skill candidate.
     //
     // Signature (agent-author.md §onPostToolUseFailure):
     //   input: { toolName, toolArgs, error, timestamp, workingDirectory, sessionId }
@@ -381,9 +363,7 @@ const session = await joinSession({
     onPostToolUseFailure: async (input, invocation) => {
       try {
         state.workingDirectory ??= input.workingDirectory;
-        if (state.activeSkillWindows.size > 0) {
-          incrementFrictionForActiveSkills();
-        }
+        incrementFrictionForLatestSkill(state.attribution);
       } catch (err) {
         try {
           await session.log(
@@ -397,7 +377,7 @@ const session = await joinSession({
     // ──────────────────────────────────────────────────────────────────────
     // onErrorOccurred
     // Fires when a model, system, or tool error is raised.
-    // Increment friction for all currently-open skill windows.
+    // Increment friction only for the latest nearby skill candidate.
     //
     // Signature (agent-author.md §onErrorOccurred):
     //   input: { error, errorContext, recoverable, timestamp, workingDirectory, sessionId }
@@ -407,9 +387,7 @@ const session = await joinSession({
     onErrorOccurred: async (input, invocation) => {
       try {
         state.workingDirectory ??= input.workingDirectory;
-        if (state.activeSkillWindows.size > 0) {
-          incrementFrictionForActiveSkills();
-        }
+        incrementFrictionForLatestSkill(state.attribution);
       } catch (err) {
         try {
           await session.log(
@@ -424,7 +402,7 @@ const session = await joinSession({
     // ──────────────────────────────────────────────────────────────────────
     // onSessionEnd
     // Fires when the session ends for any reason.
-    // If a distributed, in-scope skill was used AND its friction ≥ threshold,
+    // If an in-scope skill candidate was used AND its friction ≥ threshold,
     // write $SKILL_REFLECT_HOME/pending/<sessionId>.json (CONTRACT §8 shape).
     // No transcript, no values, no PII.
     //
@@ -435,7 +413,8 @@ const session = await joinSession({
     onSessionEnd: async (input, invocation) => {
       try {
         state.workingDirectory ??= input.workingDirectory;
-        const sessionId = invocation.sessionId;
+        const sessionId = opaqueSessionId(invocation.sessionId);
+        if (!sessionId) return;
         const cfg = getConfig(input.workingDirectory);
         const threshold =
           cfg.nudge?.frictionThreshold ??
@@ -445,8 +424,8 @@ const session = await joinSession({
         const qualifyingSkills = [];
         const frictionSnapshot = {};
 
-        for (const skillName of state.activeSkillWindows.keys()) {
-          const friction = state.frictionBySkill.get(skillName) ?? 0;
+        for (const skillName of state.attribution.observedSkills) {
+          const friction = state.attribution.frictionBySkill.get(skillName) ?? 0;
           if (friction >= threshold && isInScope(skillName, cfg)) {
             qualifyingSkills.push(skillName);
             frictionSnapshot[skillName] = friction;
@@ -463,6 +442,7 @@ const session = await joinSession({
           skills: qualifyingSkills,
           friction: frictionSnapshot,
           reason: input.reason,
+          candidate: true,
         };
 
         const pendingDir = path.join(srHome(), "pending");
@@ -470,7 +450,7 @@ const session = await joinSession({
         atomicWrite(path.join(pendingDir, `${sessionId}.json`), marker);
 
         await session.log(
-          `[skill-reflect-auto] Staged ${qualifyingSkills.length} pending review(s) for: ${qualifyingSkills.join(", ")}`,
+          `[skill-reflect-auto] Staged ${qualifyingSkills.length} pending review candidate(s) for: ${qualifyingSkills.join(", ")}`,
           { level: "info", ephemeral: true }
         );
       } catch (err) {
@@ -648,8 +628,8 @@ const session = await joinSession({
 //
 // session.on("tool.execution_complete", (event) => {
 //   try {
-//     if (event.data?.success === false && state.activeSkillWindows.size > 0) {
-//       incrementFrictionForActiveSkills();
+//     if (event.data?.success === false) {
+//       incrementFrictionForLatestSkill(state.attribution);
 //     }
 //   } catch {}
 // });

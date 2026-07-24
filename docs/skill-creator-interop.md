@@ -9,7 +9,7 @@
 | **Eval origin** | Author-written, synthetic, pre-release | Real-world sessions, post-field |
 | **Who authors** | Skill developer, before shipping | Running agent, during/after a session |
 | **What they test** | "Does this skill do what I intended?" | "Did this skill cover what users actually needed?" |
-| **Input to harness** | `evals/evals.json` (wrapped `{skill_name, evals:[…]}`) in the skill repo | `.skill-feedback/evals/<slug>.evals.json` (wrapped, emitted by skill-reflect) |
+| **Input to harness** | `evals/evals.json` (wrapped `{skill_name, evals:[…]}`) in the skill repo | A proposed eval in chat, or `.skill-feedback/evals/<slug>.evals.json` when the user requests artifact output |
 | **PII posture** | Synthetic by construction | Scrubbed before emission (see CONTRACT §7) |
 
 Together they form a complete eval lifecycle: skill-creator covers the **author's
@@ -20,7 +20,7 @@ their existing eval suite and re-run.
 
 ---
 
-## 2. Where skill-reflect emits evals
+## 2. Where skill-reflect proposes and emits evals
 
 Given the default config:
 
@@ -31,7 +31,8 @@ Given the default config:
 }
 ```
 
-After a session reflection, skill-reflect writes:
+Analysis mode includes the proposed eval in chat and writes nothing. When the user explicitly
+requests artifact output, skill-reflect may write:
 
 ```
 .skill-feedback/evals/
@@ -162,12 +163,13 @@ non-decreasing pass-rate history and a clear blame trail for regressions.
 Session ends
     │
     ▼
-skill-reflect reflects, classifies findings
+skill-reflect reflects, classifies findings, and proposes evals in chat
     │
+    │  explicit save request
     ├─ trigger-problem findings ──────────────────────────────────────────┐
     │                                                                     ▼
     ▼                                               .skill-feedback/evals/<slug>.trigger-evals.json
-FrictionFinding.proposedEval emitted to             (trigger eval set [{query, should_trigger}])
+FrictionFinding.proposedEval optionally written to  (trigger eval set [{query, should_trigger}])
   .skill-feedback/evals/<slug>.evals.json            ↓
   (wrapped: {skill_name, evals:[…]})        run_eval.py --eval-set <file>
   .skill-feedback/evals/<slug>.portable.json
@@ -242,7 +244,7 @@ this automatically via the local registry.
 
 **Q: When should skill-reflect file a GitHub issue vs just emitting evals?**
 
-Eval emission is a **local-only** step — no network, no consent required. Filing
-a GitHub issue is a separate action that requires the user's explicit second
-consent (CONTRACT §6). The emitted evals are yours to use locally even if you
-never file an issue.
+Proposing an eval in analysis mode is chat-only. Writing eval files is a local side
+effect and requires local-write authorization. Filing a GitHub issue is separate:
+skill-reflect regenerates strict content, shows the exact scrubbed body, and requires
+fresh authorization for that body and destination (CONTRACT §6).

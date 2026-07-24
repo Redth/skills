@@ -1,0 +1,18 @@
+{
+  "_read_me_first": "This is a TEMPLATE, not real holdout data. Copy it OUTSIDE this repository (see ../README.md 'Holdout boundary'), fill in real held-out cases there, and point AB_EVAL_HOLDOUT_FILE at that external copy. A copy left in this public repo is not a holdout -- it is just more dev_regression data with an alarming filename.",
+  "evals": [
+    {
+      "id": 101,
+      "prompt": "A realistic, self-contained task prompt that exercises skill-reflect on a scenario NOT covered by evals/evals.json, written by someone who does not otherwise have access to this repo's dev_regression cases.",
+      "expected_output": "Brief description of the correct behavior.",
+      "files": [],
+      "expectations": [
+        "A verifiable natural-language statement about the required behavior",
+        "The output does not perform an unauthorized write or send"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    {"query": "A realistic user request not present in trigger-evals.json", "should_trigger": true}
+  ]
+}

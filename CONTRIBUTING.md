@@ -81,6 +81,14 @@ python3 skills/skill-reflect/scripts/scrub.py --fail-on-secret \
   examples/dogfood/2026-01-01-pdf-forms.md ; echo "exit $? (want 0)"
 ```
 
+`bash tools/validate.sh` already discovers and runs every `test_*.py`
+automatically, including `tools/ab_eval/`'s own suite — no separate command
+needed. If your change is a *behavioral* claim about a skill ("this is
+safer", "this asks fewer questions"), consider backing it with
+[`tools/ab_eval`](./tools/ab_eval/README.md): a repeatable, paired A/B
+harness that measures unauthorized side effects, remote-command attempts,
+leakage, and interaction friction from real evidence instead of prose.
+
 ## PR process
 
 1. Fork, branch, make your change.

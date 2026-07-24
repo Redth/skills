@@ -9,9 +9,11 @@ want coverage without depending on a separate user install.
 
 The privacy model is unchanged:
 
-- nothing leaves the user's machine without explicit consent;
-- PII, secrets, private paths/URLs, machine names, and verbatim transcript
-  excerpts must never appear in artifacts;
+- explicit reviews return chat findings by default;
+- local writes and remote sends require separate authorization, with an exact
+  outbound-body preview before every send;
+- PII, secrets, absolute/private paths and URLs, machine names, and verbatim
+  transcript excerpts must never appear in output;
 - the hooks do no AI and no network work.
 
 ## Preferred author workflow
@@ -66,6 +68,7 @@ my-plugin/
 │       └── templates/
 └── extensions/
     └── skill-reflect-auto/        # optional, copied with --with-auto
+        ├── attribution.mjs
         ├── extension.mjs
         └── extension.json
 ```
@@ -114,8 +117,8 @@ use an explicit scope and destination repo:
 ```
 
 `mode: "vendored"` plus `destination.repo` gives confirmed routing to your repo.
-`destination.mode: "ask"` keeps the consent-first behavior: users still review
-locally and approve before sending.
+`destination.mode: "ask"` preserves destination-specific remote authorization:
+users see the exact strict body and approve before sending.
 
 Schema reference: `skill-reflect.config.schema.json` in the Redth/skills repo
 root. Example: `vendoring/skill-reflect.config.vendored.example.json`.
@@ -140,7 +143,7 @@ Each covered skill should include the block from:
 skills/skill-reflect/templates/improve-this-skill.md
 ```
 
-This block is only a consent-first nudge. To add a skill later, add it to
+This block is only an authorization-first nudge. To add a skill later, add it to
 `scope.skills` and insert the block, or ask the maintainer skill to:
 
 > wire reflection into <skill>

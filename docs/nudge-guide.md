@@ -10,8 +10,8 @@ lifecycle-hook automation down to a single paste-in line.
 ### 1. Extension hook (Tier A / Tier B) — strongest signal
 
 The `skill-reflect-auto` Copilot CLI extension (and per-agent adapters in
-`adapters/`) attaches lifecycle hooks that **automatically detect** when a
-distributed skill was used and friction occurred, stage a lightweight marker
+`adapters/`) attaches lifecycle hooks that detect skill candidates with nearby friction,
+stage a lightweight unverified marker
 in `$SKILL_REFLECT_HOME/pending/`, and emit a non-blocking nudge at the next
 session start.
 
@@ -22,8 +22,8 @@ session start.
 
 Marker and throttle state are stored in `$SKILL_REFLECT_HOME/` (default
 `~/.skill-reflect/`). The extension performs **no AI work and no network
-calls** — it only stages cheap pointers. The portable core skill does all
-real work, on consent.
+calls** — it only stages cheap pointers. The portable core skill confirms provenance and
+does all real work after review authorization.
 
 See `skill-reflect-auto/extension.mjs` and `adapters/` for implementations.
 
@@ -39,12 +39,12 @@ reaches **every agent on every platform** — no hooks, no extensions required.
 At natural stopping points (task completion, before `/clear`, user asks "what
 next?") the agent reads the block, recognises friction if it occurred, and offers:
 
-> "This session used **[skill-name]**. Want me to capture privacy-safe feedback
-> for the skill author using `skill-reflect`?"
+> "This session used **[skill-name]** and encountered some friction. Want a
+> privacy-safe review of how the skill performed?"
 
 The block instructs the agent to pass the skill's own identity when invoking
-`skill-reflect` (**the nudge carries context**), so attribution in the resulting
-artifact is exact.
+`skill-reflect` (**the nudge carries context**). The core then verifies ownership and
+provenance; the nudge itself does not prove distribution.
 
 Authors add the block with one command — see *For skill authors* below.
 
@@ -58,7 +58,7 @@ Codex CLI, Windsurf — the only reliable channel is an instruction in
 
 The snippet in `adapters/static/AGENTS.md.snippet` gives the agent a standing
 instruction to offer `skill-reflect` at session end when distributed skills
-were used, with the same consent-first rules.
+were used, with the same authorization-first rules.
 
 ---
 
@@ -113,11 +113,12 @@ Every nudge is an **offer in a log message or inline suggestion** — never an
 interrupt, never a forced confirmation dialog. The agent continues normally
 if the user ignores it.
 
-### Always consent-first
+### Always authorization-first
 
-No review runs, no artifact is created, and nothing leaves the machine without
-**explicit user consent** at each step. Declining once doesn't silence the
-skill permanently (unless `neverForSkills` is set).
+No review runs without an explicit session-performance request or accepted nudge. Chat
+analysis is the default. A local file and a remote send each require their own explicit
+authorization. Declining once does not silence the skill permanently (unless
+`neverForSkills` is set).
 
 ---
 
