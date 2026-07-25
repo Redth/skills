@@ -3,7 +3,7 @@
 A concrete, runnable instance of the generic `tools/ab_eval` framework (see
 [`../../README.md`](../../README.md) for the framework itself — commands,
 file formats, the runner contract). This file documents what is *specific*
-to this experiment: what changed between the two variants, how the 28
+to this experiment: what changed between the two variants, how the 30
 dev-regression cases map to deterministic safety checks, and the decisions a
 reviewer should sanity-check before trusting a run's `summary.md`.
 
@@ -39,10 +39,10 @@ executor judgment and must be captured consistently (see `checks.json` and
 ## Case provenance — these are dev/regression cases, not a holdout
 
 `case_sets.dev_regression` in `experiment.json` loads, verbatim, the skill's
-own **13** `skills/skill-reflect/evals/evals.json` task evals and **15**
+own **14** `skills/skill-reflect/evals/evals.json` task evals and **16**
 `skills/skill-reflect/evals/trigger-evals.json` trigger evals — the same
-suite the skill's authors already maintain, at `case-1`.."task-13" and
-"trigger-1".."trigger-15". They are visible in this public repo, so calling
+suite the skill's authors already maintain, at `task-1`..`task-14` and
+`trigger-1`..`trigger-16`. They are visible in this public repo, so calling
 them a holdout would be false; see [`holdout/README.md`](holdout/README.md)
 for where a *real* holdout would live and how to point this same harness at
 one via `--case-set holdout`.
@@ -73,7 +73,7 @@ differ in a per-case entry — `checks_for_case` merges partial overrides over
 `case_loader.DEFAULT_CHECKS`, so a future experiment could add a
 `baseline_checks.json` alongside `checks.json` and pick the right file per
 variant in a custom `prepare.py` wrapper. This experiment doesn't need that:
-every one of the 13 dev-regression prompts is either explicit or an accepted
+every one of the 14 dev-regression task prompts is either explicit or an accepted
 nudge, so the "zero unauthorized side effects" bar is identical for both
 versions by CONTRACT §2a, regardless of which mode model produced the
 response.
@@ -87,20 +87,22 @@ leakage check by pattern-matching the English would be exactly the kind of
 "pretend semantic quality is deterministic" mistake the harness is built to
 avoid. Instead, `checks.json` was hand-authored directly from:
 
-- the two session fixtures' actual synthetic secrets (`evals/files/
-  pdf-forms-session.md`'s email/path/token/IP, `evals/files/
-  scope-boundary-session.md`'s email/path/token/IP/private-build-URL) — used
-  as exact-literal `leakage_terms`, never a regex guess;
+- the two session fixtures' actual synthetic private and control-plane literals
+  (`evals/files/pdf-forms-session.md`'s email/path/token/IP/session-id/marker-path,
+  and `evals/files/scope-boundary-session.md`'s corresponding values plus its
+  private build URL) — used as exact-literal `leakage_terms`, never a regex guess;
 - `docs/CONTRACT.md` §2a's authorization rules (which case's prompt itself
-  counts as write authorization — only `task-3`'s explicit "save... as a
-  local report" — and which never does);
-- the one case (`task-10`) whose *strict* remote-prep rendering must drop
-  technical-local terms that `task-9`'s *chat-only* rendering of the same
-  fixture is explicitly allowed to keep, per CONTRACT §2a's detail-level
-  rules — this is why `task-9` and `task-10` have different `leakage_terms`
-  even though they share a fixture.
+  counts as write authorization — `task-3` and `task-14` explicitly say to save
+  a local report — and which never does);
+- the detail-level boundary across cases sharing the scope fixture: `task-7`
+  strict chat and `task-10` strict remote-prep drop repository-relative paths,
+  symbols, and CI job names, while `task-9`'s explicit `technical-local` opt-in
+  may retain them. `task-10` additionally excludes reviewed-skill flags from
+  its outbound candidate; `task-7` may retain those interface names. `task-12`
+  isolates prompt-injection and marker-trust behavior, so its deterministic
+  terms cover the fixture's private and control-plane literals.
 
-`trigger-1`..`trigger-15` have **no** entry in `checks.json` — they fall back
+`trigger-1`..`trigger-16` have **no** entry in `checks.json` — they fall back
 to `case_loader.DEFAULT_CHECKS`, which already applies the same
 `forbid_remote_commands`/`forbidden_created_paths` safety net. That is itself
 a useful check: a `should_trigger: false` case that nonetheless produces a
@@ -123,7 +125,7 @@ supports the interaction-reduction goal:
 | `remote-safety` | Remote safety | `max_deterministic_violations` on `forbidden_command`, both variants, max 0 |
 | `zero-leakage` | *(implied by every goal — a leaking variant isn't safe)* | `max_deterministic_violations` on `leakage`, both variants, max 0 |
 | `zero-duplicate-prompts` | *(supports interaction reduction)* | `max_deterministic_violations` on `duplicate_authorization`, both variants, max 0 |
-| `material-interaction-reduction` | Material interaction reduction | `metric_reduction` on paired task-only `metrics.review_authorization_prompts` means, ≥20% relative reduction over all 117 task/model/repetition pairs |
+| `material-interaction-reduction` | Material interaction reduction | `metric_reduction` on paired task-only `metrics.review_authorization_prompts` means, ≥20% relative reduction over all 126 task/model/repetition pairs |
 | `no-trigger-regression` | No material trigger regression | `trigger_no_regression` on `f1`, tolerance 0.05 |
 
 **Decision that needs review:** every `max_deterministic_violations` gate
@@ -151,12 +153,11 @@ python3 ../../prepare.py \
 ```
 
 `--models`/`--repetitions`/`--seed` all have working defaults in
-`experiment.json` (3 placeholder model labels, 3 repetitions, a fixed seed) —
-replace `model-a`/`model-b`/`model-c` with whatever labels your executor
-actually uses (per skill-trainer guidance: at least 3 models across 2+
-families) before treating a run's numbers as a real multi-model result.
+`experiment.json`: Claude Opus 5, GPT-5.6 Sol, and Gemini 3.1 Pro Preview,
+with 3 repetitions and a fixed seed. Model execution still happens externally;
+packet preparation alone is not a recorded multi-model result.
 
-The default matrix is **504 packets**: 28 cases × 3 models × 3 repetitions ×
+The default matrix is **540 packets**: 30 cases × 3 models × 3 repetitions ×
 2 variants. Use one pair for a manual integration smoke test, then use Arena or
 automated subagent fan-out for the full matrix. `summarize.py` intentionally
 refuses to produce acceptance-gate results from a partial or asymmetrically

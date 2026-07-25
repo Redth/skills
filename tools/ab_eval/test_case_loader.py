@@ -185,14 +185,14 @@ class TestDuplicateCaseIds(unittest.TestCase):
 class TestLoadCaseSetAgainstRealSkillReflectEvals(unittest.TestCase):
     """Smoke-tests case loading against the real, current skill-reflect eval suite."""
 
-    def test_loads_all_13_task_cases(self):
+    def test_loads_all_14_task_cases(self):
         cases = load_task_cases(SKILL_REFLECT_EVALS, SKILL_REFLECT_ROOT)
-        self.assertEqual(len(cases), 13)
+        self.assertEqual(len(cases), 14)
         self.assertEqual(duplicate_case_ids(cases), [])
 
-    def test_loads_all_15_trigger_cases(self):
+    def test_loads_all_16_trigger_cases(self):
         cases = load_trigger_cases(SKILL_REFLECT_TRIGGERS)
-        self.assertEqual(len(cases), 15)
+        self.assertEqual(len(cases), 16)
 
     def test_load_case_set_combines_both(self):
         case_set = {
@@ -201,7 +201,7 @@ class TestLoadCaseSetAgainstRealSkillReflectEvals(unittest.TestCase):
             "fixtures_root": str(SKILL_REFLECT_ROOT.relative_to(REPO_ROOT)),
         }
         cases = load_case_set(case_set, REPO_ROOT)
-        self.assertEqual(len(cases), 28)
+        self.assertEqual(len(cases), 30)
 
 
 class TestLoadHoldoutFile(unittest.TestCase):

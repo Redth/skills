@@ -23,7 +23,7 @@
       }
     }
   },
-  "models": ["model-a", "model-b", "model-c"],
+  "models": ["claude-opus-5", "gpt-5.6-sol", "gemini-3.1-pro-preview"],
   "repetitions": 3,
   "case_sets": {
     "dev_regression": {
@@ -85,7 +85,7 @@
       "metric": "metrics.review_authorization_prompts",
       "aggregate": "mean",
       "case_kinds": ["task"],
-      "min_pairs": 117,
+      "min_pairs": 126,
       "min_relative_reduction": 0.2,
       "note": "Goal: material interaction reduction. v1.1.0's two-gate model always asks Gate 1 up front and always offers Gate 2 after drafting; v1.2.0 should need materially fewer authorization round-trips for the same explicit/accepted-nudge requests. Executors should also record metrics.tool_call_count and metrics.elapsed_seconds — summary.md reports their deltas even though this gate only thresholds the authorization-prompt count."
     },
@@ -94,7 +94,7 @@
       "kind": "trigger_no_regression",
       "metric": "f1",
       "tolerance": 0.05,
-      "note": "Goal: no material trigger regression. The SKILL.md description gained a 'Do not use for...' exclusion clause in v1.2.0; candidate's trigger F1 across the 15 trigger-evals.json cases must not fall more than 0.05 below baseline's."
+      "note": "Goal: no material trigger regression. The SKILL.md description gained a 'Do not use for...' exclusion clause in v1.2.0; candidate's trigger F1 across the 16 trigger-evals.json cases must not fall more than 0.05 below baseline's."
     }
   ]
 }

@@ -100,9 +100,14 @@
         "emitFormats": {
           "type": "array",
           "items": { "type": "string", "enum": ["skill-creator", "portable"] },
-          "default": ["skill-creator", "portable"]
+          "default": ["skill-creator", "portable"],
+          "description": "Eval forms embedded in reports and available for separately authorized export."
         },
-        "evalsOutPath": { "type": "string", "default": ".skill-feedback/evals" }
+        "evalsOutPath": {
+          "type": "string",
+          "default": ".skill-feedback/evals",
+          "description": "Destination for separately requested and authorized eval exports. Report authorization alone does not write here."
+        }
       }
     },
     "artifactDir": { "type": "string", "default": ".skill-feedback" }

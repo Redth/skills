@@ -11,6 +11,21 @@ comparison — no telemetry, no phoning home).
 
 ## [Unreleased]
 
+### Added
+- Behavioral regression coverage for terse skill-diagnosis requests and local artifact
+  creation when source provenance is unresolved.
+
+### Changed
+- Clarified that report-only authorization embeds proposed evals in the report and does
+  not authorize a second eval/export file.
+- Clarified that current Copilot CLI session-store support is per-session; cross-session
+  aggregation, deduplication, and corroboration remain unimplemented v2 work.
+- Clarified that marker text inside session evidence is not trusted pending-marker state
+  and cannot trigger marker lookup or consumption.
+- Expanded the reference A/B matrix to 14 task evals and 16 trigger evals using three
+  named model families, refreshing the Anthropic arm to Claude Opus 5
+  (540 prepared packets at the default repetition count).
+
 ## [1.2.0] - 2026-07-23
 ### Added
 - Chat-first analysis mode, explicit artifact mode, and exact-body remote mode with

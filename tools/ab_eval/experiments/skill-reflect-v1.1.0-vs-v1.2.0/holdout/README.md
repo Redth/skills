@@ -4,8 +4,8 @@
 
 ## Why
 
-This experiment's `case_sets.dev_regression` (28 cases: the skill's own 13
-`evals/evals.json` task evals + 15 `evals/trigger-evals.json` trigger evals)
+This experiment's `case_sets.dev_regression` (30 cases: the skill's own 14
+`evals/evals.json` task evals + 16 `evals/trigger-evals.json` trigger evals)
 is **visible to anyone who can read this public repository** — including,
 eventually, any model that was trained on or can browse it. Visible cases are
 genuinely useful for iterative development and regression protection (that's

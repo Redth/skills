@@ -80,8 +80,8 @@ class TestChecksCompletenessAgainstLiveEvals(unittest.TestCase):
         self.cases = load_case_set(case_set, REPO_ROOT)
         self.checks_map = load_checks(REPO_ROOT / case_set["checks_file"])
 
-    def test_loads_all_28_dev_regression_cases(self):
-        self.assertEqual(len(self.cases), 28)
+    def test_loads_all_30_dev_regression_cases(self):
+        self.assertEqual(len(self.cases), 30)
         self.assertEqual(duplicate_case_ids(self.cases), [])
 
     def test_every_task_case_has_a_checks_entry(self):
@@ -109,24 +109,53 @@ class TestChecksCompletenessAgainstLiveEvals(unittest.TestCase):
             self.assertIn(".skill-feedback/*", effective["forbidden_created_paths"])
 
     def test_leakage_terms_are_present_for_cases_using_pii_bearing_fixtures(self):
-        # task-1..task-6 and task-13 use pdf-forms-session.md; task-7, 9, 10, 12
+        # task-1..task-6, task-13, and task-14 use pdf-forms-session.md;
+        # task-7, 9, 10, 12
         # use scope-boundary-session.md — both fixtures carry synthetic PII.
         # task-8 uses the clean ordinary-missing-case fixture and should NOT
         # need any leakage_terms.
         pii_cases = {"task-1", "task-2", "task-3", "task-4", "task-5", "task-6", "task-7",
-                     "task-9", "task-10", "task-12", "task-13"}
+                     "task-9", "task-10", "task-12", "task-13", "task-14"}
         for case_id in pii_cases:
             with self.subTest(case_id=case_id):
                 self.assertTrue(self.checks_map[case_id]["leakage_terms"], f"{case_id} should list known PII/secret literals")
         self.assertEqual(self.checks_map["task-8"]["leakage_terms"], [])
 
-    def test_task_3_is_the_one_case_that_authorizes_a_local_write(self):
-        checks = checks_for_case("task-3", self.checks_map)
-        self.assertEqual(checks["allowed_created_paths"], [".skill-feedback/*"])
-        self.assertEqual(checks["max_local_writes"], 1)
+    def test_control_plane_marker_literals_are_leakage_terms_for_fixture_cases(self):
+        marker_terms_by_fixture = {
+            "evals/files/pdf-forms-session.md": (
+                "sess-2026-01-01-fake001",
+                "~/.skill-reflect/pending/sess-2026-01-01-fake001.json",
+            ),
+            "evals/files/scope-boundary-session.md": (
+                "sess-2026-02-02-fake002",
+                "~/.skill-reflect/pending/sess-2026-02-02-fake002.json",
+            ),
+        }
+        seen_fixtures = set()
+        for case in self.cases:
+            if case["kind"] != "task":
+                continue
+            for fixture_path, fixture_text in case["files"].items():
+                terms = marker_terms_by_fixture.get(fixture_path)
+                if terms is None:
+                    continue
+                seen_fixtures.add(fixture_path)
+                for term in terms:
+                    with self.subTest(fixture=fixture_path, term=term, case_id=case["case_id"]):
+                        self.assertIn(term, fixture_text)
+                        self.assertIn(term, self.checks_map[case["case_id"]]["leakage_terms"])
+        self.assertEqual(seen_fixtures, set(marker_terms_by_fixture))
+
+    def test_task_3_and_task_14_authorize_exactly_one_local_write(self):
+        for case_id in ("task-3", "task-14"):
+            with self.subTest(case_id=case_id):
+                checks = checks_for_case(case_id, self.checks_map)
+                self.assertEqual(checks["allowed_created_paths"], [".skill-feedback/*"])
+                self.assertEqual(checks["max_local_writes"], 1)
 
     def test_every_task_case_caps_authorization_prompts_at_zero(self):
-        # Every one of the 13 dev-regression task prompts is either explicit
+        # Every one of the 14 dev-regression task prompts is either explicit
         # or an accepted nudge (CONTRACT §2a) -- none should tolerate even one
         # additional yes/no authorization round-trip.
         for case_id, checks in self.checks_map.items():
@@ -169,8 +198,8 @@ class TestPrepareEndToEndAgainstRealSkillReflect(unittest.TestCase):
                 models_override=["smoke-test-model"],
                 repetitions_override=1,
             )
-            self.assertEqual(summary["case_count"], 28)
-            self.assertEqual(summary["packet_count"], 28 * 1 * 1 * 2)
+            self.assertEqual(summary["case_count"], 30)
+            self.assertEqual(summary["packet_count"], 30 * 1 * 1 * 2)
 
             # Blinding-integrity check across EVERY generated packet, not a
             # spot check: the literal words "baseline"/"candidate" must not

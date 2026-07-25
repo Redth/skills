@@ -67,8 +67,10 @@ Critical rules:
 }
 ```
 
-Written to `.skill-feedback/evals/<slug>.portable.json`. Works with any lightweight harness
-or manual inspection; not consumed by skill-creator directly.
+When the user separately requests and authorizes a portable eval file, write it to
+`.skill-feedback/evals/<slug>.portable.json`. In Artifact mode, embed this form in the report;
+report-only authorization does not authorize an additional eval file. The separate file works
+with any lightweight harness or manual inspection; it is not consumed by skill-creator directly.
 
 **Portable → expectations string mapping:**
 ```
@@ -237,5 +239,6 @@ No `evals/evals.json` entry is emitted for `trigger-problem` findings.
 - [ ] `expectations` is a **flat array of plain strings** — NOT `{type, value}` objects
 - [ ] At least one positive expectation captures the corrected behaviour
 - [ ] At least one negative expectation (`"The output does not …"`) guards the observed regression
-- [ ] Portable form accompanies each task eval (or config disables it)
+- [ ] Portable form accompanies each task eval (embedded in the report or in a separately
+      authorized file; config may disable it)
 - [ ] No PII, real paths, real hostnames, real token values anywhere
