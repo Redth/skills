@@ -8,17 +8,37 @@ Copilot CLI automation extension for the [`skill-reflect`](../../../skills/skill
 
 `skill-reflect-auto` runs as a silent background extension in every Copilot CLI session. It does two things:
 
-### 1. Stage at session end
+### 1. Capture durably, then stage at session end
 
-While the session runs, the extension watches for invocations of the `skill` tool and
-attributes tool/model failures only to the latest skill candidate within six subsequent
-tool calls and ten minutes. When the session ends, if a candidate accumulated friction at
-or above `nudge.frictionThreshold`, the extension writes a compact JSON marker to disk.
-The core review resolves provenance before describing a candidate as distributed:
+While the session runs, the extension listens to direct `skill.invoked`, tool-completion, and
+subagent-failure events, plus model/tool/system error hooks. It attributes value-free signals
+only to the latest skill candidate within six subsequent tool calls and ten minutes. After an
+in-scope skill is observed, each relevant state change is atomically snapshotted so extension
+reload does not erase attribution; unrelated sessions create no journal:
+
+```
+$SKILL_REFLECT_HOME/journal/<session-id>.json
+```
+
+The journal contains skill names, counts by signal category, timestamps, and bounded opaque
+correlation hashes. It never contains tool names, argument/result values, messages, paths, or
+error text. A failed call followed by the same tool + argument-key/type shape records a retry;
+unsuccessful completions, rejected/denied/timeout statuses, model failures, and subagent failures
+are also eligible. Overlapping hook/event representations dedupe by opaque call key.
+
+When the session ends, if a candidate accumulated friction at or above
+`nudge.frictionThreshold`, the extension writes a compact JSON marker. The default threshold
+remains `2`; broader signals do not turn smooth sessions into markers. The core review resolves
+provenance before describing a candidate as distributed:
 
 ```
 $SKILL_REFLECT_HOME/pending/<session-id>.json
 ```
+
+If the extension process exits before `onSessionEnd`, the next startup recovers a qualifying
+marker from the durable journal only after confirming that the original session process is no
+longer live. Recovery uses the capture threshold persisted by the original session, not the next
+project's configuration. Recovered markers use `reason: "unknown"`.
 
 **Marker shape** (CONTRACT §8 — no transcript, no values, no PII):
 
@@ -29,16 +49,22 @@ $SKILL_REFLECT_HOME/pending/<session-id>.json
   "skills": ["my-skill"],
   "friction": { "my-skill": 3 },
   "reason": "complete",
-  "candidate": true
+  "candidate": true,
+  "journalVersion": 1
 }
 ```
 
 ### 2. Nudge at next start
 
-At the start of the next session, if unresolved markers exist and the nudge has not been throttled (see `nudge.throttleHours`), the extension:
+At the start of the next different session, if unresolved markers exist and the nudge has not
+been throttled (see `nudge.throttleHours`), the extension:
 
 - Logs a **non-blocking** info message to the timeline listing the skills with pending reviews.
-- Injects a short `additionalContext` note so the agent knows a review is available **if the user asks**.
+- Injects a short, name-free `additionalContext` note so the agent knows a review is available
+  **if the user asks**.
+
+A marker for the active resumed session is excluded. It remains pending for the next different
+session, avoiding a race where reviewing it while its capture engine is active would recreate it.
 
 **The review is never started automatically.** It is only launched after the user explicitly requests it (e.g. "run skill-reflect"). The review itself is done by the `skill-reflect` core skill, not by this extension.
 
@@ -51,7 +77,8 @@ At the start of the next session, if unresolved markers exist and the nudge has 
 | AI | **None** — this extension runs no model calls |
 | Network | **None** — no outbound requests |
 | Storage | Disk only, under `$SKILL_REFLECT_HOME` |
-| Marker content | Opaque session ID, timestamp, unverified candidate names, friction counts, end reason, candidate flag |
+| Journal content | Opaque session ID/correlation hashes, timestamps, candidate names, signal counts, bounded capture state |
+| Marker content | Opaque session ID, timestamp, unverified candidate names, friction counts, end reason, candidate/journal flags |
 | PII | **Never** — no transcript excerpts, no file paths, no user data, no values |
 
 All real analysis (provenance, paraphrasing, scrubbing, and optional artifact generation)
@@ -69,8 +96,9 @@ The CLI discovers extensions in `.github/extensions/<name>/` (project-scoped) or
 cp -r skill-reflect-auto/ /path/to/your-repo/.github/extensions/skill-reflect-auto/
 ```
 
-The CLI discovers `extension.mjs`; the extension imports `attribution.mjs`, so copy the
-whole directory. `extension.json` is metadata-only and is **not** read by the CLI runtime.
+The CLI discovers `extension.mjs`; the extension imports `capture.mjs` and
+`attribution.mjs`, so copy the whole directory. `extension.json` is metadata-only and is
+**not** read by the CLI runtime.
 Reload with `/clear` or restart the CLI.
 
 ### User-scoped (all repos)
@@ -111,12 +139,39 @@ Full schema: [`skill-reflect.config.schema.json`](../../../skill-reflect.config.
     "throttleHours": 12,            // min hours between nudges (0 = always nudge)
     "neverForSkills": [],           // skill names to never nudge about
     "neverForRepos": []             // "owner/repo" strings to suppress nudges in
+  },
+  "diagnostics": {
+    "enabled": false                // opt-in ephemeral capture lifecycle logs
   }
 }
 ```
 
 Missing config → uses built-in defaults (all non-excluded candidates, threshold 2,
 throttle 12 h). Marker candidates remain unverified until core provenance resolution.
+
+### Opt-in diagnostics and E2E check
+
+Set `"diagnostics": {"enabled": true}` (or `SKILL_REFLECT_DIAGNOSTICS=1`) and reload the
+extension. Diagnostics are ephemeral and value-free. They distinguish:
+
+```
+skill_observed → failure_observed (attributed=true|false)
+  → journal_persisted → marker_written → nudge_shown
+```
+
+Suppressed markers/nudges report a reason such as `below_threshold`, `throttled`, or
+`no_pending_markers`. Diagnostics may name the observed skill, but never log session ids,
+arguments, results, paths, error messages, or correlation hashes.
+
+The automated E2E uses the same `CaptureEngine` as the live extension and keeps the threshold
+at two:
+
+```bash
+node --test attribution.test.mjs capture.test.mjs
+```
+
+It simulates skill observation, an unsuccessful timeout, a retry, journal restoration,
+marker staging, and next-session nudge display in an isolated temporary home.
 
 ---
 
@@ -137,6 +192,7 @@ throttle 12 h). Marker candidates remain unverified until core provenance resolu
 | Variable | Default | Description |
 |---|---|---|
 | `SKILL_REFLECT_HOME` | `~/.skill-reflect/` | Root directory for markers, throttle state, and home config |
+| `SKILL_REFLECT_DIAGNOSTICS` | unset | `1`/`true` enables ephemeral value-free diagnostics; `0`/`false` overrides config off |
 
 ---
 
@@ -144,18 +200,20 @@ throttle 12 h). Marker candidates remain unverified until core provenance resolu
 
 ```
 Session N ends
+  ├─ during session: atomically update value-free journal
   └─ onSessionEnd: friction ≥ threshold?
        └─ yes → write $SKILL_REFLECT_HOME/pending/<id>.json
 
 Session N+1 starts
-  └─ onSessionStart: pending markers + not throttled?
+  ├─ recover qualifying journals whose session process exited before onSessionEnd
+  └─ pending markers + not throttled?
        └─ yes → log nudge + inject additionalContext
 
 User says "run skill-reflect"
   └─ onUserPromptSubmitted: trigger detected?
        └─ yes → session.send({prompt: "invoke skill-reflect"})
                   └─ skill-reflect core skill runs
-                       └─ reviews markers and returns scrubbed chat findings
+                       └─ reads marker-selected journal and returns scrubbed chat findings
                             └─ writes or sends only if separately requested
 ```
 
@@ -169,9 +227,21 @@ candidate bookkeeping.
 
 | Path | Written when |
 |---|---|
+| `$SKILL_REFLECT_HOME/journal/<sessionId>.json` | Relevant state changes after a skill is observed; restored on same-session reload |
 | `$SKILL_REFLECT_HOME/pending/<sessionId>.json` | Session ends with qualifying friction |
+| `$SKILL_REFLECT_HOME/active/<sessionId>.json` | Session is live; stale entries are ignored when their process exits |
+| `$SKILL_REFLECT_HOME/selections/<token>.json` | A nudge's marker-digest-bound selection and allowed skill subsets |
+| `$SKILL_REFLECT_HOME/locks/<sessionId>.<pid>.<token>.json` | Short-lived cross-process claim for activation, release, recovery, and consumption |
 | `$SKILL_REFLECT_HOME/throttle.json` | Nudge is emitted (updates `lastNudgeAt`) |
 
-The `pending/` markers are consumed by the core skill after successful chat analysis or
-artifact creation. Declined, aborted, and failed reviews leave them pending. The extension
-itself never deletes them.
+For a nudge-entered review, the core reads the exact filtered set through
+`scripts/read_journal.py --selection <token>`; explicit broad reviews may use `--all-pending`.
+The reader excludes every live session, verifies the selected marker digest, enforces the selected
+skill subset, and returns value-free receipts bound to exact marker+journal state rather than
+session ids. It does not assume the local Copilot session store exposes `tool_requests`.
+Receipt-selected markers and journals are consumed together after successful chat analysis or
+artifact creation. Cleanup acquires the same per-session lock used by capture and rechecks liveness
+and receipt-bound state before deletion. Declined, aborted, and failed reviews leave evidence
+pending. A legacy marker with no journal is returned as `journal: false`, reviewed from visible
+context, and remains consumable by receipt. Cleanup removes the journal first so interruption
+cannot leave an unreviewable orphan.

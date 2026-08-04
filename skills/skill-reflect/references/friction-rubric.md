@@ -227,11 +227,10 @@ Before asserting a finding, apply these checks:
 
 ### Optional: local A/B confidence boost
 
-If the session store is available (Copilot CLI), an optional autoresearch-style check can
-raise confidence before asserting `Confirmed` or `Likely`: compare sessions where the same
-skill was invoked successfully for the same task type against sessions where it failed. If
-the failure pattern is isolated to a specific skill version or usage pattern, confidence may
-be raised by one level. This check is optional and must not block the workflow.
+The current Copilot journal is deliberately per-session and value-free; it cannot establish
+same-task successful controls. Do not infer an A/B confidence boost from journal counts or
+probe unavailable local session-store tables. Cross-session comparison is future v2 work and
+must not block or inflate a v1 finding.
 
 ### Summary
 

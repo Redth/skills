@@ -85,16 +85,38 @@ python3 -m unittest -v
 
 ---
 
-## consume_pending.py — marker lifecycle
+## read_journal.py — Copilot capture evidence
 
-Removes only reviewed pending markers after successful chat analysis or artifact creation.
-It validates each opaque session id against the marker contents and prints counts only, never
-the ids themselves.
+Reads only the value-free Copilot journal selected by a matching trusted pending marker. It
+returns skill names and friction signal counts; opaque ids, tool names, arguments, results,
+paths, and runtime fingerprints are omitted.
+
+```bash
+python3 read_journal.py \
+  --selection <trusted-selection-token>
+```
+
+Use `--selection` for the filtered marker set injected by an accepted auto nudge. An explicit
+broad review may use `--all-pending`; `--session-id` is only for a trusted id injected by an
+adapter. Live sessions are always excluded. Selection-based reads also verify the marker digest and
+enforce the nudge's allowed skill subset. The output includes a value-free review receipt bound to
+the exact marker+journal state, not a session id. A legacy marker whose journal is missing is
+returned with `journal: false`; use visible-context fallback and retain its receipt for
+successful-review consumption.
+
+## consume_pending.py — marker and journal lifecycle
+
+Removes only reviewed pending markers and their matching capture journals after successful chat
+analysis or artifact creation. It validates each opaque session id against both control-plane
+documents, acquires the shared per-session capture lock, and rechecks both active state and the
+receipt-bound files before deleting anything. It prints counts only, never the ids themselves.
 
 ```bash
 python3 consume_pending.py \
-  --session-id <reviewed-session-id> \
-  [--session-id <reviewed-session-id> ...]
+  --receipt <reviewed-receipt> \
+  [--receipt <reviewed-receipt> ...]
 ```
 
 Declined, aborted, or failed reviews must not invoke this script.
+Cleanup removes a matching journal before its marker, so an interrupted cleanup leaves a
+recoverable marker-only review rather than an orphan journal.

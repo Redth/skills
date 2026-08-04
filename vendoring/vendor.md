@@ -69,6 +69,7 @@ my-plugin/
 └── extensions/
     └── skill-reflect-auto/        # optional, copied with --with-auto
         ├── attribution.mjs
+        ├── capture.mjs
         ├── extension.mjs
         └── extension.json
 ```

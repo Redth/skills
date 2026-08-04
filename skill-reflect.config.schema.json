@@ -63,6 +63,14 @@
         "neverForRepos": { "type": "array", "items": { "type": "string" }, "default": [] }
       }
     },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Opt-in, ephemeral diagnostic logging for the Copilot CLI auto-capture path. Diagnostics report lifecycle steps and value-free counts only; they never include tool arguments, results, paths, or session ids.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false }
+      }
+    },
     "privacy": {
       "type": "object",
       "additionalProperties": false,

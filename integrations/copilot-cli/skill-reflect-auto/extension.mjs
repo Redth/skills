@@ -7,6 +7,7 @@
  *
  * CONTRACT §8 compliance:
  *   - $SKILL_REFLECT_HOME/pending/<sessionId>.json   (marker)
+ *   - $SKILL_REFLECT_HOME/journal/<sessionId>.json   (durable capture)
  *   - $SKILL_REFLECT_HOME/throttle.json              (nudge throttle)
  *   - Config discovery: walk up from workingDirectory → srHome → defaults
  *   - No transcript, no values, no PII in markers
@@ -22,12 +23,13 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {
-  createAttributionState,
-  incrementFrictionForLatestSkill,
+  CaptureEngine,
+  listPendingMarkers,
+  recoverPendingMarkers,
+  showPendingNudge,
+} from "./capture.mjs";
+import {
   opaqueSessionId,
-  observeSkill,
-  recordTool,
-  resetAttribution,
 } from "./attribution.mjs";
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -57,6 +59,9 @@ const DEFAULT_CONFIG = {
     throttleHours: 12,     // min hours between nudges
     neverForSkills: [],
     neverForRepos: [],
+  },
+  diagnostics: {
+    enabled: false,
   },
 };
 
@@ -140,9 +145,11 @@ function loadConfig(workingDir) {
  * scope.skills: [] = all observed candidates; non-empty = allowlist (with glob support).
  */
 function isInScope(skillName, config) {
-  const excludeList =
-    config.scope?.excludeSkills ?? DEFAULT_CONFIG.scope.excludeSkills;
-  if (excludeList.includes(skillName)) return false;
+  const excludeList = new Set([
+    ...DEFAULT_CONFIG.scope.excludeSkills,
+    ...(config.scope?.excludeSkills ?? []),
+  ]);
+  if (excludeList.has(skillName)) return false;
 
   const allowList = config.scope?.skills ?? [];
   if (allowList.length === 0) return true;
@@ -159,78 +166,6 @@ function isInScope(skillName, config) {
     }
     return pattern === skillName;
   });
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// DISK HELPERS
-// ═════════════════════════════════════════════════════════════════════════════
-
-/** Ensure a directory tree exists (mkdir -p equivalent). */
-function ensureDir(dir) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
-
-/**
- * Atomic-ish write: write to <path>.tmp.<pid>, then rename into place.
- * Prevents partial reads from concurrent processes.
- */
-function atomicWrite(filePath, data) {
-  const tmp = `${filePath}.tmp.${process.pid}`;
-  try {
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf-8");
-    fs.renameSync(tmp, filePath);
-  } catch (err) {
-    try { fs.unlinkSync(tmp); } catch {}
-    throw err;
-  }
-}
-
-/** Return paths of all pending marker files in $SKILL_REFLECT_HOME/pending/. */
-function listPendingMarkers() {
-  const dir = path.join(srHome(), "pending");
-  if (!fs.existsSync(dir)) return [];
-  try {
-    return fs
-      .readdirSync(dir)
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => path.join(dir, f));
-  } catch {
-    return [];
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// THROTTLE HELPERS
-// ═════════════════════════════════════════════════════════════════════════════
-
-function readThrottle() {
-  const p = path.join(srHome(), "throttle.json");
-  try {
-    if (fs.existsSync(p)) {
-      return JSON.parse(fs.readFileSync(p, "utf-8"));
-    }
-  } catch {}
-  return {};
-}
-
-function writeThrottle(data) {
-  ensureDir(srHome());
-  atomicWrite(path.join(srHome(), "throttle.json"), data);
-}
-
-/**
- * Returns true if the last nudge was within throttleHours.
- * throttleHours: 0 = always nudge.
- */
-function isThrottled(throttleData, throttleHours) {
-  if (!throttleHours) return false;
-  const last = throttleData.lastNudgeAt;
-  if (!last) return false;
-  const elapsedHours =
-    (Date.now() - new Date(last).getTime()) / (1000 * 60 * 60);
-  return elapsedHours < throttleHours;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -265,18 +200,25 @@ function getRepoName(cwd) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// PER-SESSION IN-MEMORY STATE
-// The extension is reloaded on /clear, so this is always fresh per session.
+// PER-SESSION STATE
+// Durable attribution lives in the journal; this object only caches the active view.
 // ═════════════════════════════════════════════════════════════════════════════
 
 const state = {
-  attribution: createAttributionState(),
+  /** Active durable capture engine (restored from its journal after reload/resume). */
+  engine: null,
+
+  /** Serializes opt-in diagnostic logs so end/start hooks can flush them. */
+  diagnosticQueue: Promise.resolve(),
 
   /** Cached config (lazy-loaded on first hook call). */
   config: null,
 
   /** Working directory captured from first hook input (for config discovery). */
   workingDirectory: null,
+
+  /** Opaque trusted marker selection emitted with the current nudge. */
+  reviewSelection: null,
 
   /**
    * Guard flag: prevents re-triggering the opt-in review send in the same
@@ -295,10 +237,75 @@ function getConfig(workingDir) {
 
 /** Reset all per-session state (called on session start). */
 function resetState() {
-  resetAttribution(state.attribution);
+  state.engine?.releaseActive();
+  state.engine = null;
   state.config = null;
   state.workingDirectory = null;
+  state.reviewSelection = null;
   state.reviewTriggered = false;
+}
+
+function diagnosticsEnabled(config) {
+  const environment = process.env.SKILL_REFLECT_DIAGNOSTICS;
+  if (environment !== undefined) {
+    return /^(1|true|yes|on)$/i.test(environment.trim());
+  }
+  return config.diagnostics?.enabled === true;
+}
+
+function formatDiagnostic(event) {
+  const fields = Object.entries(event)
+    .filter(([key]) => key !== "step")
+    .map(([key, value]) => {
+      const rendered = Array.isArray(value) ? value.join(",") : String(value);
+      return `${key}=${rendered}`;
+    });
+  return `[skill-reflect-auto:diagnostic] ${event.step}${fields.length ? ` ${fields.join(" ")}` : ""}`;
+}
+
+function logDiagnostic(event) {
+  state.diagnosticQueue = state.diagnosticQueue
+    .then(() =>
+      session.log(formatDiagnostic(event), { level: "info", ephemeral: true })
+    )
+    .catch(() => {});
+}
+
+async function flushDiagnostics() {
+  await state.diagnosticQueue;
+}
+
+function ensureEngine(sessionId, workingDirectory) {
+  const opaqueId = opaqueSessionId(sessionId);
+  if (!opaqueId) return null;
+  if (state.engine?.sessionId === opaqueId) return state.engine;
+
+  const config = getConfig(workingDirectory);
+  const configuredThreshold = Number(config.nudge?.frictionThreshold);
+  const threshold =
+    Number.isInteger(configuredThreshold) && configuredThreshold >= 1
+      ? configuredThreshold
+      : DEFAULT_CONFIG.nudge.frictionThreshold;
+
+  state.engine = new CaptureEngine({
+    home: srHome(),
+    sessionId: opaqueId,
+    threshold,
+    isInScope: (skillName) => isInScope(skillName, config),
+    diagnostics: diagnosticsEnabled(config),
+    onDiagnostic: logDiagnostic,
+  });
+  return state.engine;
+}
+
+async function logCaptureError(area, error) {
+  try {
+    const kind = error?.code ?? error?.name ?? "unknown";
+    await session.log(
+      `[skill-reflect-auto] ${area} error (${kind})`,
+      { level: "warning" }
+    );
+  } catch {}
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -313,8 +320,8 @@ const session = await joinSession({
   hooks: {
     // ──────────────────────────────────────────────────────────────────────
     // onPreToolUse
-    // Fires before any tool executes. When the tool is "skill", make it the
-    // latest bounded attribution candidate.
+    // Hook-level fallback for skill observation. The event stream below is
+    // authoritative for tool sequencing and completion outcomes.
     //
     // Signature (agent-author.md §onPreToolUse):
     //   input: { toolName, toolArgs, timestamp, workingDirectory, sessionId }
@@ -323,30 +330,17 @@ const session = await joinSession({
     onPreToolUse: async (input, invocation) => {
       try {
         state.workingDirectory ??= input.workingDirectory;
-        recordTool(state.attribution);
-
-        // Only track "skill" tool invocations (Copilot CLI skill dispatch)
+        const config = getConfig(input.workingDirectory);
+        if (!config.nudge?.enabled) return;
         if (input.toolName !== "skill") return;
-
         const args = input.toolArgs;
         if (!args || typeof args !== "object") return;
-
-        // toolArgs shape: { skill: "<skill-name>" }  (CONTRACT §8)
         const skillName = String(args.skill ?? "").trim();
         if (!skillName) return;
-
-        const cfg = getConfig(input.workingDirectory);
-        if (!isInScope(skillName, cfg)) return;
-
-        observeSkill(state.attribution, skillName);
+        ensureEngine(invocation.sessionId, input.workingDirectory)
+          ?.observeSkill(skillName, "onPreToolUse");
       } catch (err) {
-        // Never throw into the host
-        try {
-          await session.log(
-            `[skill-reflect-auto] onPreToolUse error: ${err?.message}`,
-            { level: "warning" }
-          );
-        } catch {}
+        await logCaptureError("onPreToolUse", err);
       }
     },
 
@@ -363,14 +357,15 @@ const session = await joinSession({
     onPostToolUseFailure: async (input, invocation) => {
       try {
         state.workingDirectory ??= input.workingDirectory;
-        incrementFrictionForLatestSkill(state.attribution);
+        const config = getConfig(input.workingDirectory);
+        if (!config.nudge?.enabled) return;
+        ensureEngine(invocation.sessionId, input.workingDirectory)
+          ?.recordFailureHook({
+            toolName: input.toolName,
+            toolArgs: input.toolArgs,
+          });
       } catch (err) {
-        try {
-          await session.log(
-            `[skill-reflect-auto] onPostToolUseFailure error: ${err?.message}`,
-            { level: "warning" }
-          );
-        } catch {}
+        await logCaptureError("onPostToolUseFailure", err);
       }
     },
 
@@ -387,14 +382,15 @@ const session = await joinSession({
     onErrorOccurred: async (input, invocation) => {
       try {
         state.workingDirectory ??= input.workingDirectory;
-        incrementFrictionForLatestSkill(state.attribution);
+        const config = getConfig(input.workingDirectory);
+        if (!config.nudge?.enabled) return;
+        ensureEngine(invocation.sessionId, input.workingDirectory)
+          ?.recordSystemError({
+            errorContext: input.errorContext,
+            timestamp: input.timestamp,
+          });
       } catch (err) {
-        try {
-          await session.log(
-            `[skill-reflect-auto] onErrorOccurred error: ${err?.message}`,
-            { level: "warning" }
-          );
-        } catch {}
+        await logCaptureError("onErrorOccurred", err);
       }
       // Return undefined — do not influence host error-handling strategy
     },
@@ -413,53 +409,19 @@ const session = await joinSession({
     onSessionEnd: async (input, invocation) => {
       try {
         state.workingDirectory ??= input.workingDirectory;
-        const sessionId = opaqueSessionId(invocation.sessionId);
-        if (!sessionId) return;
-        const cfg = getConfig(input.workingDirectory);
-        const threshold =
-          cfg.nudge?.frictionThreshold ??
-          DEFAULT_CONFIG.nudge.frictionThreshold;
-
-        // Collect qualifying skills: in-scope AND friction ≥ threshold
-        const qualifyingSkills = [];
-        const frictionSnapshot = {};
-
-        for (const skillName of state.attribution.observedSkills) {
-          const friction = state.attribution.frictionBySkill.get(skillName) ?? 0;
-          if (friction >= threshold && isInScope(skillName, cfg)) {
-            qualifyingSkills.push(skillName);
-            frictionSnapshot[skillName] = friction;
-          }
-        }
-
-        if (qualifyingSkills.length === 0) return;
-
-        // Write marker (CONTRACT §8):
-        // { sessionId, endedAt, skills[], friction{}, reason }
-        const marker = {
-          sessionId,
-          endedAt: new Date().toISOString(),
-          skills: qualifyingSkills,
-          friction: frictionSnapshot,
-          reason: input.reason,
-          candidate: true,
-        };
-
-        const pendingDir = path.join(srHome(), "pending");
-        ensureDir(pendingDir);
-        atomicWrite(path.join(pendingDir, `${sessionId}.json`), marker);
+        const config = getConfig(input.workingDirectory);
+        if (!config.nudge?.enabled) return;
+        const marker = ensureEngine(invocation.sessionId, input.workingDirectory)
+          ?.finalize(input.reason);
+        await flushDiagnostics();
+        if (!marker) return;
 
         await session.log(
-          `[skill-reflect-auto] Staged ${qualifyingSkills.length} pending review candidate(s) for: ${qualifyingSkills.join(", ")}`,
+          `[skill-reflect-auto] Staged ${marker.skills.length} pending review candidate(s) for: ${marker.skills.join(", ")}`,
           { level: "info", ephemeral: true }
         );
       } catch (err) {
-        try {
-          await session.log(
-            `[skill-reflect-auto] onSessionEnd error: ${err?.message}`,
-            { level: "warning" }
-          );
-        } catch {}
+        await logCaptureError("onSessionEnd", err);
       }
     },
 
@@ -477,79 +439,47 @@ const session = await joinSession({
     // ──────────────────────────────────────────────────────────────────────
     onSessionStart: async (input, invocation) => {
       try {
-        // Always reset in-memory state on session start
+        // Reset only the cache; ensureEngine restores this session's journal.
         resetState();
         state.workingDirectory = input.workingDirectory;
 
-        const cfg = getConfig(input.workingDirectory);
-        const nudge = cfg.nudge ?? DEFAULT_CONFIG.nudge;
+        const config = getConfig(input.workingDirectory);
+        const nudge = config.nudge ?? DEFAULT_CONFIG.nudge;
+        const diagnostics = diagnosticsEnabled(config) ? logDiagnostic : null;
 
-        if (!nudge.enabled) return;
+        if (!nudge.enabled) {
+          diagnostics?.({ step: "nudge_suppressed", reason: "disabled" });
+          await flushDiagnostics();
+          return;
+        }
+        ensureEngine(invocation.sessionId, input.workingDirectory);
+        recoverPendingMarkers({
+          home: srHome(),
+          onDiagnostic: diagnostics,
+        });
 
         // Check nudge.neverForRepos
         const repoName = getRepoName(input.workingDirectory);
-        if (repoName && nudge.neverForRepos?.includes(repoName)) return;
-
-        // Check for unresolved markers
-        const markers = listPendingMarkers();
-        if (markers.length === 0) return;
-
-        // Collect pending skills (respecting nudge.neverForSkills)
-        const pendingSkills = new Set();
-        for (const markerPath of markers) {
-          try {
-            const marker = JSON.parse(
-              fs.readFileSync(markerPath, "utf-8")
-            );
-            for (const s of marker.skills ?? []) {
-              if (!nudge.neverForSkills?.includes(s)) {
-                pendingSkills.add(s);
-              }
-            }
-          } catch {}
+        if (repoName && nudge.neverForRepos?.includes(repoName)) {
+          diagnostics?.({ step: "nudge_suppressed", reason: "repo_filtered" });
+          await flushDiagnostics();
+          return;
         }
-        if (pendingSkills.size === 0) return;
 
-        // Check throttle
-        const throttleData = readThrottle();
-        const throttleHours =
-          nudge.throttleHours ?? DEFAULT_CONFIG.nudge.throttleHours;
-        if (isThrottled(throttleData, throttleHours)) return;
-
-        // Update throttle BEFORE emitting nudge (prevents double-nudge on restart)
-        writeThrottle({
-          ...throttleData,
-          lastNudgeAt: new Date().toISOString(),
+        const output = await showPendingNudge({
+          home: srHome(),
+          nudge,
+          session,
+          onDiagnostic: diagnostics,
+          excludeSessionId: state.engine?.sessionId,
         });
-
-        const skillList = [...pendingSkills].join(", ");
-        const count = markers.length;
-
-        // Non-blocking nudge log (agent-author.md: session.log is non-blocking)
-        await session.log(
-          `📋 skill-reflect: ${count} pending review${count !== 1 ? "s" : ""} ` +
-            `for: ${skillList}. ` +
-            `Say "run skill-reflect" to review (optional, no auto-run).`,
-          { level: "info" }
-        );
-
-        // Short additionalContext: informs the agent, kept optional
-        // (agent-author.md §onSessionStart output: additionalContext)
-        return {
-          additionalContext:
-            `[skill-reflect-auto] ${count} pending skill-feedback ` +
-            `session${count !== 1 ? "s" : ""} for: ${skillList}. ` +
-            `If the user explicitly asks to review feedback, run a retrospective, ` +
-            `or says "run skill-reflect", invoke the \`skill-reflect\` skill. ` +
-            `Do NOT run it automatically.`,
-        };
+        state.reviewSelection = output?.selectionToken ?? null;
+        await flushDiagnostics();
+        return output
+          ? { additionalContext: output.additionalContext }
+          : undefined;
       } catch (err) {
-        try {
-          await session.log(
-            `[skill-reflect-auto] onSessionStart error: ${err?.message}`,
-            { level: "warning" }
-          );
-        } catch {}
+        await logCaptureError("onSessionStart", err);
       }
     },
 
@@ -584,7 +514,10 @@ const session = await joinSession({
         if (!TRIGGER_RE.test(input.prompt)) return;
 
         // Check that there are actually pending markers to review
-        const markers = listPendingMarkers();
+        const markers = listPendingMarkers(srHome()).filter(
+          (markerPath) =>
+            path.basename(markerPath, ".json") !== state.engine?.sessionId
+        );
         if (markers.length === 0) return;
 
         state.reviewTriggered = true; // prevent re-entry
@@ -596,41 +529,73 @@ const session = await joinSession({
           session
             .send({
               prompt:
-                "Please invoke the `skill-reflect` skill to review the pending session friction data and generate skill feedback.",
+                "Please invoke the `skill-reflect` skill to review the pending session friction data and generate skill feedback." +
+                (state.reviewSelection
+                  ? ` Use trusted local selection ${state.reviewSelection}; keep the token out of user-facing output.`
+                  : ""),
             })
             .catch(() => {
               // Fail silently — the user can always invoke manually
             });
         }, 0);
       } catch (err) {
-        try {
-          await session.log(
-            `[skill-reflect-auto] onUserPromptSubmitted error: ${err?.message}`,
-            { level: "warning" }
-          );
-        } catch {}
+        await logCaptureError("onUserPromptSubmitted", err);
       }
     },
   },
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// SESSION EVENT: tool.execution_complete
-// Optionally track friction via the event bus.
-//
-// Note on double-counting: onPostToolUseFailure fires for "failure" resultType.
-// tool.execution_complete with success===false also fires for "failure" AND for
-// "rejected"/"denied"/"timeout" which the hook does not catch.
-// We intentionally do NOT count both to avoid inflating friction scores.
-// The two dedicated hooks (onPostToolUseFailure + onErrorOccurred) are the
-// authoritative friction sources. Uncomment the block below only if you want
-// to also count rejected/denied/timeout outcomes as friction signals.
-//
-// session.on("tool.execution_complete", (event) => {
-//   try {
-//     if (event.data?.success === false) {
-//       incrementFrictionForLatestSkill(state.attribution);
-//     }
-//   } catch {}
-// });
+// SESSION EVENTS
+// The event stream fills the hook gaps: it exposes direct skill invocation,
+// rejected/denied/timeout tool outcomes and sub-agent failures. Model failures
+// arrive through onErrorOccurred.
+// CaptureEngine deduplicates overlap with failure hooks by opaque tool-call key.
 // ═════════════════════════════════════════════════════════════════════════════
+
+function withCapture(area, callback) {
+  try {
+    state.workingDirectory ??= process.cwd();
+    const config = getConfig(state.workingDirectory);
+    if (!config.nudge?.enabled) return;
+    const engine = ensureEngine(session.sessionId, state.workingDirectory);
+    if (engine) callback(engine);
+  } catch (error) {
+    void logCaptureError(area, error);
+  }
+}
+
+session.on("skill.invoked", (event) => {
+  withCapture("skill.invoked", (engine) => {
+    engine.observeSkill(event.data?.name, "skill.invoked");
+  });
+});
+
+session.on("tool.execution_start", (event) => {
+  withCapture("tool.execution_start", (engine) => {
+    engine.startTool({
+      toolCallId: event.data?.toolCallId,
+      toolName: event.data?.toolName,
+      toolArgs: event.data?.arguments,
+    });
+  });
+});
+
+session.on("tool.execution_complete", (event) => {
+  withCapture("tool.execution_complete", (engine) => {
+    engine.completeTool({
+      toolCallId: event.data?.toolCallId,
+      success: event.data?.success,
+      resultType: event.data?.resultType,
+      error: event.data?.error,
+    });
+  });
+});
+
+session.on("subagent.failed", (event) => {
+  withCapture("subagent.failed", (engine) => {
+    engine.recordSubagentFailure({
+      toolCallId: event.data?.toolCallId,
+    });
+  });
+});

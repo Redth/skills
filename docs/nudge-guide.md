@@ -11,7 +11,7 @@ lifecycle-hook automation down to a single paste-in line.
 
 The `skill-reflect-auto` Copilot CLI extension (and per-agent adapters in
 `adapters/`) attaches lifecycle hooks that detect skill candidates with nearby friction,
-stage a lightweight unverified marker
+durably snapshot value-free Copilot capture state, stage a lightweight unverified marker
 in `$SKILL_REFLECT_HOME/pending/`, and emit a non-blocking nudge at the next
 session start.
 
@@ -25,7 +25,17 @@ Marker and throttle state are stored in `$SKILL_REFLECT_HOME/` (default
 calls** — it only stages cheap pointers. The portable core skill confirms provenance and
 does all real work after review authorization.
 
-See `skill-reflect-auto/extension.mjs` and `adapters/` for implementations.
+Copilot journals live under `$SKILL_REFLECT_HOME/journal/` and survive same-session
+extension reload. Markers for every live session are excluded from nudges. Each shown nudge creates
+an opaque, marker-digest-bound selection containing only the allowed skill subset, so accepting it
+cannot widen the review to unrelated sessions or excluded skills. If a session process exits before
+its end hook, the next startup recovers any journal that qualifies under its originally persisted
+capture threshold after confirming the original process is no longer live. Capture activation,
+release, recovery, and reviewed cleanup coordinate through per-session locks. Diagnostics are opt-in
+(`diagnostics.enabled`) and ephemeral.
+
+See `skill-reflect-auto/extension.mjs`, its sibling `capture.mjs`, and `adapters/`
+for implementations.
 
 ---
 
@@ -84,7 +94,9 @@ Nudge fatigue is a first-class concern. All mechanisms respect these rules:
 
 A nudge is only staged/offered when the session crossed a minimum number of
 friction signals (`nudge.frictionThreshold`, default `2` in
-`skill-reflect.config.json`). Smooth sessions produce no nudge.
+`skill-reflect.config.json`). Eligible signals include unsuccessful tool outcomes,
+failure-followed-by-retry shapes, model failures, and subagent failures. The broader signal
+set does not lower the default threshold; smooth sessions produce no nudge.
 
 ### Throttle
 
