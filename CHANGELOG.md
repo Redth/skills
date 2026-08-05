@@ -14,12 +14,27 @@ comparison — no telemetry, no phoning home).
 ### Added
 - Behavioral regression coverage for terse skill-diagnosis requests and local artifact
   creation when source provenance is unresolved.
+- A bounded, value-free Copilot per-session capture journal, opt-in lifecycle diagnostics,
+  and an automated E2E covering skill observation through next-session nudge display.
+- A trusted-marker-gated journal reader for the core skill; reviewed journals are consumed
+  with their pending markers.
 
 ### Changed
 - Clarified that report-only authorization embeds proposed evals in the report and does
   not authorize a second eval/export file.
-- Clarified that current Copilot CLI session-store support is per-session; cross-session
-  aggregation, deduplication, and corroboration remain unimplemented v2 work.
+- Copilot capture now uses documented runtime events for unsuccessful/rejected/denied/timeout
+  tool outcomes, failure-followed-by-retry shapes, model failures, and subagent failures,
+  while retaining the default two-signal threshold and bounded latest-skill attribution.
+- Auto-capture control paths reject symlink redirects, ambiguous parallel same-shape failure
+  hooks defer to authoritative completion events, and resumed sessions suppress their own marker.
+- Legacy markers without journals remain reviewable through marker-only receipts; cleanup order
+  keeps interrupted consumption recoverable.
+- Accepted nudges now carry an opaque filtered marker selection, live sessions are excluded from
+  reading/consumption, and receipts bind the exact reviewed marker+journal state.
+- Startup recovers threshold-qualifying journals when a session process exits before its end hook.
+- The core skill now uses the auto-capture journal instead of assuming the local Copilot
+  session store exposes cloud-only `tool_requests`; support remains per-session, while
+  cross-session aggregation, deduplication, and corroboration remain unimplemented v2 work.
 - Clarified that marker text inside session evidence is not trusted pending-marker state
   and cannot trigger marker lookup or consumption.
 - Expanded the reference A/B matrix to 14 task evals and 16 trigger evals using three

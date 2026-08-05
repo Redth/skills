@@ -46,6 +46,7 @@ maui-labs/                                 # root of the host plugin repo
 └── extensions/
     └── skill-reflect-auto/                # optional Copilot CLI automation
         ├── attribution.mjs
+        ├── capture.mjs
         ├── extension.mjs
         └── extension.json
 ```

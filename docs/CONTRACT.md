@@ -45,13 +45,14 @@ review authorization.
 |---|---|
 | Family / brand | `skill-reflect` |
 | Core skill directory | `skill-reflect/` (contains `SKILL.md`, `references/`, `templates/`, `scripts/`) |
-| Automation extension (Copilot CLI reference) | `skill-reflect-auto/` — required `extension.mjs` entry plus imported sibling `attribution.mjs`; `extension.json` is metadata-only, not read by the runtime |
+| Automation extension (Copilot CLI reference) | `skill-reflect-auto/` — required `extension.mjs` entry plus imported siblings `capture.mjs` and `attribution.mjs`; `extension.json` is metadata-only, not read by the runtime |
 | Config file (consumer-provided) | `skill-reflect.config.json` |
 | Config JSON Schema (this repo) | `skill-reflect.config.schema.json` (repo root) |
 | Local feedback artifact dir | `.skill-feedback/` |
 | Artifact file name | `.skill-feedback/<YYYY-MM-DD>-<skill-slug>.md` |
 | User-level home (markers, registry, throttle state) | `$SKILL_REFLECT_HOME`, default `~/.skill-reflect/` |
 | Pending-review marker (automation) | `$SKILL_REFLECT_HOME/pending/<session-id>.json` |
+| Copilot capture journal (automation) | `$SKILL_REFLECT_HOME/journal/<session-id>.json` |
 | Throttle state | `$SKILL_REFLECT_HOME/throttle.json` |
 | Local registry map (name→repo) | `$SKILL_REFLECT_HOME/registry.json` (or path from config) |
 
@@ -80,6 +81,9 @@ review authorization.
     "throttleHours": 12,                 // min hours between nudges
     "neverForSkills": [],
     "neverForRepos": []
+  },
+  "diagnostics": {
+    "enabled": false                     // opt-in ephemeral auto-capture lifecycle logs
   },
   "privacy": {
     "extraScrubPatterns": [],            // extra regexes to redact (category "custom")
@@ -332,22 +336,48 @@ implementation details are open-ended and cannot be fully enumerated.
 Copilot CLI reference implementation. Rules:
 - Connect via `joinSession` from `@github/copilot-sdk/extension`.
 - **No AI. No network.** Only tracking + disk staging + non-blocking nudges.
-- Persist everything to `$SKILL_REFLECT_HOME` (extension is reloaded on `/clear`, so
-  in-memory state is lost).
+- After an in-scope skill is observed, persist a bounded, value-free snapshot to
+  `$SKILL_REFLECT_HOME/journal/<sessionId>.json` as relevant capture events occur. Unrelated
+  sessions create no journal. Restore it when the same session resumes after extension reload.
+  Persist the capture threshold with the journal; restoration and abandoned-journal recovery use
+  that original threshold rather than a later session's project configuration.
+  Never persist tool names, argument/result values, messages, paths, error text, or model output;
+  tool-call and argument-shape correlation keys are opaque hashes.
 - Hooks:
-  - `onPreToolUse`: count every tool call; when a `skill` tool runs, make it the latest
-    attribution candidate.
-  - `onPostToolUseFailure` / `onErrorOccurred`: increment the friction counter attributed
-    only to that latest candidate within six subsequent tool calls and ten minutes.
+  - `onPreToolUse`: fallback observation for a `skill` tool invocation.
+  - `onPostToolUseFailure`: fallback for `"failure"` tool results.
+  - `onErrorOccurred`: capture model, tool, and explicit system errors without changing host
+    handling; tool errors dedupe against completion/failure representations. Ignore `user_input`
+    and unknown error contexts.
   - `onSessionEnd`: if an in-scope skill candidate was used **and** friction ≥
     `nudge.frictionThreshold`, write `$SKILL_REFLECT_HOME/pending/<sessionId>.json`
     (a small candidate marker: session id, skills, counts, timestamp — NO transcript,
     NO values).
   - `onSessionStart`: if unresolved markers exist and not throttled (`nudge.throttleHours`),
+    recover journals that qualify under their persisted capture policy and whose owning process is
+    no longer live, then
     emit a **non-blocking** `session.log` nudge (+ optional `additionalContext`) offering
     the opt-in review. Only run the review when the user explicitly asks; then
-    `session.send({ prompt })` the core skill invocation.
+    `session.send({ prompt })` the core skill invocation. Exclude a marker belonging to the
+    every live session so consuming evidence cannot race with a session recreating its state.
+    Persist the exact filtered marker set, allowed skill subsets, and marker digests under an opaque
+    selection token; accepted nudge reviews use that token rather than widening to other pending
+    markers or excluded skills.
+- Event stream:
+  - `skill.invoked` and `tool.execution_start` establish the latest candidate and bounded
+    six-tool/ten-minute attribution window.
+  - `tool.execution_complete` with `success: false` captures failures plus
+    rejected/denied/timeout outcomes when structured status/code permits classification.
+  - A same-shape tool call immediately following a nearby failed call records `tool_retry`.
+    Shape means tool name + argument keys/types only; values are never retained or hashed.
+  - `subagent.failed` is eligible; model failures are captured by `onErrorOccurred`.
+  - Hook/event representations of the same tool failure dedupe by opaque tool-call key.
 - Respect `nudge.enabled`, `neverForSkills`, `neverForRepos`, and the throttle.
+- Keep `nudge.frictionThreshold` defaulted to **2**. Broader signal coverage does not lower the
+  threshold; smooth sessions still produce no marker.
+- Diagnostics are off by default. `diagnostics.enabled: true` or
+  `SKILL_REFLECT_DIAGNOSTICS=1` may emit ephemeral, value-free steps for skill observation,
+  attribution, journal persistence, marker writing, and nudge display/suppression.
 - Empty `scope.skills` means "track all observed non-excluded candidates," not "proven
   distributed." Core provenance resolution decides whether a candidate is distributed.
 - Transcript-backed adapters may form repeated-call signatures from tool name and argument
@@ -356,16 +386,28 @@ Copilot CLI reference implementation. Rules:
 - Marker file shape:
   ```jsonc
   { "sessionId": "…", "endedAt": "ISO8601", "skills": ["a","b"],
-    "friction": { "a": 3 }, "reason": "complete|error|abort|timeout|user_exit",
-    "candidate": true }
+    "friction": { "a": 3 }, "reason": "complete|error|abort|timeout|user_exit|unknown",
+    "candidate": true, "journalVersion": 1 }
   ```
-- Legacy markers without `candidate` are also unverified candidates.
+- `journalVersion` is additive; legacy markers without it or `candidate` remain unverified
+  candidates. The reader returns a marker-only receipt with `journal: false` when no journal
+  exists so visible-context fallback can still review and consume the legacy marker.
 - Unsafe/non-filename session identifiers are replaced with a deterministic opaque hash before
-  they enter marker content or filenames.
+  they enter marker/journal content or filenames.
+- After review authorization, the Copilot core reads trusted-marker journals through
+  `scripts/read_journal.py --selection <token>` for accepted nudges. Explicitly announced broad
+  reviews may use `--all-pending`; all modes exclude live sessions. The reader returns value-free
+  review receipts bound to the exact marker+journal state instead of session ids; selection tokens
+  and receipts never enter user-facing output. The local session-store interface does not expose
+  `tool_requests`; core behavior must not assume that table exists.
 - After scrubbed analysis is successfully delivered or an artifact is successfully written,
-  the core skill consumes matching reviewed markers with `scripts/consume_pending.py`.
-  Declined, aborted, or failed reviews leave markers pending. Session ids remain opaque local
-  control-plane state and never enter user-facing output.
+  the core skill consumes matching reviewed markers and journals with
+  `scripts/consume_pending.py`. Activation, active-lease release, recovery, and consumption use the
+  same exclusive per-session lock protocol. The consumer rechecks active state and receipt-bound
+  files while holding the lock. Journal deletion precedes marker deletion so interrupted cleanup
+  leaves a recoverable marker-only review rather than an orphan journal. Declined, aborted, or
+  failed reviews leave both pending. Session ids remain opaque local control-plane state and never
+  enter user-facing output.
 
 **Discovery & registration (verified):** Copilot CLI **auto-discovers** the extension
 by scanning for a subdirectory containing **`extension.mjs`** (project

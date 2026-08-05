@@ -53,7 +53,9 @@ Install once, then let it review the skills you use.
 Installing also wires two **opt-in, local-only** lifecycle hooks
 (`SessionStart` / `SessionEnd`) that cheaply stage an unverified candidate marker
 when a recently used skill hits nearby friction, and offer a non-blocking nudge next
-session.
+session. The Copilot CLI extension durably snapshots value-free capture state as events
+occur so reload does not erase attribution; opt-in diagnostics can trace observation
+through nudge display without logging arguments, results, paths, or session ids.
 **No AI and no network calls run in the hook** — the actual review only happens
 when you explicitly ask for it. Disable anytime with
 `"nudge": {"enabled": false}` in `skill-reflect.config.json`, or by uninstalling.
