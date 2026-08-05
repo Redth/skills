@@ -223,7 +223,7 @@ Artifact mode writes:
 
 On **Copilot CLI**: the automation extension writes a value-free, per-session journal under
 `$SKILL_REFLECT_HOME/journal/` as capture events occur. Read it through
-`scripts/read_journal.py --selection <token>` for an accepted auto nudge, or `--all-pending` only
+`scripts/read_journal.py` with `--selection <token>` for an accepted auto nudge, or `--all-pending` only
 after an explicitly announced broad review. Both exclude live sessions and return receipts instead
 of session ids. The local session-store surface does not expose `tool_requests`; do not query that
 table. Current support remains per-session only. Cross-session aggregation, deduplication, and
