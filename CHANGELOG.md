@@ -11,6 +11,8 @@ comparison — no telemetry, no phoning home).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-05
+
 ### Added
 - Behavioral regression coverage for terse skill-diagnosis requests and local artifact
   creation when source provenance is unresolved.
@@ -97,7 +99,8 @@ comparison — no telemetry, no phoning home).
   Copilot CLI `skill-reflect-auto` reference extension.
 - Vendoring kit for authors who want to bundle a copy into their own plugin.
 
-[Unreleased]: https://github.com/Redth/skills/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/Redth/skills/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/Redth/skills/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Redth/skills/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Redth/skills/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Redth/skills/releases/tag/v1.0.0
