@@ -1,0 +1,532 @@
+{
+  "$comment": "Synthetic recorded answers from App Store Connect for push.py's tests (the invented Sample Recipes app; every id is made up). Keys are 'METHOD /path?query' as sent; a key ending in * matches by prefix. '$md5:<file>' is the MD5 of that file under out/. '$reserve' answers an upload reservation with parts at https://store-uploads.example.com/upload/<id>/<n>, '$echo' answers a PATCH with its own resource, and '$delivery' answers a poll with that assetDeliveryState.",
+  "routes": {
+    "GET /v1/apps?filter[bundleId]=com.example.samplerecipes&limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "apps",
+            "id": "1234567890",
+            "attributes": {
+              "name": "Sample Recipes",
+              "bundleId": "com.example.samplerecipes",
+              "primaryLocale": "en-US"
+            }
+          }
+        ]
+      }
+    },
+    "GET /v1/apps/1234567890/appInfos?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appInfos",
+            "id": "info-live",
+            "attributes": {
+              "state": "READY_FOR_DISTRIBUTION",
+              "appStoreState": "READY_FOR_SALE"
+            }
+          },
+          {
+            "type": "appInfos",
+            "id": "info-next",
+            "attributes": {
+              "state": "PREPARE_FOR_SUBMISSION",
+              "appStoreState": "PREPARE_FOR_SUBMISSION"
+            }
+          }
+        ]
+      }
+    },
+    "GET /v1/appInfos/info-next?include=primaryCategory,primarySubcategoryOne,primarySubcategoryTwo,secondaryCategory,secondarySubcategoryOne,secondarySubcategoryTwo": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "appInfos",
+          "id": "info-next",
+          "relationships": {
+            "primaryCategory": {
+              "data": {
+                "type": "appCategories",
+                "id": "FOOD_AND_DRINK"
+              }
+            },
+            "primarySubcategoryOne": {
+              "data": null
+            },
+            "primarySubcategoryTwo": {
+              "data": null
+            },
+            "secondaryCategory": {
+              "data": null
+            },
+            "secondarySubcategoryOne": {
+              "data": null
+            },
+            "secondarySubcategoryTwo": {
+              "data": null
+            }
+          }
+        }
+      }
+    },
+    "GET /v1/appInfos/info-next/appInfoLocalizations?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appInfoLocalizations",
+            "id": "ail-en",
+            "attributes": {
+              "locale": "en-US",
+              "name": "Sample Recipes",
+              "subtitle": "Recipes and meal plans",
+              "privacyPolicyUrl": "https://example.com/privacy",
+              "privacyChoicesUrl": null,
+              "privacyPolicyText": null
+            }
+          }
+        ]
+      }
+    },
+    "GET /v1/appInfos/info-next/ageRatingDeclaration": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "ageRatingDeclarations",
+          "id": "age-1",
+          "attributes": {
+            "violenceCartoonOrFantasy": "NONE",
+            "contests": "INFREQUENT_OR_MILD"
+          }
+        }
+      }
+    },
+    "GET /v1/apps/1234567890/appStoreVersions?filter[platform]=IOS&limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appStoreVersions",
+            "id": "ver-ios-11",
+            "attributes": {
+              "platform": "IOS",
+              "versionString": "1.1",
+              "appVersionState": "PREPARE_FOR_SUBMISSION",
+              "appStoreState": "PREPARE_FOR_SUBMISSION",
+              "copyright": "2025 Example Studio",
+              "createdDate": "2026-11-01T09:00:00-08:00"
+            }
+          },
+          {
+            "type": "appStoreVersions",
+            "id": "ver-ios-10",
+            "attributes": {
+              "platform": "IOS",
+              "versionString": "1.0",
+              "appVersionState": "READY_FOR_DISTRIBUTION",
+              "appStoreState": "READY_FOR_SALE",
+              "copyright": "2025 Example Studio",
+              "createdDate": "2026-06-01T09:00:00-08:00"
+            }
+          }
+        ]
+      }
+    },
+    "GET /v1/apps/1234567890/appStoreVersions?filter[platform]=TV_OS&limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appStoreVersions",
+            "id": "ver-tv-10",
+            "attributes": {
+              "platform": "TV_OS",
+              "versionString": "1.0",
+              "appVersionState": "READY_FOR_DISTRIBUTION",
+              "appStoreState": "READY_FOR_SALE",
+              "copyright": "2025 Example Studio",
+              "createdDate": "2026-06-01T09:00:00-08:00"
+            }
+          }
+        ]
+      }
+    },
+    "GET /v1/appStoreVersions/ver-tv-10/appStoreVersionLocalizations?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appStoreVersionLocalizations",
+            "id": "loc-tv-en",
+            "attributes": {
+              "locale": "en-US",
+              "description": "Plan a week of meals on the big screen.",
+              "keywords": "recipes",
+              "promotionalText": "Weekly plans are coming.",
+              "whatsNew": null,
+              "marketingUrl": null,
+              "supportUrl": "https://example.com/support"
+            }
+          }
+        ]
+      }
+    },
+    "GET /v1/appStoreVersions/ver-ios-11/appStoreVersionLocalizations?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appStoreVersionLocalizations",
+            "id": "loc-ios-en",
+            "attributes": {
+              "locale": "en-US",
+              "description": "Plan your meals.",
+              "keywords": "recipes, meal plan, grocery",
+              "promotionalText": "New: weekly plans.",
+              "whatsNew": "Weekly plans and a shopping list.",
+              "marketingUrl": "https://example.com",
+              "supportUrl": "https://example.com/support"
+            }
+          }
+        ]
+      }
+    },
+    "GET /v1/appStoreVersions/ver-ios-11/appStoreReviewDetail": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "appStoreReviewDetails",
+          "id": "rev-1",
+          "attributes": {
+            "contactFirstName": "Alex",
+            "contactLastName": "Example",
+            "contactPhone": "+1 555 555 0100",
+            "contactEmail": "review@example.com",
+            "demoAccountName": null,
+            "demoAccountPassword": null,
+            "demoAccountRequired": false,
+            "notes": "No sign-in needed. Plans stay on the device."
+          }
+        }
+      }
+    },
+    "GET /v1/appStoreVersionLocalizations/loc-ios-en/appScreenshotSets?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appScreenshotSets",
+            "id": "set-67",
+            "attributes": {
+              "screenshotDisplayType": "APP_IPHONE_67"
+            }
+          },
+          {
+            "type": "appScreenshotSets",
+            "id": "set-129",
+            "attributes": {
+              "screenshotDisplayType": "APP_IPAD_PRO_3GEN_129"
+            }
+          },
+          {
+            "type": "appScreenshotSets",
+            "id": "set-61",
+            "attributes": {
+              "screenshotDisplayType": "APP_IPHONE_61"
+            }
+          },
+          {
+            "type": "appScreenshotSets",
+            "id": "set-55",
+            "attributes": {
+              "screenshotDisplayType": "APP_IPHONE_55"
+            }
+          }
+        ]
+      }
+    },
+    "GET /v1/appScreenshotSets/set-67/appScreenshots?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appScreenshots",
+            "id": "shot-67-1",
+            "attributes": {
+              "fileName": "01_APP_IPHONE_67_plan.png",
+              "sourceFileChecksum": "$md5:apple/IOS/screenshots/en-US/01_APP_IPHONE_67_plan.png",
+              "assetDeliveryState": {
+                "state": "COMPLETE",
+                "errors": []
+              }
+            }
+          },
+          {
+            "type": "appScreenshots",
+            "id": "shot-67-2",
+            "attributes": {
+              "fileName": "02_APP_IPHONE_67_recipe.png",
+              "sourceFileChecksum": "$md5:apple/IOS/screenshots/en-US/02_APP_IPHONE_67_recipe.png",
+              "assetDeliveryState": {
+                "state": "COMPLETE",
+                "errors": []
+              }
+            }
+          },
+          {
+            "type": "appScreenshots",
+            "id": "shot-67-3",
+            "attributes": {
+              "fileName": "03_APP_IPHONE_67_shopping.png",
+              "sourceFileChecksum": "$md5:apple/IOS/screenshots/en-US/03_APP_IPHONE_67_shopping.png",
+              "assetDeliveryState": {
+                "state": "COMPLETE",
+                "errors": []
+              }
+            }
+          }
+        ]
+      }
+    },
+    "GET /v1/appScreenshotSets/set-129/appScreenshots?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appScreenshots",
+            "id": "shot-129-r",
+            "attributes": {
+              "fileName": "02_APP_IPAD_PRO_3GEN_129_recipe.png",
+              "sourceFileChecksum": "$md5:apple/IOS/screenshots/en-US/02_APP_IPAD_PRO_3GEN_129_recipe.png",
+              "assetDeliveryState": {
+                "state": "COMPLETE",
+                "errors": []
+              }
+            }
+          },
+          {
+            "type": "appScreenshots",
+            "id": "shot-129-p",
+            "attributes": {
+              "fileName": "01_APP_IPAD_PRO_3GEN_129_plan.png",
+              "sourceFileChecksum": "$md5:apple/IOS/screenshots/en-US/01_APP_IPAD_PRO_3GEN_129_plan.png",
+              "assetDeliveryState": {
+                "state": "COMPLETE",
+                "errors": []
+              }
+            }
+          }
+        ],
+        "links": {
+          "self": "https://api.appstoreconnect.apple.com/v1/appScreenshotSets/set-129/appScreenshots?limit=200",
+          "next": "https://api.appstoreconnect.apple.com/v1/appScreenshotSets/set-129/appScreenshots?cursor=Mg&limit=200"
+        }
+      }
+    },
+    "GET /v1/appScreenshotSets/set-129/appScreenshots?cursor=Mg&limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appScreenshots",
+            "id": "shot-129-s",
+            "attributes": {
+              "fileName": "03_APP_IPAD_PRO_3GEN_129_shopping.png",
+              "sourceFileChecksum": "$md5:apple/IOS/screenshots/en-US/03_APP_IPAD_PRO_3GEN_129_shopping.png",
+              "assetDeliveryState": {
+                "state": "COMPLETE",
+                "errors": []
+              }
+            }
+          }
+        ],
+        "links": {
+          "self": "https://api.appstoreconnect.apple.com/v1/appScreenshotSets/set-129/appScreenshots?cursor=Mg&limit=200"
+        }
+      }
+    },
+    "GET /v1/appScreenshotSets/set-61/appScreenshots?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appScreenshots",
+            "id": "shot-61-old",
+            "attributes": {
+              "fileName": "old.png",
+              "sourceFileChecksum": "0123456789abcdef0123456789abcdef",
+              "assetDeliveryState": {
+                "state": "COMPLETE"
+              }
+            }
+          },
+          {
+            "type": "appScreenshots",
+            "id": "shot-61-p",
+            "attributes": {
+              "fileName": "01_APP_IPHONE_61_plan.png",
+              "sourceFileChecksum": "$md5:apple/IOS/screenshots/en-US/01_APP_IPHONE_61_plan.png",
+              "assetDeliveryState": {
+                "state": "COMPLETE",
+                "errors": []
+              }
+            }
+          }
+        ]
+      }
+    },
+    "GET /v1/appStoreVersionLocalizations/loc-ios-en/appPreviewSets?limit=200": {
+      "status": 200,
+      "body": {
+        "data": []
+      }
+    },
+    "PATCH /v1/appInfos/info-next": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "appInfos",
+          "id": "info-next"
+        }
+      }
+    },
+    "PATCH /v1/appInfoLocalizations/ail-en": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "appInfoLocalizations",
+          "id": "ail-en"
+        }
+      }
+    },
+    "POST /v1/appInfoLocalizations": {
+      "status": 201,
+      "body": {
+        "data": {
+          "type": "appInfoLocalizations",
+          "id": "ail-de"
+        }
+      }
+    },
+    "PATCH /v1/ageRatingDeclarations/age-1": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "ageRatingDeclarations",
+          "id": "age-1"
+        }
+      }
+    },
+    "PATCH /v1/appStoreVersions/ver-ios-11": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "appStoreVersions",
+          "id": "ver-ios-11"
+        }
+      }
+    },
+    "POST /v1/appStoreVersions": {
+      "status": 201,
+      "body": {
+        "data": {
+          "type": "appStoreVersions",
+          "id": "ver-tv-12"
+        }
+      }
+    },
+    "PATCH /v1/appStoreVersionLocalizations/loc-ios-en": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "appStoreVersionLocalizations",
+          "id": "loc-ios-en"
+        }
+      }
+    },
+    "PATCH /v1/appStoreVersionLocalizations/loc-tv-en": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "appStoreVersionLocalizations",
+          "id": "loc-tv-en"
+        }
+      }
+    },
+    "POST /v1/appStoreVersionLocalizations": {
+      "status": 201,
+      "body": {
+        "data": {
+          "type": "appStoreVersionLocalizations",
+          "id": "loc-ios-de"
+        }
+      }
+    },
+    "PATCH /v1/appStoreReviewDetails/rev-1": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "appStoreReviewDetails",
+          "id": "rev-1"
+        }
+      }
+    },
+    "POST /v1/appScreenshotSets": {
+      "status": 201,
+      "body": {
+        "data": {
+          "type": "appScreenshotSets",
+          "id": "set-de-67"
+        }
+      }
+    },
+    "POST /v1/appPreviewSets": {
+      "status": 201,
+      "body": {
+        "data": {
+          "type": "appPreviewSets",
+          "id": "pset-en-67"
+        }
+      }
+    },
+    "PATCH /v1/appScreenshotSets/set-129/relationships/appScreenshots": {
+      "status": 204
+    },
+    "PATCH /v1/appScreenshotSets/set-61/relationships/appScreenshots": {
+      "status": 204
+    },
+    "PATCH /v1/appScreenshotSets/set-de-67/relationships/appScreenshots": {
+      "status": 204
+    },
+    "PATCH /v1/appPreviewSets/pset-en-67/relationships/appPreviews": {
+      "status": 204
+    },
+    "DELETE /v1/appScreenshots/shot-61-old": {
+      "status": 204
+    },
+    "POST /v1/appScreenshots": {
+      "$reserve": "appScreenshots"
+    },
+    "POST /v1/appPreviews": {
+      "$reserve": "appPreviews"
+    },
+    "PATCH /v1/appScreenshots/*": {
+      "$echo": true
+    },
+    "PATCH /v1/appPreviews/*": {
+      "$echo": true
+    },
+    "GET /v1/appScreenshots/*": {
+      "$delivery": "COMPLETE"
+    },
+    "GET /v1/appPreviews/*": {
+      "$delivery": "COMPLETE"
+    },
+    "PUT /upload/*": {
+      "status": 200
+    }
+  }
+}

@@ -51,7 +51,7 @@ Source: https://support.google.com/googleplay/android-developer/answer/9866151 (
   are deleted and the new ones uploaded in order, inside the edit, so nothing is public until the commit.
 - **Commit** uses `changesInReviewBehavior=ERROR_IF_IN_REVIEW`. Play's default (`CANCEL_IN_REVIEW_AND_SUBMIT`)
   cancels whatever is in review, a release too, and resubmits everything. With something in review the commit
-  fails with `CHANGES_ALREADY_IN_REVIEW` and the edit is kept; `--cancel-review` uses the default, only by the
+  fails with `CHANGES_ALREADY_IN_REVIEW`, nothing is committed and `apply` deletes the edit; `--cancel-review` uses the default, only by the
   user's choice. Source: https://developers.google.com/android-publisher/api-ref/rest/v3/edits/commit (checked
   2026-11-14).
 - **An uncommitted edit is deleted** when the run stops, and if that delete fails too, the original error is the

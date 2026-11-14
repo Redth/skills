@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="${lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${page_title}</title>
+<link rel="stylesheet" href="preview.css">
+</head>
+<body class="as">
+<p class="notice">An approximation of the App Store (${platform}, ${locale}), drawn from out/listing.json: not
+Apple's rendering. Fonts, sizes, line breaks and truncation can differ. The icon comes from the build, not the
+listing: ${icon_note}.</p>
+
+<p class="section-label">Search results</p>
+<div class="search-bar">${search_term}</div>
+<div class="result">
+  <div class="result-head">
+    ${icon_64}
+    <div class="result-text">
+      <div class="name-1">${name}</div>
+      <div class="subtitle-1">${subtitle}</div>
+    </div>
+    <span class="get">Get</span>
+  </div>
+  ${search_shots}
+</div>
+
+<p class="section-label">Product page (top)</p>
+<div class="product">
+  <div class="product-head">
+    ${icon_118}
+    <div class="product-text">
+      <div class="name-2">${name}</div>
+      <div class="subtitle-2">${subtitle}</div>
+      <span class="get">Get</span>
+    </div>
+  </div>
+  <div class="facts"><span>Ratings<br>(not shown)</span><span>Age<br>(from the rating)</span><span>Category<br>${category}</span></div>
+</div>
+${carousel}
+<div class="description">${description}</div>
+<div class="more">more</div>
+
+<h2>What's New</h2>
+<div class="whats-new">${whats_new}</div>
+</body>
+</html>

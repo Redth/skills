@@ -1,0 +1,42 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "copyright": "2026 Example Studio",
+    "categories": [["GAMES", "GAMES_PUZZLE", "GAMES_WORD"], "EDUCATION"],
+    "advisory": {
+      "violenceCartoonOrFantasy": "NONE",
+      "contests": "INFREQUENT_OR_MILD",
+      "gambling": false,
+      "seventeenPlus": false
+    },
+    "info": {
+      "en-US": {
+        "title": "Sample Recipes",
+        "subtitle": "Plan meals in minutes",
+        "description": "Plan a week of meals in minutes.",
+        "keywords": ["cooking", "dinner ideas", "grocery list"],
+        "releaseNotes": "The grocery list now sorts by aisle.",
+        "promoText": "Plan a whole week from what's already in your fridge.",
+        "marketingUrl": "https://example.com",
+        "supportUrl": "https://example.com/support",
+        "privacyPolicyUrl": "https://example.com/privacy"
+      },
+      "de-DE": {
+        "title": "Sample Recipes",
+        "subtitle": "Mahlzeiten schnell planen",
+        "description": "Plane eine Woche voller Mahlzeiten in Minuten.",
+        "keywords": ["kochen", "einkaufsliste"]
+      }
+    },
+    "review": {
+      "firstName": "Testfirst",
+      "lastName": "Testlast",
+      "email": "review@example.com",
+      "phone": "+1 555 0100",
+      "demoUsername": "demo-user@example.com",
+      "demoPassword": "not-a-real-password",
+      "demoRequired": true,
+      "notes": "Sign in with the demo account to see shared lists."
+    }
+  }
+}

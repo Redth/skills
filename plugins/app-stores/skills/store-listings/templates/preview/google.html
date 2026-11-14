@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="${lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${page_title}</title>
+<link rel="stylesheet" href="preview.css">
+</head>
+<body class="gp">
+<p class="notice">An approximation of Google Play's listing (${locale}), drawn from out/listing.json: not
+Google's rendering. Fonts, sizes, line breaks and cropping can differ; on a phone Play shows the feature graphic
+mainly with a video or in promotions.</p>
+<div class="page">
+  ${feature}
+  <div class="head">
+    ${icon}
+    <div>
+      <div class="title">${title}</div>
+      <div class="dev">${developer}</div>
+    </div>
+  </div>
+  <div class="install">Install</div>
+  ${shots}
+  ${tablet_shots}
+  <h2>About this app</h2>
+  <div class="short">${short_description}</div>
+  <div class="full">${full_description}</div>
+</div>
+</body>
+</html>

@@ -374,6 +374,13 @@ The plan file:
 
 `apply` also refuses when `out/listing.json` no longer matches `listingSha256`.
 
+As built (wave 2): `listing.json` also has the Apple TV privacy text in `apple.app.localizations[<primary>].privacyPolicyText`, `apple.auth` and
+`google.auth` (variable names), and `apple.review.contact`/`demoAccount` as variable names (`demoAccount: null` = no
+sign-in needed). An unset Play `video` is `null` (left as the store has it); `""` clears it. The plan file also
+carries `compared` (each compared key's hash and, for pictures, a count) so a refusal can say what changed. Play's
+default language differing from the config is a note, never an action. An edit whose commit is refused
+(`CHANGES_ALREADY_IN_REVIEW`) is deleted.
+
 Behaviour the docs and evals rely on:
 
 - **Exit codes** for both scripts: `0` done; `1` a check error or a store's error (its message printed as it

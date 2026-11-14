@@ -73,7 +73,9 @@ The examples use an invented app, "Sample Recipes" by Example Studio (`com.examp
 - **Fallback, field by field:** a locale's missing field takes `primaryLocale`'s. A store's own `description`
   falls back to the locale's shared `description`, so write one shared description and override only where a
   store needs its own words.
-- **`null` means "not set" (fall back); `""` means "set to empty".** Use `""` only on purpose.
+- **`null` means "not set" (fall back); `""` means "set to empty".** Use `""` only on purpose. When a field is
+  still unset after falling back (What's New, Play's video), `push.py` leaves the store's value as it is; `""` clears
+  it on the store.
 - `apple`: `name` (defaults to `app.name`), `subtitle`, `keywords` (a list; written comma-separated with no
   spaces), `promotionalText`, `whatsNew` (not on a first version; required on every later one), `description`.
 - `google`: `title`, `shortDescription`, `fullDescription`, `video` (one YouTube URL), `releaseNotes` (these go
@@ -206,3 +208,14 @@ For an Android-only app with no screenshots yet (the check will say what's missi
                           "dataSafetyCsv": null } }
 }
 ```
+
+## What `listing.py` reports
+
+- `check --json` prints `{"findings": [...], "fallbacks": [...], "relaxed": [...]}` plus `checklist`, `notChecked`,
+  `notes`, `summary`, `stores` and `config`; each finding has `rule_id`, `severity`, `where`, `message`, `source`,
+  `status` and `store`.
+- Findings about the config itself (a screen named but not defined, a file that isn't there, a locale a store
+  doesn't have) use `config.*` ids. They can't be relaxed: fix the config.
+- `preview` works from `out/` (run `build` first), so it shows what was built, not the config as it is now.
+- `out/listing.json` carries the Apple TV privacy text in `apple.app.localizations[<primary>].privacyPolicyText`, each store's
+  `auth` (variable names only) and App Review's `contact` and `demoAccount` (variable names only).

@@ -1,0 +1,119 @@
+{
+  "$comment": "Synthetic recorded answers from Google Play's Android Publisher API for push.py's tests (the invented Sample Recipes app; every id is made up). Keys are 'METHOD /path?query' as sent. 'images' is what each language's image type holds at first (by SHA-256; '$sha256:<file>' is that file's under out/): the tests' fake keeps it as Play would, a DELETE emptying it and an upload adding one. 'alternates' are answers tests put in a route's place.",
+  "routes": {
+    "POST /token": {
+      "status": 200,
+      "body": {
+        "access_token": "synthetic-access-token",
+        "token_type": "Bearer",
+        "expires_in": 3599
+      }
+    },
+    "POST /androidpublisher/v3/applications/com.example.samplerecipes/edits": {
+      "status": 200,
+      "body": {
+        "id": "edit-1",
+        "expiryTimeSeconds": "1800000000"
+      }
+    },
+    "GET /androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-1/details": {
+      "status": 200,
+      "body": {
+        "defaultLanguage": "en-US",
+        "contactEmail": "support@example.com",
+        "contactWebsite": "https://example.com"
+      }
+    },
+    "GET /androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-1/listings": {
+      "status": 200,
+      "body": {
+        "kind": "androidpublisher#listingsListResponse",
+        "listings": [
+          {
+            "language": "en-US",
+            "title": "Sample Recipes",
+            "shortDescription": "Recipes and meal plans.",
+            "fullDescription": "Plan a week of meals in minutes. Pick recipes, and the shopping list writes itself.",
+            "video": ""
+          }
+        ]
+      }
+    },
+    "PUT /androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-1/listings/en-US": {
+      "$echo": true
+    },
+    "PUT /androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-1/listings/de-DE": {
+      "$echo": true
+    },
+    "PATCH /androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-1/details": {
+      "$echo": true
+    },
+    "POST /androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-1:validate": {
+      "status": 200,
+      "body": {
+        "id": "edit-1"
+      }
+    },
+    "POST /androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-1:commit?changesInReviewBehavior=ERROR_IF_IN_REVIEW": {
+      "status": 200,
+      "body": {
+        "id": "edit-1"
+      }
+    },
+    "POST /androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-1:commit?changesInReviewBehavior=CANCEL_IN_REVIEW_AND_SUBMIT": {
+      "status": 200,
+      "body": {
+        "id": "edit-1"
+      }
+    },
+    "DELETE /androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-1": {
+      "status": 204
+    },
+    "POST /androidpublisher/v3/applications/com.example.samplerecipes/dataSafety": {
+      "status": 200,
+      "body": {}
+    }
+  },
+  "alternates": {
+    "commit-in-review": {
+      "status": 400,
+      "body": {
+        "error": {
+          "code": 400,
+          "message": "Changes are sent for review automatically. The query parameter changesInReviewBehavior=ERROR_IF_IN_REVIEW was set and there are changes already in review.",
+          "status": "FAILED_PRECONDITION",
+          "details": [
+            {
+              "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+              "reason": "CHANGES_ALREADY_IN_REVIEW",
+              "domain": "androidpublisher.googleapis.com"
+            }
+          ]
+        }
+      }
+    },
+    "service-unavailable": {
+      "status": 503,
+      "body": {
+        "error": {
+          "code": 503,
+          "message": "The service is currently unavailable.",
+          "status": "UNAVAILABLE"
+        }
+      }
+    }
+  },
+  "images": {
+    "en-US/phoneScreenshots": [
+      "$sha256:google/metadata/android/en-US/images/phoneScreenshots/01_plan.png",
+      "$sha256:google/metadata/android/en-US/images/phoneScreenshots/02_recipe.png",
+      "0000000000000000000000000000000000000000000000000000000000000001"
+    ],
+    "en-US/featureGraphic": [
+      "$sha256:google/metadata/android/en-US/images/featureGraphic.png"
+    ],
+    "en-US/icon": [
+      "$sha256:google/metadata/android/en-US/images/icon.png"
+    ]
+  }
+}

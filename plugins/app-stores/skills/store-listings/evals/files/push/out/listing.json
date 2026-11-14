@@ -1,0 +1,214 @@
+{
+  "$comment": "Synthetic fixture for push.py's tests: out/listing.json as listing.py build writes it, for the invented Sample Recipes app. Ids are made up; hashes are the files' beside it.",
+  "version": 1,
+  "builtAt": "2026-11-14T10:00:00Z",
+  "config": "store-listing.json",
+  "apple": {
+    "appId": "1234567890",
+    "bundleId": "com.example.samplerecipes",
+    "primaryLocale": "en-US",
+    "app": {
+      "categories": {
+        "primary": "FOOD_AND_DRINK",
+        "primarySubcategories": [],
+        "secondary": "LIFESTYLE",
+        "secondarySubcategories": []
+      },
+      "ageRating": {
+        "violenceCartoonOrFantasy": "NONE",
+        "contests": "NONE"
+      },
+      "copyright": "2026 Example Studio",
+      "localizations": {
+        "en-US": {
+          "name": "Sample Recipes",
+          "subtitle": "Plan meals in minutes",
+          "privacyPolicyUrl": "https://example.com/privacy",
+          "privacyChoicesUrl": null
+        },
+        "de-DE": {
+          "name": "Sample Recipes",
+          "subtitle": "Mahlzeiten in Minuten planen",
+          "privacyPolicyUrl": "https://example.com/privacy",
+          "privacyChoicesUrl": null
+        }
+      }
+    },
+    "platforms": {
+      "IOS": {
+        "localizations": {
+          "en-US": {
+            "description": "Plan a week of meals in minutes. Pick recipes, and the shopping list writes itself.",
+            "keywords": "recipes,meal plan,grocery",
+            "promotionalText": "New: weekly plans.",
+            "whatsNew": "Weekly plans and a shopping list.",
+            "marketingUrl": "https://example.com",
+            "supportUrl": "https://example.com/support"
+          },
+          "de-DE": {
+            "description": "Plane eine Woche voller Mahlzeiten in Minuten.",
+            "keywords": "rezepte,essensplan,einkauf",
+            "promotionalText": null,
+            "whatsNew": "Wochenpläne und eine Einkaufsliste.",
+            "marketingUrl": "https://example.com",
+            "supportUrl": "https://example.com/support"
+          }
+        },
+        "screenshots": {
+          "en-US": {
+            "APP_IPHONE_67": [
+              {
+                "file": "apple/IOS/screenshots/en-US/01_APP_IPHONE_67_plan.png",
+                "md5": "a036051f4f04f85ca9f695a29052942b",
+                "size": 73
+              },
+              {
+                "file": "apple/IOS/screenshots/en-US/02_APP_IPHONE_67_recipe.png",
+                "md5": "be733a2a77606abafd344c4281771f0d",
+                "size": 73
+              },
+              {
+                "file": "apple/IOS/screenshots/en-US/03_APP_IPHONE_67_shopping.png",
+                "md5": "833ac8712809158c3a925018632ab423",
+                "size": 73
+              }
+            ],
+            "APP_IPAD_PRO_3GEN_129": [
+              {
+                "file": "apple/IOS/screenshots/en-US/01_APP_IPAD_PRO_3GEN_129_plan.png",
+                "md5": "cc33531bb2ec72e5ea4429fe252ab900",
+                "size": 73
+              },
+              {
+                "file": "apple/IOS/screenshots/en-US/02_APP_IPAD_PRO_3GEN_129_recipe.png",
+                "md5": "043183071d7850e6c4e4f436a50ea9f9",
+                "size": 73
+              },
+              {
+                "file": "apple/IOS/screenshots/en-US/03_APP_IPAD_PRO_3GEN_129_shopping.png",
+                "md5": "451872647f8ebe975ab7a4d524d0c970",
+                "size": 73
+              }
+            ],
+            "APP_IPHONE_61": [
+              {
+                "file": "apple/IOS/screenshots/en-US/01_APP_IPHONE_61_plan.png",
+                "md5": "3c187a86249bc45b96d59c167a207e70",
+                "size": 73
+              },
+              {
+                "file": "apple/IOS/screenshots/en-US/02_APP_IPHONE_61_recipe.png",
+                "md5": "144d8b1a6da08a5a08c93a04e39f9d54",
+                "size": 73
+              }
+            ]
+          },
+          "de-DE": {
+            "APP_IPHONE_67": [
+              {
+                "file": "apple/IOS/screenshots/de-DE/01_APP_IPHONE_67_plan.png",
+                "md5": "a036051f4f04f85ca9f695a29052942b",
+                "size": 73
+              }
+            ]
+          }
+        },
+        "previews": {
+          "en-US": {
+            "IPHONE_67": [
+              {
+                "file": "apple/IOS/previews/en-US/01_IPHONE_67_plan.mp4",
+                "md5": "d639908fd629d880524a81b055d834ba",
+                "posterFrame": "00:00:05:00",
+                "mime": "video/mp4"
+              }
+            ]
+          }
+        }
+      },
+      "TV_OS": {
+        "localizations": {
+          "en-US": {
+            "description": "Plan a week of meals on the big screen.",
+            "keywords": "recipes",
+            "promotionalText": "New: weekly plans.",
+            "whatsNew": null,
+            "marketingUrl": null,
+            "supportUrl": "https://example.com/support"
+          }
+        },
+        "screenshots": {},
+        "previews": {}
+      },
+      "MAC_OS": null
+    },
+    "review": {
+      "notes": "No sign-in needed. Plans stay on the device.",
+      "contact": {
+        "firstNameEnv": "APPLE_REVIEW_FIRST_NAME",
+        "lastNameEnv": "APPLE_REVIEW_LAST_NAME",
+        "phoneEnv": "APPLE_REVIEW_PHONE",
+        "emailEnv": "APPLE_REVIEW_EMAIL"
+      },
+      "demoAccount": null
+    }
+  },
+  "google": {
+    "package": "com.example.samplerecipes",
+    "defaultLanguage": "en-US",
+    "details": {
+      "contactEmail": "support@example.com",
+      "contactWebsite": "https://example.com",
+      "contactPhone": null
+    },
+    "listings": {
+      "en-US": {
+        "title": "Sample Recipes: Meal Planner",
+        "shortDescription": "Plan a week of meals in minutes.",
+        "fullDescription": "Plan a week of meals in minutes. Pick recipes, and the shopping list writes itself.",
+        "video": ""
+      },
+      "de-DE": {
+        "title": "Sample Recipes: Essensplaner",
+        "shortDescription": "Plane eine Woche voller Mahlzeiten in Minuten.",
+        "fullDescription": "Plane eine Woche voller Mahlzeiten in Minuten.",
+        "video": ""
+      }
+    },
+    "images": {
+      "en-US": {
+        "phoneScreenshots": [
+          {
+            "file": "google/metadata/android/en-US/images/phoneScreenshots/01_plan.png",
+            "sha256": "c4783db90469997348c209f83c6438c2b6148b32ea8d6b5eff67fdb6a6c4b4a4"
+          },
+          {
+            "file": "google/metadata/android/en-US/images/phoneScreenshots/02_recipe.png",
+            "sha256": "ac9c88f52063796ab85904ae16a9009d10122cc0bd49a6a7621e9ced5d08df4e"
+          },
+          {
+            "file": "google/metadata/android/en-US/images/phoneScreenshots/03_shopping.png",
+            "sha256": "a848d54ec92929dfc636e2434ce920381bed80c93d36a29bb41a03e990c3381b"
+          },
+          {
+            "file": "google/metadata/android/en-US/images/phoneScreenshots/04_week.png",
+            "sha256": "a95c76b628166d779299d433ccbfd341f2807ab11b62f656ad01bfa29c8d8b2d"
+          }
+        ],
+        "featureGraphic": [
+          {
+            "file": "google/metadata/android/en-US/images/featureGraphic.png",
+            "sha256": "de72becc36282c968ceb322793a8cd7e06befd95d161ee76ad9ebe0ecd09f626"
+          }
+        ],
+        "icon": [
+          {
+            "file": "google/metadata/android/en-US/images/icon.png",
+            "sha256": "f01bbf193a21bbf1a71dd1994a69876b2bdf0efdb42b91bcadeaade78f14f11f"
+          }
+        ]
+      }
+    },
+    "dataSafetyCsv": null
+  }
+}

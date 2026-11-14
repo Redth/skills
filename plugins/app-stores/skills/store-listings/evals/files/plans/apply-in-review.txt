@@ -7,5 +7,5 @@ The store matches the plan. Applying 3 actions.
 Committing the edit (changesInReviewBehavior=ERROR_IF_IN_REVIEW)...
 Google Play answered 400 FAILED_PRECONDITION:
   {"error": {"code": 400, "status": "FAILED_PRECONDITION", "message": "Changes are sent for review automatically. The query parameter changesInReviewBehavior=ERROR_IF_IN_REVIEW was set and there are changes already in review.", "details": [{"reason": "CHANGES_ALREADY_IN_REVIEW"}]}}
-The edit was not committed; nothing is public. The edit was kept, as Play does with this error.
+The edit was not committed; nothing is public. The edit was deleted.
 exit status 1
