@@ -46,6 +46,10 @@ window.__appstoresReady = new Promise(resolve => setTimeout(() => {
 PLAIN_PAGE = "<!doctype html><html><body style='margin:0;background:#fafafa'>No report</body></html>"
 
 
+TALL_PAGE = """<!doctype html><html><head><style>html, body { margin: 0; background: #fff; }
+.top { height: 1200px; } .end { height: 34px; background: #3366cc; }</style></head>
+<body><div class="top"></div><div class="end"></div></body></html>"""
+
 class FindChromeTests(unittest.TestCase):
     def test_chrome_env_pointing_nowhere_is_an_error(self):
         with mock.patch.dict(os.environ, {"CHROME": "/nonexistent/chrome-for-a-test"}):
@@ -88,7 +92,7 @@ class RenderTests(unittest.TestCase):
         cls._tmp = tempfile.TemporaryDirectory()
         cls.dir = cls._tmp.name
         cls.pages = {}
-        for name, html in (("opaque", OPAQUE_PAGE), ("ready", READY_PAGE), ("plain", PLAIN_PAGE)):
+        for name, html in (("opaque", OPAQUE_PAGE), ("ready", READY_PAGE), ("plain", PLAIN_PAGE), ("tall", TALL_PAGE)):
             path = os.path.join(cls.dir, name + ".html")
             with open(path, "w", encoding="utf-8") as f:
                 f.write(html)
@@ -133,6 +137,21 @@ class RenderTests(unittest.TestCase):
         self.chrome.render(self.pages["opaque"], 301, 201, out, scale=2)
         info = png.info(out)
         self.assertEqual((info.width, info.height), (301, 201))
+
+    def test_full_page_is_as_tall_as_the_page(self):
+        out = self.out("tall.png")
+        self.chrome.render(self.pages["tall"], 200, 100, out, scale=2, full_page=6000)
+        info = png.info(out)
+        self.assertEqual((info.width, info.height), (200, 2468))  # 1234 CSS px at 2x
+        w, h, rgb = png.decode_rgb(out)
+        last = rgb[((h - 2) * w + 5) * 3:((h - 2) * w + 5) * 3 + 3]
+        self.assertEqual(last, bytes([0x33, 0x66, 0xCC]), "the bottom of the page is in the picture")
+
+    def test_full_page_stops_at_its_cap(self):
+        out = self.out("capped.png")
+        self.chrome.render(self.pages["tall"], 300, 100, out, full_page=500)
+        info = png.info(out)
+        self.assertEqual((info.width, info.height), (300, 500))
 
     def test_jpeg(self):
         out = self.out("feature.jpg")

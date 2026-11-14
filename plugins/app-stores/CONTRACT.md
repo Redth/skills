@@ -97,7 +97,8 @@ it are relative to the config's own folder. Schema: `skills/store-listings/schem
     "en-US": {
       "description": "Plan a week of meals in minutes. …",
       "apple": { "name": null, "subtitle": "Plan meals in minutes", "keywords": ["recipes", "meal plan", "grocery"],
-                 "promotionalText": "…", "whatsNew": "…", "description": null },
+                 "promotionalText": "…", "whatsNew": "…", "description": null,
+                 "platforms": { "TV_OS": { "description": "… the Siri Remote does it all." } } },
       "google": { "title": "Sample Recipes: Meal Planner", "shortDescription": "Plan a week of meals in minutes.",
                   "fullDescription": null, "video": null, "releaseNotes": null },
       "altText": { "featureGraphic": "A phone showing a week of planned meals" }
@@ -121,6 +122,8 @@ it are relative to the config's own folder. Schema: `skills/store-listings/schem
   "stores": {
     "apple": {
       "enabled": true,
+      "primaryLocale": null,
+      "locales": null,
       "categories": { "primary": "FOOD_AND_DRINK", "primarySubcategories": [], "secondary": "LIFESTYLE",
                       "secondarySubcategories": [] },
       "platforms": {
@@ -137,6 +140,7 @@ it are relative to the config's own folder. Schema: `skills/store-listings/schem
     "google": {
       "enabled": true,
       "defaultLanguage": "en-US",
+      "locales": ["en-US", "de-DE"],
       "slots": { "phone": "android-phone", "tablet7": null, "tablet10": "android-tablet", "tv": null, "wear": null },
       "graphics": { "icon": "graphics/icon-512.png", "featureGraphic": "graphics/feature-1024x500.png", "tvBanner": null },
       "dataSafetyCsv": null
@@ -150,9 +154,20 @@ it are relative to the config's own folder. Schema: `skills/store-listings/schem
 
 Meanings:
 
-- **Locales** are BCP 47 (`en-US`, `pt-BR`, `zh-Hans`). Each locale's fields fall back, field by field, to
-  `primaryLocale`'s; a store's own `description` falls back to the locale's shared `description`. `null` means
-  "not set" (fall back); `""` means "set to empty". Mapping to each store's own codes is `locales.py`'s.
+- **Locales** are BCP 47 (`en-US`, `pt-BR`, `zh-Hans`). Each locale's fields fall back, field by field, to the
+  store's primary locale's, then `primaryLocale`'s; a store's own `description` falls back to the locale's shared
+  `description` before moving on. `null` means "not set" (fall back); `""` means "set to empty". Mapping to each
+  store's own codes is `locales.py`'s.
+- **Locales per store:** `stores.<store>.locales` lists the config's locales a store gets (`null` or absent: every
+  one); only those are checked, built and sent. A store's primary is `stores.apple.primaryLocale` or
+  `stores.google.defaultLanguage` (`null`: `primaryLocale`) and must be one of its locales (a `config.*` error
+  otherwise).
+- **Per-platform Apple words:** App Store Connect keeps a version's words per platform. A locale's
+  `apple.platforms.<IOS|MAC_OS|TV_OS|VISION_OS>` may set `description`, `keywords`, `promotionalText`, `whatsNew`,
+  `marketingUrl`, `supportUrl` for that platform. A platform's field: its override in the locale → the locale's
+  `apple.<field>` → (description) the locale's shared `description` → the same chain in the App Store's primary
+  locale → in `primaryLocale`; the URLs end at `app.urls`. `name` and `subtitle` are app-wide (appInfo), never
+  per platform. Rules run on each platform's words where they differ (`where`: `en-US apple.description (TV_OS)`).
 - **Screenshots** are files at `<screenshots.folder>/<locale>/<screen>/<shot id>.png` (or `.jpg`), the layout
   `store-capture` and `store-screenshots` write. A locale without a file falls back to the primary locale's file
   for that screen and shot. `shots` is the order. `screens`/`stores` filters: `null` = all.
@@ -259,7 +274,9 @@ Every function documented with a docstring; every module has `test_<module>.py`.
   target, sets `Emulation.setDeviceMetricsOverride` to `width/scale × height/scale` CSS px at `deviceScaleFactor`
   `scale`, navigates, waits for load and `document.fonts.ready`, captures with `Page.captureScreenshot`
   (`format`, `quality`, `captureBeyondViewport: false`), writes `out_path`, and returns `window.__appstoresReport`
-  if the page set one (else `{}`). `evaluate(expr)`. Closes targets it opened; kills Chrome on exit.
+  if the page set one (else `{}`). With `full_page=<max CSS px>`, the page is laid out at the width, its
+  `document.documentElement.scrollHeight` measured, and the picture made that tall (capped). `evaluate(expr)`.
+  Closes targets it opened; kills Chrome on exit.
 - **`schema.py`**: `validate(instance, schema) -> list[str]` (JSON-pointer-located messages) for the subset:
   `type` (incl. lists), `properties`, `required`, `additionalProperties` (bool or schema), `patternProperties`,
   `items`, `minItems`, `maxItems`, `uniqueItems`, `enum`, `const`, `minimum`, `maximum`, `minLength`, `maxLength`,
@@ -288,14 +305,21 @@ Every function documented with a docstring; every module has `test_<module>.py`.
 
 `listing.py` (store-listings):
 
-- `import --from fastlane|supply|triple-t|expo <path> [--out store-listing.json]`: a first config from those
-  layouts (words per locale, URLs, categories where present, screenshots copied into the folder layout).
+- `import --from fastlane|supply|triple-t|expo <path> [--out store-listing.json] [--platform IOS|MAC_OS|TV_OS|VISION_OS]`:
+  a first config from those layouts (words per locale, URLs, categories where present, screenshots copied into
+  the folder layout). A fastlane folder is one Apple platform's (`--platform`, else its screenshots', else IOS); a
+  later platform's differing words become its `apple.platforms.<P>` overrides. Each store's `locales` and primary
+  are what its source had. Shot ids come from the file names (order number, device, size and locale taken off;
+  `shot-NN` for a folder whose names don't each name a moment); Apple screens are named by device class
+  (`iphone`, `ipad`, `mac`, `apple-tv`, `vision-pro`) unless a class has two display types; Play slots whose
+  pictures are byte-identical share one screen.
 - `check [--config …] [--stores apple,google] [--json]`: schema, then every rule of every enabled store on the
   resolved words and the screenshot files; prints findings grouped by store and severity; exit 1 on any error.
 - `build [--config …] [--out out]`: runs `check` first (stops on errors), then writes `out/` (below).
 - `preview [--out out] [--png]`: writes `out/preview/index.html` (each store's page as it'll look: Apple's search
   row and product page, Play's listing, per locale) and, with `--png`, renders it through `chrome.py` to
-  `out/preview/*.png` for an agent to look at.
+  `out/preview/*.png` for an agent to look at: each page whole (up to 6,000 CSS px tall), descriptions shown in
+  whole lines (never a word cut with an ellipsis glued on).
 
 `out/` layout:
 
@@ -342,7 +366,11 @@ out/
 }
 ```
 
-Locale keys in `listing.json` are each store's own codes (Apple's `en-US`, `de-DE`…; Play's `en-US`, `de-DE`…).
+Locale keys in `listing.json` are each store's own codes (Apple's `en-US`, `de-DE`…; Play's `en-US`, `de-DE`…),
+and each store has only its own locales (`stores.<store>.locales`), its primary as `apple.primaryLocale` /
+`google.defaultLanguage`. `apple.platforms.<P>.localizations` are that platform's own words (overrides resolved);
+fastlane's `apple/<P>/metadata/` likewise. `google.developer` (the copyright's holder, else the app's name) is for
+the preview only; `push.py` never sends it.
 
 `push.py` (store-listings):
 

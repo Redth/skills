@@ -8,7 +8,11 @@ happen to any app.
 - **The store's primary language isn't the one you wrote.** A listing written as `en-US` went to an app whose
   App Store primary language was `en-CA`, while Play's default was `en-US`. Writing to a locale nobody sees, or
   creating a new one, is easy to miss. Read each store's primary locale (the `plan` notes a mismatch) before
-  writing copy; it's set per store.
+  writing copy; it's set per store. Set `stores.apple.primaryLocale`, `stores.google.defaultLanguage` and each
+  store's `locales` to match, so the build sends neither store a language it doesn't have.
+- **One Apple platform's words overwritten with another's.** App Store Connect keeps a version's description per
+  platform; an Apple TV description saying a controller is needed (Guideline 2.4.3) became the iPhone one in a
+  single-description config. Keep a platform's own words in `locales.<loc>.apple.platforms.<P>`.
 - **A new Apple localisation copies everything but the description and keywords.** Check both after adding a
   locale.
 - **A localised screenshot that isn't there falls back to the primary's.** The check reports fallbacks: read

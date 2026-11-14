@@ -3,7 +3,7 @@
 
 Subcommands (run from the user's project; every one is offline):
 
-    listing.py import --from fastlane|supply|triple-t|expo <path> [--out store-listing.json]
+    listing.py import --from fastlane|supply|triple-t|expo <path> [--out store-listing.json] [--platform P]
     listing.py check  [--config store-listing.json] [--stores apple,google] [--json]
     listing.py build  [--config store-listing.json] [--out out]
     listing.py preview [--config store-listing.json] [--out out] [--png]
@@ -71,6 +71,12 @@ STORE_FIELDS = {
                "google.releaseNotes", "altText.featureGraphic"),
 }
 LOCALE_PREFIXES = ("apple.", "google.", "altText.")
+
+# App Store Connect keeps these per platform (a version's words): ``locales.<loc>.apple.platforms.<P>.<field>``
+# overrides them for one platform. ``name`` and ``subtitle`` are the app's (appInfo), the same on every platform.
+APPLE_PLATFORM_FIELDS = ("description", "keywords", "promotionalText", "whatsNew", "marketingUrl", "supportUrl")
+APPLE_PLATFORM_PATHS = tuple("apple." + f for f in APPLE_PLATFORM_FIELDS)
+APPLE_URL_FIELDS = {"marketingUrl": "marketing", "supportUrl": "support"}
 
 # A config's own findings (not a store's rule) use these ids; they can't be relaxed.
 CONFIG_STORE = "config"
@@ -242,6 +248,33 @@ class Listing:
         """The config's ``stores.<name>`` object (``{}`` when absent)."""
         return (self.data.get("stores") or {}).get(name) or {}
 
+    def store_primary(self, store):
+        """A store's primary locale: ``stores.apple.primaryLocale`` or ``stores.google.defaultLanguage``, else the
+        config's ``primaryLocale``."""
+        key = {"apple": "primaryLocale", "google": "defaultLanguage"}.get(store)
+        return (self.store(store).get(key) if key else None) or self.primary
+
+    def store_locale_codes(self, store):
+        """The locales a store gets (``stores.<store>.locales``, else every one of the config's), the store's
+        primary first. Names that aren't the config's locales are left out (the check reports them)."""
+        listed = self.store(store).get("locales")
+        codes = self.locale_codes
+        if isinstance(listed, list):
+            codes = [c for c in codes if c in listed]
+        first = self.store_primary(store)
+        if first in codes:
+            codes.remove(first)
+            codes.insert(0, first)
+        return codes
+
+    def fallback_order(self, loc, store=None):
+        """The locales a field is looked for in: the locale, the store's primary, then the config's primary."""
+        out = []
+        for l in (loc, self.store_primary(store) if store else None, self.primary):
+            if l and l not in out:
+                out.append(l)
+        return out
+
     def enabled(self, name):
         """True when ``stores.<name>.enabled`` is true."""
         return bool(self.store(name).get("enabled"))
@@ -315,34 +348,60 @@ class Listing:
         words = (self.data.get("locales") or {}).get(loc) or {}
         if group is None:
             return words.get(field)
-        return (words.get(group) or {}).get(field)
+        node = words
+        for key in (group if isinstance(group, tuple) else (group,)):
+            node = node.get(key) if isinstance(node, dict) else None
+        return node.get(field) if isinstance(node, dict) else None
 
-    def resolve(self, loc, path):
+    def resolve(self, loc, path, store=None, platform=None):
         """A locale field's value after fallback, and the locale it came from: ``(value, locale)``.
 
-        A locale's field falls back to the primary locale's; ``apple.description`` and
-        ``google.fullDescription`` fall back to the same locale's shared ``description`` first (so a
-        translated shared description beats the primary's store-specific one). ``apple.name`` ends at
-        ``app.name`` (locale ``None``). ``(None, None)`` when nothing sets it.
+        A field is looked for in the locale, then the store's primary locale, then the config's
+        (``fallback_order``; the store is the path's own, ``apple.``/``google.``/``altText.``, unless given).
+        ``apple.description`` and ``google.fullDescription`` take the same locale's shared ``description``
+        before moving on (so a translated shared description beats the primary's store-specific one). With a
+        ``platform``, an Apple version field (``APPLE_PLATFORM_PATHS``) first takes that platform's override
+        (``locales.<loc>.apple.platforms.<P>.<field>``) at each step. ``apple.name`` ends at ``app.name``,
+        ``apple.marketingUrl``/``supportUrl`` at ``app.urls`` (locale ``None``). ``(None, None)`` when nothing
+        sets it.
         """
-        order = [loc] if loc == self.primary else [loc, self.primary]
+        if store is None:
+            store = "apple" if path.startswith("apple.") else (
+                "google" if path.startswith(("google.", "altText.")) else None)
+        order = self.fallback_order(loc, store)
+        cands = []
         if path == "description":
             cands = [(l, None, "description") for l in order]
-        elif path in ("apple.description", "google.fullDescription"):
-            group, field = path.split(".", 1)
-            cands = []
-            for l in order:
-                cands += [(l, group, field), (l, None, "description")]
         else:
             group, field = path.split(".", 1)
-            cands = [(l, group, field) for l in order]
+            for l in order:
+                if group == "apple" and platform and path in APPLE_PLATFORM_PATHS:
+                    cands.append((l, ("apple", "platforms", platform), field))
+                if group == "apple" and field in APPLE_URL_FIELDS:
+                    continue  # a URL is set per platform, or app-wide in app.urls
+                cands.append((l, group, field))
+                if path in ("apple.description", "google.fullDescription"):
+                    cands.append((l, None, "description"))
         for l, g, f in cands:
             value = self._raw(l, g, f)
             if value is not None:
                 return value, l
         if path == "apple.name":
             return (self.data.get("app") or {}).get("name"), None
+        if path.startswith("apple.") and path[6:] in APPLE_URL_FIELDS:
+            return ((self.data.get("app") or {}).get("urls") or {}).get(APPLE_URL_FIELDS[path[6:]]), None
         return None, None
+
+    def platform_overrides(self, loc):
+        """``{platform: {field: value}}`` a locale sets for single Apple platforms (nulls left out)."""
+        plats = ((((self.data.get("locales") or {}).get(loc) or {}).get("apple") or {}).get("platforms")) or {}
+        out = collections.OrderedDict()
+        for p in APPLE_PLATFORMS:
+            words = plats.get(p) or {}
+            given = collections.OrderedDict((k, v) for k, v in words.items() if not k.startswith("$") and v is not None)
+            if given:
+                out[p] = given
+        return out
 
     def root_value(self, path):
         """A value read from the config's root (``app.…``, ``stores.…``). Where the config names an
@@ -388,18 +447,15 @@ class Listing:
                 return p
         return None
 
-    def picture(self, loc, screen, shot):
-        """The ``Picture`` for a locale, screen and shot: the locale's own file, else the primary locale's
-        (a fallback), else None."""
-        path = self._picture_file(loc, screen, shot)
-        from_loc = loc
-        if path is None and loc != self.primary:
-            path = self._picture_file(self.primary, screen, shot)
-            from_loc = self.primary
-        if path is None:
-            return None
-        info, err = self.picture_info(path)
-        return Picture(screen, shot, path, self.relpath(path), loc, from_loc, info, err)
+    def picture(self, loc, screen, shot, store=None):
+        """The ``Picture`` for a locale, screen and shot: the locale's own file, else the store's primary
+        locale's, else the config's primary's (a fallback), else None."""
+        for from_loc in self.fallback_order(loc, store):
+            path = self._picture_file(from_loc, screen, shot)
+            if path is not None:
+                info, err = self.picture_info(path)
+                return Picture(screen, shot, path, self.relpath(path), loc, from_loc, info, err)
+        return None
 
     def graphic(self, name):
         """The ``Picture`` for a Play graphic (``icon``…), or None when the config sets none or it's missing."""
@@ -604,11 +660,36 @@ def validate_config(listing, report):
             if s not in screens:
                 report.add(CONFIG_STORE, config_finding(
                     "config.screens", "stores.google.slots.%s" % slot, "names %r, which isn't in screens" % s))
-        dl = listing.store("google").get("defaultLanguage")
-        if dl and dl not in locs:
+    for store, key, rid in (("apple", "primaryLocale", "config.primary_locale"),
+                            ("google", "defaultLanguage", "config.default_language")):
+        if not listing.enabled(store):
+            continue
+        listed = listing.store(store).get("locales")
+        if isinstance(listed, list):
+            for i, loc in enumerate(listed):
+                if loc not in locs:
+                    report.add(CONFIG_STORE, config_finding(
+                        "config.locales", "stores.%s.locales[%d]" % (store, i),
+                        "%s isn't one of the config's locales (%s)" % (loc, ", ".join(locs))))
+        own = listing.store(store).get(key)
+        if own and own not in locs:
             report.add(CONFIG_STORE, config_finding(
-                "config.default_language", "stores.google.defaultLanguage",
-                "%s isn't one of the config's locales (%s)" % (dl, ", ".join(locs))))
+                rid, "stores.%s.%s" % (store, key), "%s isn't one of the config's locales (%s)" % (own, ", ".join(locs))))
+        elif isinstance(listed, list) and listing.store_primary(store) not in listed:
+            where = "stores.%s.%s" % (store, key) if own else "primaryLocale"
+            report.add(CONFIG_STORE, config_finding(
+                rid, where, "%s, %s's primary locale, isn't one of stores.%s.locales (%s): a store's primary must be "
+                "one of its locales (set stores.%s.%s)" % (listing.store_primary(store), STORE_NAMES[store], store,
+                                                            ", ".join(listed), store, key)))
+    if listing.enabled("apple"):
+        shipped = listing.apple_platforms()
+        for loc in locs:
+            for p in listing.platform_overrides(loc):
+                if p not in shipped:
+                    report.add(CONFIG_STORE, config_finding(
+                        "config.platforms", "locales.%s.apple.platforms.%s" % (loc, p),
+                        "sets words for %s, which stores.apple.platforms doesn't ship (they're not sent)" % p,
+                        "warning"))
     for store in STORES:
         if not listing.enabled(store):
             continue
@@ -638,11 +719,11 @@ def _store_files(listing, store):
 
 
 def store_locales(listing, store, report):
-    """``{bcp47: store code}`` for the config's locales; a locale the store doesn't offer (or two that map to
-    one store locale) is an error, and left out."""
+    """``{bcp47: store code}`` for the locales a store gets (``stores.<store>.locales``, else all), its primary
+    first; a locale the store doesn't offer (or two that map to one store locale) is an error, and left out."""
     out = collections.OrderedDict()
     taken = {}
-    for loc in listing.locale_codes:
+    for loc in listing.store_locale_codes(store):
         try:
             code = locales.for_store(store, loc)
         except locales.LocaleError as e:
@@ -675,6 +756,7 @@ class StoreCheck:
                 "config.relax", "rules.relax", "relaxes %s, which isn't one of %s's rules (a typo, or since renamed?)"
                 % (rid, store), "warning"))
         self.slots = self.rules.slots
+        self.primary = listing.store_primary(store)
         self.locales = store_locales(listing, store, report)
         extra = list((listing.data.get("rules") or {}).get("extraForbiddenWords") or [])
         self.extra_rule = rules.Rule({
@@ -702,9 +784,9 @@ class StoreCheck:
                 unassigned = []
                 for screen in self.listing.platform_screens(platform):
                     for shot in self.listing.shots_for("apple", screen):
-                        pic = self.listing.picture(loc, screen, shot)
+                        pic = self.listing.picture(loc, screen, shot, "apple")
                         if pic is None:
-                            if loc == self.listing.primary:
+                            if loc == self.primary:
                                 self.missing_shots.append((platform, screen, shot))
                             continue
                         if pic.fell_back:
@@ -728,7 +810,7 @@ class StoreCheck:
         """Each preview goes in the slot its screen's screenshots fill (in the primary locale)."""
         pconf = self.listing.store("apple")["platforms"][platform]
         out = []
-        primary_pics = self.pictures.get((platform, self.listing.primary)) or {}
+        primary_pics = self.pictures.get((platform, self.primary)) or {}
         for screen, items in (pconf.get("previews") or {}).items():
             slots = []
             for key, pics in primary_pics.items():
@@ -749,9 +831,9 @@ class StoreCheck:
             for slot, screen in self.listing.google_slots().items():
                 pics = []
                 for shot in self.listing.shots_for("google", screen):
-                    pic = self.listing.picture(loc, screen, shot)
+                    pic = self.listing.picture(loc, screen, shot, "google")
                     if pic is None:
-                        if loc == self.listing.primary:
+                        if loc == self.primary:
                             self.missing_shots.append((None, screen, shot))
                         continue
                     if pic.fell_back:
@@ -783,7 +865,7 @@ class StoreCheck:
 
     def own_pictures(self, platform, loc):
         """True when a locale has a picture of its own (not fallen back) for a platform (or Play)."""
-        if loc == self.listing.primary:
+        if loc == self.primary:
             return True
         for pics in (self.pictures.get((platform, loc)) or {}).values():
             if any(p.locale is not None and not p.fell_back for p in pics):
@@ -832,9 +914,9 @@ class StoreCheck:
         used = set()
         if self.store == "apple":
             for p in self.listing.apple_platforms():
-                used |= self.slots_in_play(p, self.listing.primary)
+                used |= self.slots_in_play(p, self.primary)
         else:
-            used = self.slots_in_play(None, self.listing.primary)
+            used = self.slots_in_play(None, self.primary)
         return used
 
     def _unknown_why(self, rule):
@@ -865,7 +947,7 @@ class StoreCheck:
         for platform, screen, shot in self.missing_shots:
             grouped.setdefault((platform, screen), []).append(shot)
         for (platform, screen), shots in grouped.items():
-            where = "%s/%s/%s/" % (folder, self.listing.primary, screen)
+            where = "%s/%s/%s/" % (folder, self.primary, screen)
             if platform:
                 where = "%s %s" % (platform, where)
             self.report.add(self.store, config_finding(
@@ -884,14 +966,32 @@ class StoreCheck:
             self.extra_words()
 
     def field_fallbacks(self):
-        """Report each non-primary locale's store field that took the primary locale's value."""
+        """Report each non-primary locale's store field that took another locale's value (the store's primary's,
+        or the config's)."""
         for loc in self.locales:
-            if loc == self.listing.primary:
+            if loc == self.primary:
                 continue
             for field in STORE_FIELDS[self.store]:
-                value, src = self.listing.resolve(loc, field)
-                if value is not None and src == self.listing.primary:
-                    self.report.fallback(self.store, loc, field, src)
+                for value, src, what, _ in self.locale_values(loc, field):
+                    if value is not None and src is not None and src != loc:
+                        self.report.fallback(self.store, loc, what, src)
+
+    def locale_values(self, loc, field):
+        """A locale's value of a field as each store target gets it: ``[(value, source locale, label,
+        platforms)]``. One entry, ``platforms`` None, unless the field is an Apple version field whose value
+        differs between the shipped platforms: then one entry per distinct value, labelled with its platforms."""
+        plats = self.listing.apple_platforms() if self.store == "apple" and field in APPLE_PLATFORM_PATHS else []
+        if not plats:
+            value, src = self.listing.resolve(loc, field, self.store)
+            return [(value, src, field, None)]
+        groups = collections.OrderedDict()
+        for p in plats:
+            value, src = self.listing.resolve(loc, field, self.store, p)
+            groups.setdefault(json.dumps(value, sort_keys=True), [value, src, []])[2].append(p)
+        if len(groups) == 1:
+            value, src, _ = list(groups.values())[0]
+            return [(value, src, field, None)]
+        return [(v, src, "%s (%s)" % (field, ", ".join(ps)), ps) for v, src, ps in groups.values()]
 
     # -- field rules --------------------------------------------------------------------------------------
 
@@ -908,10 +1008,12 @@ class StoreCheck:
                 continue
             if field.startswith(LOCALE_PREFIXES) or field == "description":
                 for loc in self.locales:
-                    value, src = self.listing.resolve(loc, field)
-                    if loc != self.listing.primary and src != loc:
-                        continue  # the primary locale's value: checked there
-                    self.evaluate(rule, field, value, "%s %s" % (loc, field), loc)
+                    for value, src, label, plats in self.locale_values(loc, field):
+                        if loc != self.primary and src != loc:
+                            continue  # the store's primary locale's value: checked there
+                        if plats and not any(self.when(rule, p) is not False for p in plats):
+                            continue
+                        self.evaluate(rule, field, value, "%s %s" % (loc, label), loc)
             else:
                 value = self.listing.root_value(field)
                 env = self.listing.env_name(field)
@@ -1019,7 +1121,7 @@ class StoreCheck:
         words = []
         for other in rule.get("wordsFrom") or []:
             if other.startswith(LOCALE_PREFIXES) or other == "description":
-                v = self.listing.resolve(loc or self.listing.primary, other)[0]
+                v = self.listing.resolve(loc or self.primary, other, self.store)[0]
             else:
                 v = self.listing.root_value(other)
             if isinstance(v, list):
@@ -1038,11 +1140,11 @@ class StoreCheck:
         """The config's ``extraForbiddenWords`` in every word field the store sends."""
         for loc in self.locales:
             for field in STORE_FIELDS[self.store]:
-                value, src = self.listing.resolve(loc, field)
-                if value is None or (loc != self.listing.primary and src != loc):
-                    continue
-                for f in rules.check_words(self.extra_rule, value, "%s %s" % (loc, field)):
-                    self.report.add(self.store, f._replace(message=f.message + " (rules.extraForbiddenWords)"))
+                for value, src, label, _ in self.locale_values(loc, field):
+                    if value is None or (loc != self.primary and src != loc):
+                        continue
+                    for f in rules.check_words(self.extra_rule, value, "%s %s" % (loc, label)):
+                        self.report.add(self.store, f._replace(message=f.message + " (rules.extraForbiddenWords)"))
 
     # -- slot rules ------------------------------------------------------------------------------------
 
@@ -1548,7 +1650,7 @@ def build_apple(listing, check, out):
     manifest = collections.OrderedDict()
     manifest["appId"] = (ids.get("apple") or {}).get("appId")
     manifest["bundleId"] = (ids.get("apple") or {}).get("bundleId")
-    manifest["primaryLocale"] = by_code.get(listing.primary)
+    manifest["primaryLocale"] = by_code.get(check.primary)
     age = collections.OrderedDict((k, v) for k, v in (a.get("ageRating") or {}).items() if not k.startswith("$"))
     app_locs = collections.OrderedDict()
     for loc, code in by_code.items():
@@ -1573,8 +1675,8 @@ def build_apple(listing, check, out):
     if a.get("tvPrivacyText") and os.path.isfile(listing.abspath(a["tvPrivacyText"])):
         with open(listing.abspath(a["tvPrivacyText"]), encoding="utf-8") as f:
             tv_text = f.read().strip()
-        # One file today, so it's the primary locale's (Apple TV shows the text, not a link)
-        primary_code = by_code.get(listing.primary)
+        # One file today, so it's the store's primary locale's (Apple TV shows the text, not a link)
+        primary_code = by_code.get(check.primary)
         if primary_code in app_locs:
             app_locs[primary_code]["privacyPolicyText"] = tv_text
     for platform in listing.apple_platforms():
@@ -1583,19 +1685,15 @@ def build_apple(listing, check, out):
         locs = collections.OrderedDict()
         shots = collections.OrderedDict()
         for loc, code in by_code.items():
-            words = collections.OrderedDict([
-                ("description", listing.resolve(loc, "apple.description")[0]),
-                ("keywords", _keywords(listing.resolve(loc, "apple.keywords")[0])),
-                ("promotionalText", listing.resolve(loc, "apple.promotionalText")[0]),
-                ("whatsNew", listing.resolve(loc, "apple.whatsNew")[0]),
-                ("marketingUrl", urls.get("marketing")),
-                ("supportUrl", urls.get("support")),
-            ])
+            # The version's words are this platform's: its override, else the locale's (decision: per platform)
+            words = collections.OrderedDict(
+                (f, listing.resolve(loc, "apple." + f, "apple", platform)[0]) for f in APPLE_PLATFORM_FIELDS)
+            words["keywords"] = _keywords(words["keywords"])
             locs[code] = words
             files = [("name", app_locs[code]["name"]), ("subtitle", app_locs[code]["subtitle"]),
                      ("description", words["description"]), ("keywords", words["keywords"]),
                      ("promotional_text", words["promotionalText"]), ("release_notes", words["whatsNew"]),
-                     ("marketing_url", urls.get("marketing")), ("support_url", urls.get("support")),
+                     ("marketing_url", words["marketingUrl"]), ("support_url", words["supportUrl"]),
                      ("privacy_url", urls.get("privacy"))]
             if platform == "TV_OS" and tv_text is not None:
                 files.append(("apple_tv_privacy_policy", tv_text))
@@ -1661,6 +1759,12 @@ def build_apple(listing, check, out):
     return manifest, web_only
 
 
+def _developer(app):
+    """Who the app is by, for the preview: the copyright's holder (``2026 Example Studio``), else the app's name."""
+    holder = re.sub(r"^\s*(©|\(c\))?\s*\d{4}(\s*[-–]\s*\d{4})?\s*,?\s*", "", app.get("copyright") or "").strip()
+    return holder or app.get("name")
+
+
 def build_google(listing, check, out):
     """Write ``out/google/…`` (fastlane supply's layout) and return the manifest's ``google`` section."""
     g = listing.store("google")
@@ -1670,11 +1774,12 @@ def build_google(listing, check, out):
     by_code = check.locales
     manifest = collections.OrderedDict()
     manifest["package"] = (ids.get("google") or {}).get("package")
-    default = g.get("defaultLanguage") or listing.primary
-    manifest["defaultLanguage"] = by_code.get(default)
+    manifest["defaultLanguage"] = by_code.get(check.primary)
     manifest["details"] = collections.OrderedDict([
         ("contactEmail", contact.get("email")), ("contactWebsite", contact.get("website")),
         ("contactPhone", contact.get("phone"))])
+    # Shown by the preview only (Play's developer name is the account's, never sent): the copyright's owner.
+    manifest["developer"] = _developer(app)
     listings = collections.OrderedDict()
     images = collections.OrderedDict()
     meta = os.path.join(out, "google", "metadata", "android")
@@ -1837,8 +1942,8 @@ def build_checklist(listing, report, web_only, stores):
 
 
 def report_locales(listing, store):
-    """The config's locales (primary first)."""
-    return listing.locale_codes
+    """The locales a store gets (its primary first)."""
+    return listing.store_locale_codes(store)
 
 
 def run_build(config_path, out, now=None):
@@ -1910,6 +2015,9 @@ def parser():
     imp.add_argument("--from", dest="source", required=True, choices=("fastlane", "supply", "triple-t", "expo"))
     imp.add_argument("path", help="the metadata folder (or Expo's store.config.json)")
     imp.add_argument("--out", default="store-listing.json", help="the config to write or merge into")
+    imp.add_argument("--platform", choices=APPLE_PLATFORMS,
+                     help="fastlane only: the Apple platform the folder is for (default: what its screenshots fit, "
+                          "else IOS)")
     chk = sub.add_parser("check", help="check the config against each enabled store's rules")
     chk.add_argument("--config", default="store-listing.json")
     chk.add_argument("--stores", help="comma-separated: apple,google (default: every enabled store)")

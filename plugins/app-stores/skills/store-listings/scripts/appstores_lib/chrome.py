@@ -433,7 +433,8 @@ class Chrome:
             max(1, deadline - time.monotonic()),
         )
 
-    def render(self, url_or_path, width, height, out_path, fmt="png", quality=None, scale=1.0, timeout=60):
+    def render(self, url_or_path, width, height, out_path, fmt="png", quality=None, scale=1.0, timeout=60,
+               full_page=None):
         """Render a page to a ``width`` x ``height`` pixel picture at ``out_path``; return the page's report.
 
         The page is laid out at ``width/scale`` x ``height/scale`` CSS pixels with ``deviceScaleFactor``
@@ -442,6 +443,10 @@ class Chrome:
         ``window.__appstoresReady`` promise if it set one, captures the viewport only, writes the file
         (making its folder) and returns ``window.__appstoresReport`` if the page set one, else ``{}``.
         Raises ``ChromeError`` on a failed load, a page error or the ``timeout`` (seconds) running out.
+
+        ``full_page`` (CSS px): capture the whole page instead. It's laid out ``width/scale`` wide (``height``
+        is only the first viewport), its height measured (``document.documentElement.scrollHeight``), and the
+        picture is that tall, at most ``full_page`` CSS px (times ``scale`` in pixels).
         """
         if fmt not in ("png", "jpeg"):
             raise ValueError("fmt must be png or jpeg, not %r" % (fmt,))
@@ -466,6 +471,27 @@ class Chrome:
                 timeout=timeout,
             )
             self._load(session, to_url(url_or_path), deadline)
+            if full_page:
+                tall = self._evaluate(
+                    session, "Math.ceil(Math.max(document.documentElement.scrollHeight,"
+                    " document.body ? document.body.scrollHeight : 0))", max(1, deadline - time.monotonic()))
+                css_h = float(min(max(int(tall or 1), 1), int(full_page)))
+                height = int(round(css_h * scale))
+                css_h = height / float(scale)
+                whole = whole and abs(css_h - round(css_h)) < 1e-6
+                self.call(
+                    "Emulation.setDeviceMetricsOverride",
+                    {
+                        "width": int(round(css_w)) if whole else int(math.ceil(css_w)),
+                        "height": int(round(css_h)) if whole else int(math.ceil(css_h)),
+                        "deviceScaleFactor": float(scale),
+                        "mobile": False,
+                    },
+                    session_id=session,
+                    timeout=max(1, deadline - time.monotonic()),
+                )
+                self._evaluate(session, "new Promise(f => requestAnimationFrame(() => requestAnimationFrame(f)))"
+                               ".then(() => true)", max(1, deadline - time.monotonic()))
             params = {"format": fmt, "captureBeyondViewport": False, "fromSurface": True}
             if fmt == "jpeg":
                 params["quality"] = 90 if quality is None else int(quality)

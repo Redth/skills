@@ -28,11 +28,13 @@ SKILL_DIR = os.path.dirname(SCRIPTS_DIR)
 TEMPLATES = os.path.join(SKILL_DIR, "templates", "preview")
 RULES_DIR = os.path.join(SKILL_DIR, "rules")
 
-# Viewports: (CSS width, CSS height, scale). Phones at 2x; desktop pages at 1x.
-PHONE = (390, 1500, 2)
-PLAY_PHONE = (412, 1500, 2)
-DESKTOP = (1280, 1100, 1)
-PLAY_DESKTOP = (1280, 1500, 1)
+# Viewports: (CSS width, first CSS height, scale). Phones at 2x; desktop pages at 1x. Each page is captured
+# whole (as tall as it is, up to MAX_PAGE_HEIGHT CSS px), so nothing below the screenshots is cut off.
+PHONE = (390, 844, 2)
+PLAY_PHONE = (412, 915, 2)
+DESKTOP = (1280, 800, 1)
+PLAY_DESKTOP = (1280, 800, 1)
+MAX_PAGE_HEIGHT = 6000
 WIDE_PLATFORMS = ("MAC_OS", "TV_OS", "VISION_OS")
 
 
@@ -157,7 +159,7 @@ def google_page(manifest, out, code):
                        % "".join(_img(s["file"], "", "tablet screenshot") for s in tablets))
     return _template("google.html").safe_substitute(
         lang=_esc(code), page_title=_esc("%s - Google Play (%s)" % (title, code)), locale=_esc(code),
-        feature=feature_html, icon=icon_html, title=_esc(title), developer=_esc(g.get("package") or ""),
+        feature=feature_html, icon=icon_html, title=_esc(title), developer=_esc(g.get("developer") or title),
         shots=shots, tablet_shots=tablet_html, short_description=_esc(words.get("shortDescription") or ""),
         full_description=_esc(words.get("fullDescription") or ""))
 
@@ -215,7 +217,8 @@ def render(out, pages):
     done = []
     with chrome.Chrome() as browser:
         for page, (w, h, scale), name in pages:
-            browser.render(os.path.join(folder, page), w * scale, h * scale, os.path.join(folder, name), scale=scale)
+            browser.render(os.path.join(folder, page), w * scale, h * scale, os.path.join(folder, name), scale=scale,
+                           full_page=MAX_PAGE_HEIGHT)
             done.append(name)
     return done
 

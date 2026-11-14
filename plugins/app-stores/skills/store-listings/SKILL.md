@@ -68,7 +68,12 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
      `store.config.json`, run `listing.py import --from fastlane|supply|triple-t|expo <path>`
      ([references/importing.md](references/importing.md)). Otherwise write one from the user's answers and
      [references/config.md](references/config.md). Leave ids `null` until the user gives them; never invent them.
-   - **Primary locale:** each store has its own (it may not be `en-US`). Write to the store's primary locale.
+   - **Primary locale and locales:** each store has its own primary (it may not be `en-US`) and its own
+     languages: `stores.apple.primaryLocale`, `stores.google.defaultLanguage` and `stores.<store>.locales`. Write
+     to the store's primary locale; don't give a store a language it has no listing in unless the user wants one.
+   - **Per platform:** App Store Connect keeps a version's words (description, keywords, promotional text, What's
+     New, URLs) per Apple platform. Where one platform needs its own (Apple TV's controller sentence), write it in
+     `locales.<loc>.apple.platforms.<P>` rather than changing every platform's words.
 2. **Check:** `listing.py check [--stores apple,google]`. Errors stop everything after. **A failing check means
    editing the config (the words, the pictures), not the rule.** Only if the store's cited page now says
    otherwise does a rule change, and then upstream with its source and date

@@ -115,7 +115,19 @@
             },
             "promotionalText": { "$ref": "#/$defs/text" },
             "whatsNew": { "$comment": "Not on a first version; required on every later one.", "$ref": "#/$defs/text" },
-            "description": { "$comment": "null: the locale's shared description.", "$ref": "#/$defs/text" }
+            "description": { "$comment": "null: the locale's shared description.", "$ref": "#/$defs/text" },
+            "platforms": {
+              "$comment": "Words for one Apple platform where it differs (App Store Connect keeps a version's words per platform). null fields fall back to this locale's apple words, then the store's primary locale's, then the config's.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "$comment": { "type": "string" },
+                "IOS": { "$ref": "#/$defs/applePlatformWords" },
+                "MAC_OS": { "$ref": "#/$defs/applePlatformWords" },
+                "TV_OS": { "$ref": "#/$defs/applePlatformWords" },
+                "VISION_OS": { "$ref": "#/$defs/applePlatformWords" }
+              }
+            }
           }
         },
         "google": {
@@ -139,6 +151,29 @@
           }
         }
       }
+    },
+
+    "applePlatformWords": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "description": { "$ref": "#/$defs/text" },
+            "keywords": { "anyOf": [ { "type": "null" }, { "type": "array", "items": { "type": "string" } } ] },
+            "promotionalText": { "$ref": "#/$defs/text" },
+            "whatsNew": { "$ref": "#/$defs/text" },
+            "marketingUrl": { "$comment": "null: app.urls.marketing.", "$ref": "#/$defs/url" },
+            "supportUrl": { "$comment": "null: app.urls.support.", "$ref": "#/$defs/url" }
+          }
+        }
+      ]
+    },
+    "storeLocales": {
+      "$comment": "The config's locales this store gets; null or absent: every one. The store's primary must be one of them.",
+      "anyOf": [ { "type": "null" }, { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/locale" } } ]
     },
 
     "screenshots": {
@@ -201,6 +236,8 @@
       "properties": {
         "$comment": { "type": "string" },
         "enabled": { "type": "boolean" },
+        "primaryLocale": { "$comment": "The App Store's primary language (a locale of 'locales'); null: the config's primaryLocale. The App Store's words fall back to it before the config's.", "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/locale" } ] },
+        "locales": { "$ref": "#/$defs/storeLocales" },
         "categories": {
           "$comment": "App Store Connect's category ids (FOOD_AND_DRINK, GAMES...); the list is in rules/apple.json. Games take up to two subcategories (GAMES_PUZZLE...).",
           "type": "object",
@@ -321,7 +358,8 @@
       "properties": {
         "$comment": { "type": "string" },
         "enabled": { "type": "boolean" },
-        "defaultLanguage": { "$comment": "Play's default listing language (a BCP 47 locale of 'locales').", "$ref": "#/$defs/locale" },
+        "defaultLanguage": { "$comment": "Play's default listing language (a BCP 47 locale of 'locales'): Play's primary, which its words fall back to before the config's primaryLocale. null: the config's primaryLocale.", "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/locale" } ] },
+        "locales": { "$ref": "#/$defs/storeLocales" },
         "category": { "$comment": "Optional: Play's category id (GAME_PUZZLE, FOOD_AND_DRINK...; the list is in rules/google.json). Play Console only, never sent: read to know whether the app is a game, and printed in the checklist.", "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/categoryId" } ] },
         "slots": {
           "$comment": "Which of the user's screens fills each Play screenshot slot; null = none.",

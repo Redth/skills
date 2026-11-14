@@ -14,6 +14,11 @@ change at different times.
 | App info | categories, age rating | as above; the age rating only with `--age-rating` |
 | Version (per platform, per locale) | description, keywords, What's New, marketing URL, support URL | only on a version in preparation |
 | Version (per platform, per locale) | **promotional text** | **any time**, without review |
+
+The config keeps the version fields once per locale, with a platform's own words in
+`locales.<loc>.apple.platforms.<P>` where it differs ([config.md](config.md#locales)); `out/listing.json` and the
+fastlane folders carry each platform's resolved words, so a plan never proposes overwriting one platform's
+description with another's.
 | Version | copyright, App Review details (notes, contact, demo account) | on a version in preparation |
 | Version (per locale, per display type) | screenshot sets, preview sets | on a version in preparation |
 

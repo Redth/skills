@@ -66,6 +66,93 @@ FASTLANE_URLS = collections.OrderedDict([("marketing_url", "marketing"), ("suppo
 FASTLANE_PERSONAL = ("review_information", "trade_representative_contact_information")
 
 
+# Words in a picture's file name that say which device or size it's for, not which moment it shows
+DEVICE_WORDS = frozenset([
+    "iphone", "ipad", "ipadpro", "mac", "macos", "macbook", "desktop", "appletv", "tvos", "tv", "vision",
+    "visionpro", "visionos", "watch", "watchos", "android", "phone", "tablet", "tablet7", "tablet10", "wear",
+    "chromebook", "apple", "landscape", "portrait"])
+GENERIC_WORDS = frozenset(["screenshot", "screenshots", "screen", "shot", "image", "img", "picture", "pic", "frame",
+                           "capture", "untitled", "copy", "at"])
+DEVICE_MODIFIERS = frozenset([
+    "pro", "max", "plus", "mini", "ultra", "air", "se", "xl", "xs", "xr", "inch", "in", "gen", "generation",
+    "series", "seven", "ten", "large", "small"])
+
+
+def shot_id_from_name(filename, locale=None, display_types=()):
+    """The moment a picture's file name says it shows, as a shot id: the order number, the device or size and
+    the locale taken off (``01-check-close-iphone.jpg`` -> ``check-close``, ``03_APP_IPHONE_67_plan.png`` ->
+    ``plan``, ``iPhone 15 Pro Max-01_home.png`` -> ``home``). None when nothing's left that names a moment."""
+    stem = os.path.splitext(os.path.basename(filename))[0]
+    for code in sorted(display_types, key=len, reverse=True):
+        stem = re.sub(r"(?i)(^|[^A-Za-z0-9])%s(?=$|[^A-Za-z0-9])" % re.escape(code), r"\1-", stem)
+    tokens = [t for t in re.split(r"[^a-z0-9]+", stem.lower()) if t]
+
+    def device_run(seq):
+        """How many tokens at the start of ``seq`` are a device and its model words (0 if it doesn't start with
+        a device word)."""
+        if not seq or seq[0] not in DEVICE_WORDS:
+            return 0
+        n = 1
+        while n < len(seq) and (seq[n] in DEVICE_WORDS or seq[n] in DEVICE_MODIFIERS
+                                or re.match(r"^\d+(st|nd|rd|th|mm|k)?$", seq[n])):
+            n += 1
+        return n
+
+    numbered = False
+    while tokens:  # the front: fastlane snapshot's device and model ("iPhone 15 Pro Max-"), order numbers
+        n = 0 if numbered else device_run(tokens)
+        if n and n < len(tokens):
+            tokens = tokens[n:]
+        elif tokens[0].isdigit():
+            numbered = True
+            tokens = tokens[1:]
+        else:
+            break
+    loc = [t for t in re.split(r"[^a-z0-9]+", (locale or "").lower()) if t]
+    while tokens:  # the end: a size, the locale, a device and its model, a number after the device
+        if re.match(r"^\d+x\d+$", tokens[-1]):
+            tokens = tokens[:-1]
+        elif loc and tokens[-len(loc):] == loc:
+            tokens = tokens[:-len(loc)]
+        else:
+            for i in range(len(tokens) - 1, 0, -1):
+                if tokens[i] in DEVICE_WORDS and device_run(tokens[i:]) == len(tokens) - i:
+                    while i > 1 and tokens[i - 1] in DEVICE_WORDS:
+                        i -= 1
+                    tokens = tokens[:i]
+                    break
+            else:
+                break
+    if not tokens or all(t.isdigit() or t in GENERIC_WORDS for t in tokens) or device_run(tokens) == len(tokens):
+        return None
+    return "-".join(tokens)
+
+
+def shot_ids(files, locale=None, display_types=()):
+    """Shot ids for a folder's pictures, in order: from their names when every one names a different moment,
+    else ``shot-01``, ``shot-02``… for all of them (so one id never means two moments)."""
+    ids = [shot_id_from_name(f, locale, display_types) for f in files]
+    if all(ids) and len(set(ids)) == len(ids) and all(re.match(r"^[a-z0-9][a-z0-9_-]*$", i) for i in ids):
+        return ids, True
+    return ["shot-%02d" % i for i in range(1, len(files) + 1)], False
+
+
+def merge_order(order, sequence):
+    """Put a folder's shot ids into the config's order, each new one after the one before it in the folder."""
+    for i, sid in enumerate(sequence):
+        if sid in order:
+            continue
+        before = [s for s in sequence[:i] if s in order]
+        after = [s for s in sequence[i + 1:] if s in order]
+        if before:
+            order.insert(order.index(before[-1]) + 1, sid)
+        elif after:
+            order.insert(order.index(after[0]), sid)
+        else:
+            order.append(sid)
+    return order
+
+
 class ImportError_(Exception):
     """Nothing to import at the path given (exit 3)."""
 
@@ -157,6 +244,12 @@ class Merge:
         self.not_copied = []
         self.copied = 0
         self.new_stores = set()
+        self.old_screens = [k for k in (self.data.get("screens") or {}) if not k.startswith("$")]
+        self.old_shots = set(s.get("id") for s in ((self.data.get("screenshots") or {}).get("shots") or []))
+        self.old_platforms = set(p for p, v in (((self.data.get("stores") or {}).get("apple") or {})
+                                               .get("platforms") or {}).items() if isinstance(v, dict))
+        self.shot_screens = collections.OrderedDict()  # shot id -> screens it got a picture for in this import
+        self.generic_ids = False
 
     # -- values --------------------------------------------------------------------------------------------
 
@@ -264,20 +357,71 @@ class Merge:
         self.copied += 1
         return rel
 
-    def add_screenshot(self, src, loc, screen, kind, shot):
-        """Copy a screenshot into ``<folder>/<locale>/<screen>/<shot>.<ext>`` and list its screen and shot."""
+    def add_screenshots(self, files, loc, screen, kind, ids=None):
+        """Copy a folder's screenshots (in order) into ``<folder>/<locale>/<screen>/<shot>.<ext>``, list the
+        screen, and merge their shot ids into ``screenshots.shots``' order. ``ids``: taken from the file names
+        (``shot_ids``) unless given."""
+        if not files:
+            return
+        if ids is None:
+            ids, named = shot_ids(files, loc, _display_types())
+            self.generic_ids = self.generic_ids or not named
         folder = self.node(["screenshots"]).setdefault("folder", "screenshots")
         self.node(["screenshots"]).setdefault("shots", [])
-        ext = os.path.splitext(src)[1].lower()
-        ext = ".jpg" if ext == ".jpeg" else ext
-        self.copy(src, os.path.join(folder, loc, screen, shot + ext))
+        for src, shot in zip(files, ids):
+            ext = os.path.splitext(src)[1].lower()
+            ext = ".jpg" if ext == ".jpeg" else ext
+            self.copy(src, os.path.join(folder, loc, screen, shot + ext))
+            self.shot_screens.setdefault(shot, [])
+            if screen not in self.shot_screens[shot]:
+                self.shot_screens[shot].append(screen)
         screens = self.node(["screens"])
         if screen not in screens:
             screens[screen] = collections.OrderedDict([("kind", kind)])
             self.took.append("screens.%s" % screen)
         shots = self.data["screenshots"]["shots"]
-        if shot not in [s.get("id") for s in shots]:
-            shots.append(collections.OrderedDict([("id", shot), ("screens", None), ("stores", None)]))
+        order = merge_order([s.get("id") for s in shots], list(ids))
+        by_id = dict((s.get("id"), s) for s in shots)
+        shots[:] = [by_id.get(i) or collections.OrderedDict([("id", i), ("screens", None), ("stores", None)])
+                    for i in order]
+
+    def settle_shots(self):
+        """Each shot's ``screens`` after the import: a shot new here lists the screens it has pictures for; one
+        the config had gains the screens this import gave it; a shot for every screen (null) that has no picture
+        for a screen this import added keeps to the screens it had. A list naming every screen becomes null."""
+        shots = (self.data.get("screenshots") or {}).get("shots") or []
+        all_screens = [k for k in (self.data.get("screens") or {}) if not k.startswith("$")]
+        added = [k for k in all_screens if k not in self.old_screens]
+        for shot in shots:
+            sid = shot.get("id")
+            got = self.shot_screens.get(sid, [])
+            screens = shot.get("screens")
+            if sid not in self.old_shots:
+                screens = [k for k in all_screens if k in got]
+            elif screens is None:
+                if added and not all(k in got for k in added):
+                    screens = self.old_screens + [k for k in added if k in got]
+            else:
+                screens = list(screens) + [k for k in got if k not in screens]
+            if isinstance(screens, list) and screens and set(all_screens) <= set(screens):
+                screens = None
+            shot["screens"] = screens or None
+
+    def set_store_locales(self, store, locs, primary_key, primary):
+        """``stores.<store>.locales``: what this source had (a store made here), or the list grown by it (one
+        the config lists already); a store the config gives every locale (no list) is left so. The store's
+        primary (``primary_key``) is set where the config hasn't one."""
+        section = self.node(["stores", store])
+        if store in self.new_stores:
+            section["locales"] = list(locs)
+            self.took.append("stores.%s.locales (%s)" % (store, ", ".join(locs)))
+        elif isinstance(section.get("locales"), list):
+            more = [l for l in locs if l not in section["locales"]]
+            if more:
+                section["locales"].extend(more)
+                self.took.append("stores.%s.locales (+%s)" % (store, ", ".join(more)))
+        if primary and store in self.new_stores:
+            self.set(["stores", store, primary_key], primary)
 
     # -- stores ------------------------------------------------------------------------------------------
 
@@ -287,6 +431,8 @@ class Merge:
         if not isinstance(stores.get("apple"), dict):
             stores["apple"] = collections.OrderedDict([
                 ("enabled", True),
+                ("primaryLocale", None),
+                ("locales", None),
                 ("categories", collections.OrderedDict([
                     ("primary", None), ("primarySubcategories", []), ("secondary", None),
                     ("secondarySubcategories", [])])),
@@ -312,6 +458,7 @@ class Merge:
             stores["google"] = collections.OrderedDict([
                 ("enabled", True),
                 ("defaultLanguage", None),
+                ("locales", None),
                 ("category", None),
                 ("slots", collections.OrderedDict((s, None) for s in ("phone", "tablet7", "tablet10", "tv", "wear"))),
                 ("graphics", collections.OrderedDict((g, None) for g in SUPPLY_GRAPHICS)),
@@ -333,6 +480,11 @@ class Merge:
 
     def save(self):
         """Write the config (``app.name`` left out until something set it, so the check asks for it)."""
+        self.settle_shots()
+        if self.generic_ids:
+            self.notes.append("some screenshots' file names don't say which moment they show, so they were named "
+                              "shot-01, shot-02… per screen, in file order: rename them to meaningful ids (in "
+                              "screenshots.shots and the files) so one id is the same moment on every screen")
         app = self.data.get("app") or {}
         if app.get("name") is None:
             app.pop("name", None)
@@ -377,6 +529,11 @@ def _apple_slots():
     return rules.load("apple", RULES_DIR).slots
 
 
+def _display_types():
+    """Apple's display type codes (``APP_IPHONE_67``…), which fastlane file names may carry."""
+    return [v.get("displayType") or k for k, v in _apple_slots().items() if isinstance(v, dict)]
+
+
 def _screen_for_slot(key):
     """Our screen name for an Apple display type: APP_IPHONE_67 -> iphone-67, APP_DESKTOP -> mac."""
     name = key.lower()
@@ -385,16 +542,34 @@ def _screen_for_slot(key):
     return "mac" if name == "desktop" else name.replace("_", "-")
 
 
-def _apple_slot_for(size, slots):
+# A device class's screen name, by the slot's platform and kind
+DEVICE_CLASS = {("IOS", "phone"): "iphone", ("IOS", "tablet"): "ipad", ("IOS", "watch"): "apple-watch",
+                ("MAC_OS", "desktop"): "mac", ("TV_OS", "tv"): "apple-tv", ("VISION_OS", "xr"): "vision-pro"}
+
+
+def _apple_slot_for(size, slots, platform=None):
+    """The first Apple slot a picture's size fits (the given platform's slots first)."""
     import listing  # the slot rules live with the check
-    for key, slot in slots.items():
+    items = list(slots.items())
+    if platform:
+        items = [kv for kv in items if kv[1].get("platform") == platform] + \
+            [kv for kv in items if kv[1].get("platform") != platform]
+    for key, slot in items:
         if listing.fits(size, slot.get("sizes") or [], slot.get("orientation")):
             return key, slot
     return None, None
 
 
-def import_fastlane(m, path):
-    """fastlane deliver's metadata (and screenshots) into the config."""
+# The fields App Store Connect keeps per platform, as fastlane names them -> the config's
+FASTLANE_PLATFORM_FIELDS = collections.OrderedDict([
+    ("description", "description"), ("keywords", "keywords"), ("promotional_text", "promotionalText"),
+    ("release_notes", "whatsNew"), ("marketing_url", "marketingUrl"), ("support_url", "supportUrl")])
+
+
+def import_fastlane(m, path, platform=None):
+    """fastlane deliver's metadata (and screenshots) into the config: one Apple platform's (``platform``, else
+    the one its screenshots are for, else IOS). A platform imported after another whose words differ gets
+    them as overrides (``locales.<loc>.apple.platforms.<P>``)."""
     meta = path
     if os.path.isdir(os.path.join(path, "metadata")):
         meta = os.path.join(path, "metadata")
@@ -404,9 +579,29 @@ def import_fastlane(m, path):
     locs = [n for n in sorted(os.listdir(meta)) if os.path.isdir(os.path.join(meta, n)) and _is_locale(n, "apple")]
     if not locs and not os.path.isfile(os.path.join(meta, "copyright.txt")):
         raise ImportError_("no fastlane deliver metadata in %s (expected metadata/<locale>/*.txt)" % path)
+    pictures = _apple_screenshots(m, shots_dir, platform)
+    found = []
+    for _, _, _, slot in pictures:
+        if slot.get("platform") not in found:
+            found.append(slot.get("platform"))
+    if platform is None:
+        platform = found[0] if len(found) == 1 else "IOS"
+        if len(found) > 1:
+            m.notes.append("the screenshots are for %s: the words were imported as %s's (pass --platform to say "
+                           "which platform this folder is)" % (", ".join(found), platform))
     m.apple()
     bcp = collections.OrderedDict((n, _bcp47(n, "apple")) for n in locs)
     m.choose_primary(list(bcp.values()))
+    apple_locs = list(bcp.values())
+    apple_primary = None
+    for cand in (m.get(["stores", "apple", "primaryLocale"]), m.primary, "en-US") + tuple(apple_locs[:1]):
+        if cand in apple_locs:
+            apple_primary = cand
+            break
+    m.set_store_locales("apple", apple_locs, "primaryLocale", apple_primary)
+    # Words of a platform the config already had words for (another fastlane folder) are this platform's own
+    # where they differ.
+    overriding = "apple" not in m.new_stores and platform not in m.old_platforms and bool(m.old_platforms)
     default = os.path.join(meta, "default")
     values = collections.OrderedDict()
     for code, loc in bcp.items():
@@ -414,13 +609,14 @@ def import_fastlane(m, path):
         for fname in list(FASTLANE_FIELDS) + list(FASTLANE_URLS) + ["apple_tv_privacy_policy"]:
             values[loc][fname] = _read(os.path.join(meta, code, fname + ".txt"))
     if os.path.isdir(default):
-        target = m.primary if m.primary in values else (list(values)[0] if values else None)
+        target = apple_primary if apple_primary in values else (list(values)[0] if values else None)
         if target:
             for fname in values[target]:
                 if values[target][fname] is None:
                     values[target][fname] = _read(os.path.join(default, fname + ".txt"))
             m.notes.append("metadata/default/ was used where %s had no file of its own" % target)
-    order = sorted(values, key=lambda l: (l != m.primary, list(values).index(l)))
+    order = sorted(values, key=lambda l: (l != apple_primary, l != m.primary, list(values).index(l)))
+    overridden = []
     for loc in order:
         v = values[loc]
         name = v.get("name")
@@ -431,28 +627,50 @@ def import_fastlane(m, path):
             name = None
         m.set_word(loc, "apple", "name", name)
         m.set_word(loc, "apple", "subtitle", v.get("subtitle"))
-        m.set_description(loc, "apple", "description", v.get("description"))
-        m.set_word(loc, "apple", "keywords", _keywords(v.get("keywords")))
-        m.set_word(loc, "apple", "promotionalText", v.get("promotional_text"))
-        m.set_word(loc, "apple", "whatsNew", v.get("release_notes"))
-        for fname, key in FASTLANE_URLS.items():
-            if v.get(fname) is None:
+        for fname, field in FASTLANE_PLATFORM_FIELDS.items():
+            value = v.get(fname)
+            if field == "keywords":
+                value = _keywords(value)
+            if value is None:
                 continue
-            if loc == m.primary or m.get(["app", "urls", key]) is None:
-                m.set(["app", "urls", key], v[fname])
-            elif m.get(["app", "urls", key]) != v[fname]:
-                m.notes.append("%s's %s differs from the primary locale's: the config has one for every locale"
-                               % (loc, fname))
+            if overriding:
+                import listing
+                now = listing.Listing(m.path, m.data).resolve(loc, "apple." + field, "apple", platform)[0]
+                if now is not None:
+                    if now != value:
+                        m.set(["locales", loc, "apple", "platforms", platform, field], value)
+                        overridden.append("%s %s" % (loc, field))
+                    continue
+            if field == "description":
+                m.set_description(loc, "apple", "description", value)
+            elif field in ("marketingUrl", "supportUrl"):
+                key = FASTLANE_URLS[fname]
+                if loc == m.primary or m.get(["app", "urls", key]) is None:
+                    m.set(["app", "urls", key], value)
+                elif m.get(["app", "urls", key]) != value:
+                    m.notes.append("%s's %s differs from the primary locale's: the config has one for every locale "
+                                   "(or set locales.%s.apple.platforms.%s.%s)" % (loc, fname, loc, platform, field))
+            else:
+                m.set_word(loc, "apple", field, value)
+        if v.get("privacy_url") is not None:
+            if loc == m.primary or m.get(["app", "urls", "privacy"]) is None:
+                m.set(["app", "urls", "privacy"], v["privacy_url"])
+            elif m.get(["app", "urls", "privacy"]) != v["privacy_url"]:
+                m.notes.append("%s's privacy_url differs from the primary locale's: the config has one for every "
+                               "locale" % loc)
         if v.get("release_notes"):
             m.notes.append("%s What's New came across as \"%s\": rewrite it for the next version's changes"
                            % (loc, v["release_notes"][:60] + ("…" if len(v["release_notes"]) > 60 else "")))
-        if v.get("apple_tv_privacy_policy") and loc == m.primary:
+        if v.get("apple_tv_privacy_policy") and loc == apple_primary:
             rel = "apple-tv-privacy.txt"
             dst = os.path.join(m.dir, rel)
             if not os.path.exists(dst):
                 with open(dst, "w", encoding="utf-8") as f:
                     f.write(v["apple_tv_privacy_policy"] + "\n")
             m.set(["stores", "apple", "tvPrivacyText"], rel)
+    if overridden:
+        m.notes.append("%s's words differ from the platforms imported before: they're %s's own "
+                       "(locales.<loc>.apple.platforms.%s): %s" % (platform, platform, platform, ", ".join(overridden)))
     text, changed = _copyright(_read(os.path.join(meta, "copyright.txt")))
     if m.set(["app", "copyright"], text) and changed:
         m.notes.append("the copyright's leading sign was dropped: Apple adds it")
@@ -486,48 +704,74 @@ def import_fastlane(m, path):
         m.notes.append("%s is Google Play's: import it with --from supply" % os.path.join(meta, "android"))
     if m.get(["app", "ids", "apple", "bundleId"]) is None:
         m.notes.append("set app.ids.apple.bundleId (the metadata doesn't say it)")
-    n = _import_apple_screenshots(m, shots_dir)
-    if n == 0 and not any((m.apple().get("platforms") or {}).values()):
-        m.add_platform_screen("IOS", "iphone")
-        m.node(["screens"]).setdefault("iphone", collections.OrderedDict([("kind", "phone")]))
-        m.notes.append("no screenshots were found: stores.apple.platforms.IOS lists an 'iphone' screen; add the "
-                       "platforms and screens you ship")
+    n = _import_apple_screenshots(m, pictures)
+    if n == 0 and not isinstance((m.apple().get("platforms") or {}).get(platform), dict):
+        screen = DEVICE_CLASS.get((platform, {"IOS": "phone", "MAC_OS": "desktop", "TV_OS": "tv",
+                                              "VISION_OS": "xr"}[platform]))
+        kind = {"IOS": "phone", "MAC_OS": "desktop", "TV_OS": "tv", "VISION_OS": "xr"}[platform]
+        m.add_platform_screen(platform, screen)
+        m.node(["screens"]).setdefault(screen, collections.OrderedDict([("kind", kind)]))
+        m.notes.append("no screenshots were found: stores.apple.platforms.%s lists a '%s' screen; add the "
+                       "platforms and screens you ship" % (platform, screen))
     if os.path.isdir(os.path.join(os.path.dirname(meta), "app_previews")):
         m.notes.append("app_previews/ weren't imported: list them under stores.apple.platforms.<platform>.previews")
 
 
-def _import_apple_screenshots(m, shots_dir):
-    """fastlane's ``screenshots/<locale>/*.png``: each picture's slot by its pixel size."""
+def _apple_screenshots(m, shots_dir, platform=None):
+    """fastlane's ``screenshots/<locale>/*.png``, each with its slot by its pixel size: ``[(src, locale, slot
+    key, slot)]`` (pictures that fit no slot are noted and left out)."""
     if not os.path.isdir(shots_dir):
-        return 0
+        return []
     slots = _apple_slots()
-    count = 0
+    out = []
     for code in sorted(os.listdir(shots_dir)):
         folder = os.path.join(shots_dir, code)
         if not os.path.isdir(folder) or not _is_locale(code, "apple"):
             continue
         loc = _bcp47(code, "apple")
-        per_slot = collections.Counter()
         for src in _pictures_in(folder):
             try:
                 info = png.info(src)
             except (png.ImageError, OSError) as e:
                 m.notes.append("%s wasn't imported: %s" % (os.path.basename(src), e))
                 continue
-            key, slot = _apple_slot_for((info.width, info.height), slots)
+            key, slot = _apple_slot_for((info.width, info.height), slots, platform)
             if key is None:
                 m.notes.append("%s (%dx%d) fits no App Store slot and wasn't imported" % (
                     os.path.join(code, os.path.basename(src)), info.width, info.height))
                 continue
-            per_slot[key] += 1
-            screen = _screen_for_slot(key)
-            m.add_screenshot(src, loc, screen, slot.get("kind") or "phone", "shot-%02d" % per_slot[key])
-            m.add_platform_screen(slot.get("platform") or "IOS", screen)
-            count += 1
-    if count:
-        m.notes.append("screenshots were named shot-01, shot-02… per screen, in file order: rename them to "
-                       "meaningful ids (in screenshots.shots and the files) and check the order")
-    return count
+            out.append((src, loc, key, slot))
+    return out
+
+
+def _import_apple_screenshots(m, pictures):
+    """Copy fastlane's screenshots into the config's layout: a screen per device class (``iphone``, ``ipad``,
+    ``mac``, ``apple-tv``…), or per display type (``iphone-67``) where a class has pictures in two; shot ids
+    from the file names."""
+    keys_by_class = collections.OrderedDict()
+    for _, _, key, slot in pictures:
+        cls = DEVICE_CLASS.get((slot.get("platform"), slot.get("kind")))
+        keys_by_class.setdefault(cls, [])
+        if key not in keys_by_class[cls]:
+            keys_by_class[cls].append(key)
+    groups = collections.OrderedDict()  # (loc, screen) -> (kind, platform, [src])
+    for src, loc, key, slot in pictures:
+        cls = DEVICE_CLASS.get((slot.get("platform"), slot.get("kind")))
+        screen = cls if cls and len(keys_by_class[cls]) == 1 else _screen_for_slot(key)
+        groups.setdefault((loc, screen), (slot.get("kind") or "phone", slot.get("platform") or "IOS", []))[2].append(src)
+    classes = list(DEVICE_CLASS.values())
+
+    def rank(item):
+        """Per locale, the device classes in DEVICE_CLASS's order (iPhone before iPad), display types by class."""
+        (loc, screen), _ = item
+        cls = screen if screen in classes else next(
+            (c for c in classes if screen.startswith(c.split("-")[0] + "-")), None)
+        return (loc, classes.index(cls) if cls in classes else len(classes), screen)
+
+    for (loc, screen), (kind, platform, files) in sorted(groups.items(), key=rank):
+        m.add_screenshots(files, loc, screen, kind)
+        m.add_platform_screen(platform, screen)
+    return len(pictures)
 
 
 # ---------------------------------------------------------------------------------------------------------
@@ -547,6 +791,9 @@ def import_expo(m, path):
     info = apple.get("info") or {}
     bcp = collections.OrderedDict((code, _bcp47(code, "apple")) for code in info)
     m.choose_primary(list(bcp.values()))
+    apple_locs = list(bcp.values())
+    first = [l for l in (m.primary, "en-US") + tuple(apple_locs[:1]) if l in apple_locs]
+    m.set_store_locales("apple", apple_locs, "primaryLocale", first[0] if first else None)
     order = sorted(bcp, key=lambda c: (bcp[c] != m.primary, list(bcp).index(c)))
     for code in order:
         loc = bcp[code]
@@ -646,18 +893,53 @@ def _set_google_words(m, values):
             m.notes.append("app.name was taken from Play's title (%r): check it" % title)
 
 
+def _same_files(a, b):
+    """True when two lists of pictures are the same files, byte for byte, in the same order."""
+    return len(a) == len(b) and all(filecmp.cmp(x, y, shallow=False) for x, y in zip(a, b))
+
+
+def _play_screens(per_locale_images):
+    """``{image type: screen}`` for the Play slots that have pictures: a slot whose pictures are byte for byte
+    another's in every language shares its screen (Play's 7-inch and 10-inch slots often do); the tablets are
+    one ``android-tablet`` screen unless both slots have their own pictures."""
+    used = [t for t in SUPPLY_SCREENSHOTS if any(imgs.get(t) for imgs in per_locale_images.values())]
+    same_as = collections.OrderedDict()
+    for i, t in enumerate(used):
+        for earlier in used[:i]:
+            if earlier in same_as:
+                continue
+            if all(_same_files(imgs.get(t) or [], imgs.get(earlier) or []) for imgs in per_locale_images.values()):
+                same_as[t] = earlier
+                break
+    own = [t for t in used if t not in same_as]
+    tablets = [t for t in own if SUPPLY_SCREENSHOTS[t][2] == "tablet"]
+    screens = collections.OrderedDict()
+    for t in used:
+        base = same_as.get(t, t)
+        name = SUPPLY_SCREENSHOTS[base][1]
+        if SUPPLY_SCREENSHOTS[base][2] == "tablet" and len(tablets) == 1:
+            name = "android-tablet"
+        screens[t] = name
+    return screens, same_as
+
+
 def _google_images(m, per_locale_images, per_locale_graphics, preferred=None):
     """Screenshots (``{loc: {imageType: [paths]}}``) and graphics (``{loc: {graphic: path}}``) into the config;
     ``preferred`` is the layout's own default language, if it names one."""
     g = m.google()
+    screens, same_as = _play_screens(per_locale_images)
     order = sorted(per_locale_images, key=lambda l: (l != m.primary, l))
     for loc in order:
         for image_type, files in per_locale_images[loc].items():
-            slot, screen, kind = SUPPLY_SCREENSHOTS[image_type]
-            for i, src in enumerate(files, 1):
-                m.add_screenshot(src, loc, screen, kind, "shot-%02d" % i)
-            if files:
-                m.set(["stores", "google", "slots", slot], screen)
+            if not files:
+                continue
+            slot, _, kind = SUPPLY_SCREENSHOTS[image_type]
+            if image_type not in same_as:
+                m.add_screenshots(files, loc, screens[image_type], kind)
+            m.set(["stores", "google", "slots", slot], screens[image_type])
+    for t, base in same_as.items():
+        m.notes.append("Play's %s are the %s's pictures, byte for byte: one screen, %s, fills both slots"
+                       % (t, base, screens[t]))
     chosen = {}
     for loc in sorted(per_locale_graphics, key=lambda l: (l != m.primary, l)):
         for name, src in per_locale_graphics[loc].items():
@@ -681,6 +963,7 @@ def _google_images(m, per_locale_images, per_locale_graphics, preferred=None):
             break
     else:
         default = m.primary
+    m.set_store_locales("google", play_locs, "defaultLanguage", None)
     if m.set(["stores", "google", "defaultLanguage"], default):
         m.notes.append("stores.google.defaultLanguage is %s: check it matches Play Console's default" % default)
     if (m.get(["app", "ids", "google", "package"]) is None):
@@ -797,12 +1080,18 @@ def import_triple_t(m, path):
 SOURCES = {"fastlane": import_fastlane, "supply": import_supply, "triple-t": import_triple_t, "expo": import_expo}
 
 
-def run_import(source, path, out):
-    """Import ``path`` (a ``source`` layout) into the config at ``out``; return the ``Merge`` (saved)."""
+def run_import(source, path, out, platform=None):
+    """Import ``path`` (a ``source`` layout) into the config at ``out``; return the ``Merge`` (saved).
+    ``platform``: the Apple platform a fastlane folder is (else its screenshots say, else IOS)."""
     if not os.path.exists(path):
         raise ImportError_("%s doesn't exist" % path)
+    if platform and source != "fastlane":
+        raise ImportError_("--platform is for --from fastlane (an Apple platform's folder)")
     m = Merge(out)
-    SOURCES[source](m, path)
+    if source == "fastlane":
+        import_fastlane(m, path, platform)
+    else:
+        SOURCES[source](m, path)
     m.save()
     return m
 
@@ -817,7 +1106,7 @@ def main(args):
     """``listing.py import``: returns the exit code."""
     import listing
     try:
-        m = run_import(args.source, args.path, args.out)
+        m = run_import(args.source, args.path, args.out, getattr(args, "platform", None))
     except ImportError_ as e:
         raise listing.UsageError(str(e))
     except jsonio.JsonError as e:

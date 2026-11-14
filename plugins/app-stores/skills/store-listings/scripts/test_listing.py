@@ -475,11 +475,16 @@ class Video(TempDir):
         self.assertNotIn("886x1920", msgs)
 
 
-class Build(TempDir):
+class Builds(TempDir):
+    """A temp folder and a build into it."""
+
     def build(self, config, out=None):
         out = out or os.path.join(self.tmp, "out")
         code, text, err = kit.run(["build", "--config", config, "--out", out])
         return code, out, text, err
+
+
+class Build(Builds):
 
     def test_build_writes_the_layouts_and_manifest(self):
         config = self.sample()
@@ -722,10 +727,208 @@ class Preview(TempDir):
         self.assertEqual(code, 0, err)
         from appstores_lib import png
         info = png.info(os.path.join(out, "preview", "apple-IOS-en-US.png"))
-        self.assertEqual((info.width, info.height), (780, 3000))
+        self.assertEqual(info.width, 780)
+        self.assertTrue(1688 < info.height <= 12000, info.height)  # the whole page, at 2x
         info = png.info(os.path.join(out, "preview", "google-en-US-desktop.png"))
         self.assertEqual(info.width, 1280)
         self.assertTrue(os.path.isfile(os.path.join(out, "preview", "google-de-DE-phone.png")))
+
+
+class PlatformWords(Builds):
+    """App Store Connect keeps a version's words per platform: locales.<loc>.apple.platforms.<P> overrides them."""
+
+    TV_DESCRIPTION = "Plan a week of meals from the couch.\n\nA game controller isn't needed: the Siri Remote does it all."
+
+    def with_tv(self, config, override=None):
+        root = os.path.dirname(config)
+        kit.write_png(os.path.join(root, "screenshots", "en-US", "tv", "week.png"), 1920, 1080)
+        with open(os.path.join(root, "privacy.txt"), "w", encoding="utf-8") as f:
+            f.write("Sample Recipes keeps your recipes on your devices.\n")
+
+        def change(d):
+            d["screens"]["tv"] = {"kind": "tv"}
+            d["stores"]["apple"]["platforms"]["TV_OS"] = {"screens": ["tv"]}
+            d["stores"]["apple"]["tvPrivacyText"] = "privacy.txt"
+            d["screenshots"]["shots"][0]["$comment"] = "the only shot on the TV"
+            for shot in d["screenshots"]["shots"][1:]:
+                shot["screens"] = [s for s in (shot["screens"] or list(d["screens"])) if s != "tv"]
+            if override is not None:
+                d["locales"]["en-US"]["apple"]["platforms"] = {"TV_OS": override}
+        kit.edit_config(config, change)
+
+    def manifest(self, out):
+        with open(os.path.join(out, "listing.json"), encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_each_platform_gets_its_own_words(self):
+        config = self.sample()
+        self.with_tv(config, {"description": self.TV_DESCRIPTION, "keywords": ["couch", "recipes"],
+                              "supportUrl": "https://example.com/tv-support"})
+        code, out, text, _ = self.build(config)
+        self.assertEqual(code, 0, text)
+        m = self.manifest(out)
+        ios, tv = m["apple"]["platforms"]["IOS"]["localizations"], m["apple"]["platforms"]["TV_OS"]["localizations"]
+        self.assertTrue(ios["en-US"]["description"].startswith("Plan a week of meals in minutes."))
+        self.assertEqual(tv["en-US"]["description"], self.TV_DESCRIPTION)
+        self.assertEqual(tv["en-US"]["keywords"], "couch,recipes")
+        self.assertEqual(tv["en-US"]["supportUrl"], "https://example.com/tv-support")
+        self.assertEqual(ios["en-US"]["supportUrl"], "https://example.com/support")
+        # what TV_OS doesn't override is the locale's own words
+        self.assertEqual(tv["en-US"]["promotionalText"], ios["en-US"]["promotionalText"])
+        # de-DE has its own shared description: it beats en-US's TV override
+        self.assertTrue(tv["de-DE"]["description"].startswith("Plane eine Woche"))
+        with open(os.path.join(out, "apple/TV_OS/metadata/en-US/description.txt"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), self.TV_DESCRIPTION)
+        with open(os.path.join(out, "apple/TV_OS/metadata/en-US/support_url.txt"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), "https://example.com/tv-support")
+        with open(os.path.join(out, "apple/IOS/metadata/en-US/description.txt"), encoding="utf-8") as f:
+            self.assertTrue(f.read().startswith("Plan a week of meals in minutes."))
+
+    def test_a_locale_without_an_override_takes_the_primarys_for_that_platform(self):
+        config = self.sample()
+        self.with_tv(config, {"promotionalText": "Now on the big screen."})
+        kit.edit_config(config, lambda d: d["locales"]["de-DE"]["apple"].pop("promotionalText"))
+        code, out, text, _ = self.build(config)
+        self.assertEqual(code, 0, text)
+        tv = self.manifest(out)["apple"]["platforms"]["TV_OS"]["localizations"]
+        self.assertEqual(tv["de-DE"]["promotionalText"], "Now on the big screen.")
+
+    def test_rules_run_on_each_platforms_words(self):
+        config = self.sample()
+        self.with_tv(config, {"description": self.TV_DESCRIPTION + " Also on Android.", "promotionalText": "x" * 171})
+        _, report = kit.check_json(config)
+        others = kit.findings(report, "apple.metadata.other_platforms", where="apple.description")
+        self.assertEqual([f["where"] for f in others], ["en-US apple.description (TV_OS)"])
+        promo = kit.findings(report, "apple.promotional_text.length")
+        self.assertEqual([f["where"] for f in promo], ["en-US apple.promotionalText (TV_OS)"])
+
+    def test_the_same_words_on_every_platform_are_checked_once(self):
+        config = self.sample()
+        self.with_tv(config)
+        kit.edit_config(config, lambda d: d["locales"]["en-US"].update(
+            description=d["locales"]["en-US"]["description"] + " Also on Android."))
+        _, report = kit.check_json(config)
+        others = kit.findings(report, "apple.metadata.other_platforms", where="apple.description")
+        self.assertEqual([f["where"] for f in others], ["en-US apple.description"])
+
+    def test_words_for_a_platform_not_shipped_warn(self):
+        config = self.sample()
+        kit.edit_config(config, lambda d: d["locales"]["en-US"]["apple"].update(
+            platforms={"MAC_OS": {"description": "On the Mac."}}))
+        _, report = kit.check_json(config)
+        found = kit.findings(report, "config.platforms", "warning", "locales.en-US.apple.platforms.MAC_OS")
+        self.assertTrue(found)
+
+
+class StoreLocales(Builds):
+    """Each store gets its own locales (stores.<store>.locales) and falls back to its own primary first."""
+
+    def test_each_store_gets_only_its_locales(self):
+        config = self.sample()
+
+        def change(d):
+            d["stores"]["apple"]["locales"] = ["de-DE"]
+            d["stores"]["apple"]["primaryLocale"] = "de-DE"
+            d["stores"]["google"]["locales"] = ["en-US"]
+        kit.edit_config(config, change)
+        code, out, text, _ = self.build(config)
+        self.assertEqual(code, 0, text)
+        with open(os.path.join(out, "listing.json"), encoding="utf-8") as f:
+            m = json.load(f)
+        self.assertEqual(m["apple"]["primaryLocale"], "de-DE")
+        self.assertEqual(list(m["apple"]["app"]["localizations"]), ["de-DE"])
+        self.assertEqual(list(m["apple"]["platforms"]["IOS"]["localizations"]), ["de-DE"])
+        self.assertEqual(list(m["apple"]["platforms"]["IOS"]["screenshots"]), ["de-DE"])
+        self.assertEqual(m["google"]["defaultLanguage"], "en-US")
+        self.assertEqual(list(m["google"]["listings"]), ["en-US"])
+        self.assertEqual(list(m["google"]["images"]), ["en-US"])
+        self.assertFalse(os.path.exists(os.path.join(out, "apple/IOS/metadata/en-US")))
+        self.assertFalse(os.path.exists(os.path.join(out, "google/metadata/android/de-DE")))
+
+    def test_fields_fall_back_to_the_stores_primary_then_the_configs(self):
+        config = self.sample()
+
+        def change(d):
+            d["locales"]["fr-FR"] = {"apple": {"subtitle": "Vos repas en quelques minutes"}}
+            d["locales"]["fr-CA"] = {"$comment": "nothing of its own"}
+            d["stores"]["apple"]["locales"] = ["fr-FR", "fr-CA"]
+            d["stores"]["apple"]["primaryLocale"] = "fr-FR"
+            d["stores"]["google"]["locales"] = ["en-US"]
+        kit.edit_config(config, change)
+        code, report = kit.check_json(config)
+        self.assertEqual(code, 0, kit.findings(report, severity="error"))
+        self.assertIn({"store": "apple", "locale": "fr-CA", "what": "apple.subtitle", "from": "fr-FR"},
+                      report["fallbacks"])
+        self.assertIn({"store": "apple", "locale": "fr-CA", "what": "apple.description", "from": "en-US"},
+                      report["fallbacks"])
+        code, out, text, _ = self.build(config)
+        self.assertEqual(code, 0, text)
+        with open(os.path.join(out, "listing.json"), encoding="utf-8") as f:
+            m = json.load(f)
+        locs = m["apple"]["app"]["localizations"]
+        self.assertEqual(list(locs), ["fr-FR", "fr-CA"])
+        self.assertEqual(locs["fr-CA"]["subtitle"], "Vos repas en quelques minutes")
+        self.assertEqual(locs["fr-FR"]["name"], "Sample Recipes")
+        words = m["apple"]["platforms"]["IOS"]["localizations"]
+        self.assertTrue(words["fr-CA"]["description"].startswith("Plan a week of meals"))
+
+    def test_a_stores_primary_must_be_one_of_its_locales(self):
+        config = self.sample(pictures=False)
+        kit.edit_config(config, lambda d: d["stores"]["google"].update(locales=["de-DE"]))
+        _, report = kit.check_json(config)
+        found = kit.findings(report, "config.default_language", "error")
+        self.assertTrue(found and "stores.google.locales" in found[0]["message"], report["findings"])
+        kit.edit_config(config, lambda d: (d["stores"]["google"].pop("locales"),
+                                           d["stores"]["apple"].update(locales=["de-DE"])))
+        _, report = kit.check_json(config)
+        self.assertTrue(kit.findings(report, "config.primary_locale", "error", "primaryLocale"))
+        kit.edit_config(config, lambda d: d["stores"]["apple"].update(locales=["de-DE", "fr-FR"],
+                                                                     primaryLocale="de-DE"))
+        _, report = kit.check_json(config)
+        self.assertFalse(kit.findings(report, "config.primary_locale"))
+        self.assertTrue(kit.findings(report, "config.locales", "error", "stores.apple.locales[1]"))
+
+
+class PreviewPages(Builds):
+    def built(self, config):
+        code, out, text, err = self.build(config)
+        self.assertEqual(code, 0, text + err)
+        code, _, err = kit.run(["preview", "--out", out])
+        self.assertEqual(code, 0, err)
+        return out
+
+    def test_plays_developer_line_is_who_made_it_not_the_package(self):
+        out = self.built(self.sample())
+        with open(os.path.join(out, "preview", "google-en-US.html"), encoding="utf-8") as f:
+            page = f.read()
+        self.assertIn('<div class="dev">Example Studio</div>', page)
+        self.assertNotIn("com.example.samplerecipes", page)
+
+    def test_descriptions_show_whole_lines_never_a_cut_word(self):
+        out = self.built(self.sample())
+        with open(os.path.join(out, "preview", "preview.css"), encoding="utf-8") as f:
+            css = f.read()
+        for selector in (".as .description", ".as .whats-new", ".gp .full"):
+            rule = css[css.index(selector + " {"):]
+            rule = rule[:rule.index("}")]
+            # Chrome's line clamp can cut a word and glue an ellipsis on: these clip after whole lines
+            self.assertNotIn("line-clamp", rule, selector)
+            self.assertIn("max-height", rule, selector)
+
+    @unittest.skipIf(CHROME is None, "Google Chrome or Chromium isn't installed")
+    def test_wide_pages_are_rendered_whole(self):
+        config = self.sample()
+        PlatformWords.with_tv(self, config, {"description": "\n\n".join(["A long paragraph of words."] * 30)})
+        out = self.built(config)
+        code, _, err = kit.run(["preview", "--out", out, "--png"])
+        self.assertEqual(code, 0, err)
+        from appstores_lib import png
+        info = png.info(os.path.join(out, "preview", "apple-TV_OS-en-US.png"))
+        self.assertEqual(info.width, 1280)
+        self.assertTrue(1100 < info.height <= 6000, info.height)  # down past the screenshots to What's New
+        w, h, rgb = png.decode_rgb(os.path.join(out, "preview", "apple-TV_OS-en-US.png"))
+        bottom = rgb[(h - 1) * w * 3:h * w * 3]
+        self.assertEqual(set(bottom), {255}, "the page ends inside the picture (white below the last words)")
 
 
 class CommandLine(TempDir):

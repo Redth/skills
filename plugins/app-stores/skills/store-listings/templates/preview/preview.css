@@ -43,7 +43,7 @@ body {
 }
 
 /* ---- App Store ---------------------------------------------------------------------------------- */
-.as { color: #000; }
+.as { color: #000; padding-bottom: 24px; }
 .as .search-bar {
   margin: 12px 16px 4px;
   padding: 8px 12px;
@@ -84,11 +84,13 @@ body {
 .as .carousel img { flex: none; height: 480px; border-radius: 18px; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.15); }
 .as .carousel.landscape img { height: 200px; border-radius: 10px; }
 .as .device-note { margin: 0 16px; font-size: 12px; color: #8a8a8e; }
+/* The description and What's New show their first lines whole, the rest behind "more", as the stores do:
+   never a word cut short with an ellipsis glued on. */
 .as .description { margin: 12px 16px 0; font-size: 15px; line-height: 1.4; white-space: pre-wrap;
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  max-height: calc(1.4em * 3); overflow: hidden; }
 .as .more { margin: 2px 16px 0; text-align: right; color: #007aff; font-size: 15px; }
-.as .whats-new { margin: 0 16px; font-size: 15px; line-height: 1.4; white-space: pre-wrap; display: -webkit-box;
-  -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.as .whats-new { margin: 0 16px; font-size: 15px; line-height: 1.4; white-space: pre-wrap;
+  max-height: calc(1.4em * 3); overflow: hidden; }
 .as h2 { margin: 20px 16px 6px; font-size: 22px; }
 
 /* Wide (Mac, Apple TV, Vision Pro): the same parts, side by side */
@@ -99,7 +101,7 @@ body {
 }
 
 /* ---- Google Play ------------------------------------------------------------------------------- */
-.gp { color: #1f1f1f; font-family: Roboto, "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif; }
+.gp { padding-bottom: 24px; color: #1f1f1f; font-family: Roboto, "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif; }
 .gp .feature { display: block; width: 100%; aspect-ratio: 1024 / 500; object-fit: cover; }
 .gp .feature-missing { width: 100%; aspect-ratio: 1024 / 500; display: flex; align-items: center;
   justify-content: center; background: #e8eaed; color: #8a1c1c; font-size: 13px; }
@@ -114,8 +116,8 @@ body {
 .gp .shots img { flex: none; height: 220px; border-radius: 8px; box-shadow: 0 0 0 1px rgba(0,0,0,0.08); }
 .gp h2 { margin: 8px 16px 6px; font-size: 18px; font-weight: 500; }
 .gp .short { margin: 0 16px; font-size: 14px; line-height: 1.45; color: #444746; }
-.gp .full { margin: 8px 16px 0; font-size: 14px; line-height: 1.45; color: #444746; white-space: pre-wrap;
-  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.gp .full { margin: 8px 16px 0; font-size: 14px; line-height: 20px; color: #444746; white-space: pre-wrap;
+  max-height: 80px; overflow: hidden; }
 .gp .shots.tablet img { height: 160px; }
 .gp .tablet-label { margin: 8px 16px 0; font-size: 12px; color: #5f6368; }
 

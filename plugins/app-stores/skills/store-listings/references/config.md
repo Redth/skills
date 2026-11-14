@@ -14,7 +14,7 @@ The examples use an invented app, "Sample Recipes" by Example Studio (`com.examp
 | `$schema` | string | `"./store-listing.schema.json"` if a copy sits beside it (editors then complete and check fields) |
 | `version` | `1` | the config format's version |
 | `app` | object | the app itself, shared by every store (below) |
-| `primaryLocale` | BCP 47 | the locale every other one falls back to, e.g. `en-US` |
+| `primaryLocale` | BCP 47 | the locale every other one falls back to last, e.g. `en-US` (each store can name its own primary first: `stores.apple.primaryLocale`, `stores.google.defaultLanguage`) |
 | `locales` | object | the words, per locale (below) |
 | `screenshots` | object | which pictures, in what order (below) |
 | `screens` | object | the user's own device names and their kind (below) |
@@ -58,7 +58,8 @@ The examples use an invented app, "Sample Recipes" by Example Studio (`com.examp
     "description": "Plan a week of meals in minutes. …",
     "apple":  { "name": null, "subtitle": "Plan meals in minutes",
                 "keywords": ["recipes", "meal plan", "grocery"],
-                "promotionalText": "…", "whatsNew": "…", "description": null },
+                "promotionalText": "…", "whatsNew": "…", "description": null,
+                "platforms": { "TV_OS": { "description": "… A game controller isn't needed: the Siri Remote does it all." } } },
     "google": { "title": "Sample Recipes: Meal Planner",
                 "shortDescription": "Plan a week of meals in minutes.",
                 "fullDescription": null, "video": null, "releaseNotes": null },
@@ -70,14 +71,23 @@ The examples use an invented app, "Sample Recipes" by Example Studio (`com.examp
 
 - Keys are BCP 47 (`en-US`, `pt-BR`, `zh-Hans`). Mapping to each store's own codes is the scripts' job; a locale
   a store doesn't support is an error naming it.
-- **Fallback, field by field:** a locale's missing field takes `primaryLocale`'s. A store's own `description`
-  falls back to the locale's shared `description`, so write one shared description and override only where a
-  store needs its own words.
+- **Fallback, field by field:** a locale's missing field takes the store's primary locale's
+  (`stores.apple.primaryLocale` or `stores.google.defaultLanguage`), then the config's `primaryLocale`'s. A store's
+  own `description` falls back to the locale's shared `description` first, so write one shared description and
+  override only where a store needs its own words.
 - **`null` means "not set" (fall back); `""` means "set to empty".** Use `""` only on purpose. When a field is
   still unset after falling back (What's New, Play's video), `push.py` leaves the store's value as it is; `""` clears
   it on the store.
 - `apple`: `name` (defaults to `app.name`), `subtitle`, `keywords` (a list; written comma-separated with no
   spaces), `promotionalText`, `whatsNew` (not on a first version; required on every later one), `description`.
+- `apple.platforms.<IOS|MAC_OS|TV_OS|VISION_OS>`: App Store Connect keeps a version's words per platform, so one
+  platform can have its own `description`, `keywords`, `promotionalText`, `whatsNew`, `marketingUrl` or
+  `supportUrl` (an Apple TV description that says what controller it needs, a Mac one that doesn't mention touch).
+  A platform's field is looked for in this order: that platform's override in the locale, the locale's `apple.<field>`,
+  (for the description) the locale's shared `description`, then the same three in the App Store's primary locale,
+  then in the config's primary locale; the URLs end at `app.urls`. `name` and `subtitle` are the whole app's (App
+  Store Connect's app information isn't per platform), so they have no override. The check runs the rules on each
+  platform's words where they differ (a finding then names the platform: `en-US apple.description (TV_OS)`).
 - `google`: `title`, `shortDescription`, `fullDescription`, `video` (one YouTube URL), `releaseNotes` (these go
   with a release, not the listing; see [google.md](google.md)).
 - `altText.featureGraphic`: Play's alt text for the feature graphic (up to 140 characters; it's Console-only
@@ -106,8 +116,8 @@ Limits and what each field may say: [words.md](words.md).
 
 - Files live at `<folder>/<locale>/<screen>/<shot id>.png` (or `.jpg`): the layout `store-capture` and
   `store-screenshots` write. Any tool's output works if it's renamed into this layout.
-- A locale without a file falls back to the primary locale's file for that screen and shot. The check reports
-  each fallback, so a shot meant to be localised isn't silently in English.
+- A locale without a file falls back to the store's primary locale's file for that screen and shot, then the
+  config's primary's. The check reports each fallback, so a shot meant to be localised isn't silently in English.
 - `shots` is the order the store shows them. `screens` and `stores` filter a shot (`null` = all).
 - `screens` are the user's own names; `kind` is `phone`, `tablet`, `desktop`, `tv`, `watch` or `xr`.
 - **Which Apple slot a picture fills is decided by its pixel size**, against Apple's display types in the
@@ -119,6 +129,8 @@ Limits and what each field may say: [words.md](words.md).
 ```json
 "apple": {
   "enabled": true,
+  "primaryLocale": null,
+  "locales": null,
   "categories": { "primary": "FOOD_AND_DRINK", "primarySubcategories": [],
                   "secondary": "LIFESTYLE", "secondarySubcategories": [] },
   "platforms": {
@@ -135,6 +147,10 @@ Limits and what each field may say: [words.md](words.md).
 }
 ```
 
+- `primaryLocale`: the App Store's primary language (App Store Connect sets it per app; it may not be `en-US`), or
+  `null` for the config's `primaryLocale`. The App Store's words fall back to it before the config's.
+- `locales`: the config's locales the App Store gets, e.g. `["en-CA"]`; `null` (or absent): every one. Only these
+  are checked, built and sent, so a locale the store has no listing in isn't added. The primary must be one of them.
 - `categories`: App Store Connect's category ids (`FOOD_AND_DRINK`, `GAMES`, …); games take subcategories.
 - `platforms`: `IOS`, `MAC_OS`, `TV_OS`, `VISION_OS` (App Store Connect's names). `null` = not shipped there.
   Each lists the `screens` whose pictures it uses and optional `previews` per screen (up to 3; `posterFrame` as
@@ -152,6 +168,7 @@ Limits and what each field may say: [words.md](words.md).
 "google": {
   "enabled": true,
   "defaultLanguage": "en-US",
+  "locales": ["en-US", "de-DE"],
   "slots": { "phone": "android-phone", "tablet7": null, "tablet10": "android-tablet", "tv": null, "wear": null },
   "graphics": { "icon": "graphics/icon-512.png", "featureGraphic": "graphics/feature-1024x500.png",
                 "tvBanner": null },
@@ -159,7 +176,9 @@ Limits and what each field may say: [words.md](words.md).
 }
 ```
 
-- `defaultLanguage`: Play's default listing language. Check it matches the Console's (the plan says when not).
+- `defaultLanguage`: Play's default listing language, and Play's primary: its words fall back to it before the
+  config's `primaryLocale`. Check it matches the Console's (the plan says when not).
+- `locales`: the config's locales Play gets (`null` or absent: every one); `defaultLanguage` must be one of them.
 - `slots`: which of the user's screens fills each Play slot (`phone`, `tablet7`, `tablet10`, `tv`, `wear`).
 - `graphics`: the 512×512 icon, the 1024×500 feature graphic (required), the 1280×720 TV banner (with TV).
 - `dataSafetyCsv`: a path to the Data safety CSV exported from Play Console, or `null` ([forms.md](forms.md)).
@@ -218,4 +237,10 @@ For an Android-only app with no screenshots yet (the check will say what's missi
   doesn't have) use `config.*` ids. They can't be relaxed: fix the config.
 - `preview` works from `out/` (run `build` first), so it shows what was built, not the config as it is now.
 - `out/listing.json` carries the Apple TV privacy text in `apple.app.localizations[<primary>].privacyPolicyText`, each store's
-  `auth` (variable names only) and App Review's `contact` and `demoAccount` (variable names only).
+  `auth` (variable names only) and App Review's `contact` and `demoAccount` (variable names only). Each Apple
+  platform's `localizations` are that platform's own words; each store lists only its own locales, its primary
+  as `apple.primaryLocale` and `google.defaultLanguage`. `google.developer` (the copyright's holder, else the app's
+  name) is for the preview's developer line; nothing sends it.
+- A store's `locales` naming a locale the config hasn't (`config.locales`), or a store's primary that isn't one of its
+  locales (`config.primary_locale`, `config.default_language`), is an error; words for a platform the config
+  doesn't ship (`config.platforms`) are a warning.
