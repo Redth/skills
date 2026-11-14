@@ -170,6 +170,20 @@ class Supply(ImportTest):
         self.assert_no_personal()
         self.assert_schema_valid()
 
+    def test_play_default_is_one_of_plays_languages(self):
+        # An App Store listing in en-CA imported first, then Play's in en-US and de-DE: Play's default is en-US,
+        # not the config's primary (which Play has no listing in).
+        meta = os.path.join(self.tmp, "deliver", "metadata", "en-CA")
+        os.makedirs(meta)
+        with open(os.path.join(meta, "name.txt"), "w", encoding="utf-8") as f:
+            f.write("Sample Recipes\n")
+        self.imp("fastlane", os.path.join(self.tmp, "deliver"))
+        out = self.imp("supply", SUPPLY)
+        d = self.data()
+        self.assertEqual(d["primaryLocale"], "en-CA")
+        self.assertEqual(d["stores"]["google"]["defaultLanguage"], "en-US")
+        self.assertIn("defaultLanguage is en-US", out)
+
     def test_supply_words_pictures_and_changelog(self):
         root = self.copy_tree(os.path.join(kit.FILES, "supply-import"), "sp")
         android = os.path.join(root, "fastlane", "metadata", "android")

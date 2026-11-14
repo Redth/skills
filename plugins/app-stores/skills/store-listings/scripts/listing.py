@@ -1206,7 +1206,7 @@ class StoreCheck:
         return out
 
     def check_format(self, rule, pic):
-        """A ``format`` rule on a picture: the file format, an alpha channel, the file size."""
+        """A ``format`` rule on a picture: the file format, an alpha channel, see-through pixels, the file size."""
         out = []
         info = pic.info
         if rule.get("formats") and info.format not in rule.get("formats"):
@@ -1215,6 +1215,14 @@ class StoreCheck:
         if rule.get("alpha") is False and info.has_alpha:
             out.append(rules.finding(rule, pic.rel, "has an alpha channel or transparency, which %s doesn't take: "
                                      "save it without alpha (24-bit PNG or JPEG)" % pic.slot))
+        if rule.get("transparency") is False and info.has_alpha:
+            try:
+                see_through = png.has_transparency(pic.path)
+            except png.ImageError:
+                see_through = True
+            if see_through:
+                out.append(rules.finding(rule, pic.rel, "has see-through pixels, which %s shouldn't: make every "
+                                         "pixel opaque (an alpha channel itself is fine)" % pic.slot))
         if rule.get("maxBytes") is not None:
             n = os.path.getsize(pic.path)
             if n > rule.get("maxBytes"):

@@ -788,7 +788,7 @@
       "applies": {
         "slot": "icon"
       },
-      "alpha": false,
+      "transparency": false,
       "severity": "warning",
       "source": "https://developer.android.com/distribute/google-play/resources/icon-design-specifications",
       "checked": "2026-11-14",

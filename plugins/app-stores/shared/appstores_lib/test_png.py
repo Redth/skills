@@ -221,6 +221,28 @@ class DecodeTests(PngTestCase):
             png.decode_rgb(self.write("t.png", broken))
 
 
+class TransparencyTests(PngTestCase):
+    def test_an_opaque_alpha_channel_is_not_transparency(self):
+        # A 32-bit PNG (what Play asks of an icon) whose every pixel is opaque: an alpha channel, nothing see-through
+        rows = [bytes([9, 99, 199, 255] * 5)] * 4
+        path = self.write("opaque.png", png_bytes(5, 4, 6, rows=rows, filters=[0, 1, 2, 3, 4]))
+        self.assertTrue(png.info(path).has_alpha)
+        self.assertFalse(png.has_transparency(path))
+        grey = self.write("ga.png", png_bytes(2, 2, 4, rows=[bytes([7, 255, 8, 255])] * 2))
+        self.assertFalse(png.has_transparency(grey))
+
+    def test_one_see_through_pixel_is(self):
+        rows = [bytes([9, 99, 199, 255] * 5)] * 3 + [bytes([9, 99, 199, 255] * 4 + [1, 2, 3, 254])]
+        self.assertTrue(png.has_transparency(self.write("one.png", png_bytes(5, 4, 6, rows=rows, filters=[4]))))
+
+    def test_what_has_none_and_what_counts_anyway(self):
+        self.assertFalse(png.has_transparency(self.write("rgb.png", png_bytes(2, 2, 2))))
+        self.assertFalse(png.has_transparency(self.write("a.jpg", jpeg_bytes(2, 2))))
+        plte = chunk(b"PLTE", bytes([255, 0, 0])) + chunk(b"tRNS", bytes([0]))
+        self.assertTrue(png.has_transparency(self.write("pal.png", png_bytes(2, 2, 3, before_idat=plte))))
+        self.assertTrue(png.has_transparency(self.write("16.png", png_bytes(2, 2, 6, depth=16))))
+
+
 class DigestTests(PngTestCase):
     def test_md5_and_sha256(self):
         data = png_bytes(3, 3, 2)

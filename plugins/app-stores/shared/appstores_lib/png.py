@@ -291,6 +291,39 @@ def decode_rgb(path):
     return width, height, bytes(out)
 
 
+def has_transparency(path):
+    """True when a picture has see-through pixels, not merely an alpha channel (a 32-bit PNG whose every
+    pixel is opaque has none). A JPEG never does. Colour types 4 and 6 at 8 bits, non-interlaced, are decoded
+    and their alpha read; a ``tRNS`` chunk, or an alpha channel this module can't decode (16-bit, interlaced),
+    counts as transparency. Raises ``ImageError`` for a file that isn't a PNG or JPEG."""
+    meta = info(path)
+    if not meta.has_alpha:
+        return False
+    data = _read(path)
+    pos = 8
+    idat = []
+    while pos + 8 <= len(data):
+        length, kind = struct.unpack(">I4s", data[pos: pos + 8])
+        if kind == b"tRNS":
+            return True
+        if kind == b"IDAT":
+            idat.append(data[pos + 8: pos + 8 + length])
+        elif kind == b"IEND":
+            break
+        pos += 12 + length
+    if meta.bit_depth != 8 or meta.interlaced or meta.color_type not in (4, 6):
+        return True
+    try:
+        raw = zlib.decompress(b"".join(idat))
+    except zlib.error as e:
+        raise ImageError("%s: damaged image data (%s)" % (path, e)) from None
+    bpp = _CHANNELS[meta.color_type]
+    try:
+        pixels = _unfilter(raw, meta.width, meta.height, bpp)
+    except ImageError as e:
+        raise ImageError("%s: %s" % (path, e)) from None
+    return min(pixels[bpp - 1::bpp], default=255) < 255
+
 def _digest(path, algo):
     h = hashlib.new(algo)
     with open(path, "rb") as f:

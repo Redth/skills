@@ -192,7 +192,8 @@ Meanings:
   - `count`: `min`/`max` pictures (or items, e.g. keywords).
   - `size`: `sizes` (list of `[w, h]`, either orientation unless `orientation` set) or `range`
     (`{minSide, maxSide, maxAspect}`).
-  - `format`: `formats` (`png`, `jpeg`), `alpha` (false = forbidden), `maxBytes`.
+  - `format`: `formats` (`png`, `jpeg`), `alpha` (false = an alpha channel is forbidden), `transparency` (false =
+    see-through pixels are; an opaque alpha channel is fine), `maxBytes`.
   - `words`: `words` (list, matched as whole words, case-insensitive; entries starting or ending with a symbol
     match as written), `fields` they apply to.
   - `required`: a field or slot that must be present (`when` condition: e.g. `{"platform": "IOS", "screenKind": "tablet"}`).

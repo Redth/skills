@@ -203,6 +203,14 @@ class Pictures(TempDir):
         self.assertEqual(code, 0)
         self.assertTrue(kit.findings(report, "google.icon.transparency", "warning"))
 
+    def test_play_icon_opaque_alpha_channel_is_fine(self):
+        # Play asks for a 32-bit PNG icon: an alpha channel with every pixel opaque isn't transparency
+        config = self.sample()
+        kit.write_png(os.path.join(self.tmp, "project", "graphics", "icon-512.png"), 512, 512, alpha=255)
+        code, report = kit.check_json(config)
+        self.assertEqual(code, 0)
+        self.assertFalse(kit.findings(report, "google.icon.transparency"))
+
     def test_apple_slot_by_size_first_listed_wins(self):
         config = self.sample()
         ipad = os.path.join(self.tmp, "project", "screenshots", "en-US", "ipad")

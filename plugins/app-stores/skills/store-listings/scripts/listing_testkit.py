@@ -19,16 +19,17 @@ _PNG_CACHE = {}
 
 
 def png_bytes(width, height, alpha=False, rgb=(52, 120, 198)):
-    """A solid-colour 8-bit PNG (RGB, or RGBA with ``alpha``) of exactly ``width`` x ``height``."""
+    """A solid-colour 8-bit PNG (RGB, or RGBA with ``alpha``) of exactly ``width`` x ``height``. ``alpha=True``
+    is half see-through; a number (0-255) is every pixel's alpha (255: an opaque alpha channel)."""
     key = (width, height, alpha, tuple(rgb))
     if key not in _PNG_CACHE:
-        pixel = bytes(rgb) + (b"\x80" if alpha else b"")
+        pixel = bytes(rgb) + (b"\x80" if alpha is True else (bytes([alpha]) if alpha is not False else b""))
         raw = (b"\x00" + pixel * width) * height
 
         def chunk(kind, data):
             return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
 
-        ihdr = struct.pack(">IIBBBBB", width, height, 8, 6 if alpha else 2, 0, 0, 0)
+        ihdr = struct.pack(">IIBBBBB", width, height, 8, 6 if alpha is not False else 2, 0, 0, 0)
         _PNG_CACHE[key] = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw, 6))
                            + chunk(b"IEND", b""))
     return _PNG_CACHE[key]

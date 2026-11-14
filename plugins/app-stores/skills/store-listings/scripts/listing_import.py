@@ -646,8 +646,9 @@ def _set_google_words(m, values):
             m.notes.append("app.name was taken from Play's title (%r): check it" % title)
 
 
-def _google_images(m, per_locale_images, per_locale_graphics):
-    """Screenshots (``{loc: {imageType: [paths]}}``) and graphics (``{loc: {graphic: path}}``) into the config."""
+def _google_images(m, per_locale_images, per_locale_graphics, preferred=None):
+    """Screenshots (``{loc: {imageType: [paths]}}``) and graphics (``{loc: {graphic: path}}``) into the config;
+    ``preferred`` is the layout's own default language, if it names one."""
     g = m.google()
     order = sorted(per_locale_images, key=lambda l: (l != m.primary, l))
     for loc in order:
@@ -671,8 +672,17 @@ def _google_images(m, per_locale_images, per_locale_graphics):
             ext = os.path.splitext(src)[1].lower()
             rel = m.copy(src, os.path.join("graphics", name + (".jpg" if ext == ".jpeg" else ext)))
             m.set(["stores", "google", "graphics", name], rel)
-    if m.set(["stores", "google", "defaultLanguage"], m.primary):
-        m.notes.append("stores.google.defaultLanguage is %s: check it matches Play Console's default" % m.primary)
+    # Play's default is one of the languages imported here (an earlier import may have set the primary locale
+    # from the App Store's): the layout's own default if it says, else the primary if Play has it, else en-US,
+    # else the first.
+    play_locs = list(per_locale_images)
+    for default in (preferred, m.primary, "en-US") + tuple(play_locs[:1]):
+        if default in play_locs:
+            break
+    else:
+        default = m.primary
+    if m.set(["stores", "google", "defaultLanguage"], default):
+        m.notes.append("stores.google.defaultLanguage is %s: check it matches Play Console's default" % default)
     if (m.get(["app", "ids", "google", "package"]) is None):
         m.notes.append("set app.ids.google.package (the metadata doesn't say it)")
 
@@ -746,7 +756,8 @@ def import_triple_t(m, path):
              and _is_locale(n, "google")]
     bcp = collections.OrderedDict((c, _bcp47(c, "google")) for c in codes)
     default = _read(os.path.join(base, "default-language.txt"))
-    m.choose_primary(list(bcp.values()), _bcp47(default, "google") if default else None)
+    preferred = _bcp47(default, "google") if default else None
+    m.choose_primary(list(bcp.values()), preferred)
     m.set(["app", "contact", "email"], _read(os.path.join(base, "contact-email.txt")))
     m.set(["app", "contact", "phone"], _read(os.path.join(base, "contact-phone.txt")))
     m.set(["app", "contact", "website"], _read(os.path.join(base, "contact-website.txt")))
@@ -778,7 +789,7 @@ def import_triple_t(m, path):
             if found:
                 graphics[loc][name] = found[0]
     _set_google_words(m, values)
-    _google_images(m, images, graphics)
+    _google_images(m, images, graphics, preferred)
 
 
 # ---------------------------------------------------------------------------------------------------------

@@ -34,7 +34,7 @@ That keeps a guess from blocking a release while still showing it.
 | `limit` | `max`, optional `min`, `count`: `characters` (code points), `graphemes`, `bytes` (UTF-8) | Apple keywords: 100 bytes |
 | `count` | `min`/`max` pictures or items | Play phone screenshots: up to 8 |
 | `size` | `sizes` (`[w, h]` pairs, either orientation unless `orientation` is set) or `range` (`minSide`, `maxSide`, `maxAspect`) | Play screenshots: 320–3840 px, long side at most 2× the short |
-| `format` | `formats` (`png`, `jpeg`), `alpha` (`false` = forbidden), `maxBytes` | Apple screenshots: no alpha |
+| `format` | `formats` (`png`, `jpeg`), `alpha` (`false` = no alpha channel), `transparency` (`false` = no see-through pixels; an opaque alpha channel is fine), `maxBytes` | Apple screenshots: no alpha; Play's icon: no transparency |
 | `words` | `words` (whole words, case-insensitive; an entry starting or ending with a symbol matches as written), `fields` | price words in Apple's name and subtitle |
 | `required` | a field or slot that must be present, with an optional `when` (`{"platform": "IOS", "screenKind": "tablet"}`) | iPad 13" screenshots when the app runs on iPad |
 | `video` | `codecs`, `fps`, `minSeconds`, `maxSeconds`, `sizes`, `audioRequired`, `maxBytes` | Apple previews: 15–30 s, at most 30 fps |
