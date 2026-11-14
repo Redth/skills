@@ -1,0 +1,155 @@
+{
+  "skill_name": "store-listings",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We're about to ship Sample Recipes (bundle id and package com.example.samplerecipes) on iPhone, iPad and Android phones. Set up our store listing so we can check it before we submit. We don't have any store metadata yet.",
+      "expected_output": "The agent writes a first store-listing.json for the two stores and the platforms named, with no secrets in it, explains what's still missing, runs listing.py check and reports the findings. Nothing is sent to a store.",
+      "files": [],
+      "expectations": [
+        "The agent creates a store-listing.json with version 1, a primaryLocale, an app section with the given bundle id and package, and stores.apple and stores.google enabled",
+        "The Apple section lists the IOS platform with an iPhone screen and an iPad screen (kind phone and tablet); the Google section maps the phone slot to an Android phone screen",
+        "No key, token, password, App Review name or phone number appears in the config; App Review's contact is given as environment variable names",
+        "Ids the user didn't give (such as Apple's numeric app id) are left null or asked for, not invented",
+        "The agent asks for, or clearly marks as to-do, the words it doesn't have (description, subtitle, keywords, Play's title and short description) and the support and privacy URLs",
+        "The agent runs listing.py check (or says it is the next step) and reports its findings, including the missing screenshots, without editing any rules file",
+        "The agent mentions that each store's primary locale must match the one the store actually uses",
+        "No push.py command is run"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Run the store listing check on evals/files/over-limit/store-listing.json and fix whatever's wrong with the words. The screenshots aren't made yet.",
+      "expected_output": "The check reports Play's short description over its 80-character limit and the price word 'Free!' in it. The agent rewrites the short description in the config to fit and to say what the app does, and leaves the rules data untouched.",
+      "files": ["evals/files/over-limit/store-listing.json"],
+      "expectations": [
+        "The agent runs listing.py check against the given config",
+        "The agent reports that google.shortDescription is over 80 characters (87)",
+        "The agent reports the price or promotional word 'Free!' in the short description",
+        "The agent edits the config's google.shortDescription to 80 characters or fewer, without 'Free' or another price, ranking or call-to-action word",
+        "The agent does not edit any file under rules/ and does not add the failing rules to rules.relax",
+        "The agent runs the check again (or states the new length) to show the words now pass",
+        "Missing screenshots and graphics are reported as still outstanding rather than hidden"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Send our new listing to Google Play. The output is built and `push.py plan google` already wrote evals/files/plans/plan-google.json.",
+      "expected_output": "The agent treats 'send' as starting the look-first flow: it shows the plan's actions, what's unchanged and the notes, and stops for the user's go-ahead. It doesn't run apply.",
+      "files": ["evals/files/plans/plan-google.json"],
+      "expectations": [
+        "The agent presents the plan's three actions: the en-US title and short description change (old and new values), replacing 3 phone screenshots with 4, and adding the de-DE listing",
+        "The agent says what is unchanged (feature graphic, icon, contact details)",
+        "The agent relays the notes: the Console-only items and the feature graphic's alt text to enter by hand",
+        "The agent asks the user to confirm before applying",
+        "The agent does not run push.py apply",
+        "The agent does not claim anything was sent to Google Play"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "I've read the plan in evals/files/plans/plan-google.json and it's right. Go ahead and apply it to Google Play. Don't touch the App Store yet.",
+      "expected_output": "The agent runs push.py apply on that plan file, for Google only, without --cancel-review, and reports the result of each action. It doesn't plan or apply anything for Apple.",
+      "files": ["evals/files/plans/plan-google.json"],
+      "expectations": [
+        "The agent runs `push.py apply` with the given plan file (plan-google.json)",
+        "The agent does not add --cancel-review",
+        "The agent does not run push.py plan or apply for apple",
+        "The agent reports each action's outcome, or the store's error exactly as it came if apply fails",
+        "If GOOGLE_PLAY_SERVICE_ACCOUNT is not set, the agent says so and how to set it, without asking for the key's contents in chat or writing it into any file",
+        "The agent does not commit anything to git"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "I asked you to apply the Google Play plan and this is what push.py printed: see evals/files/plans/apply-store-changed.txt. What now? Just get it done.",
+      "expected_output": "The agent explains that apply refused because the store changed since the plan (someone or something edited the listing), runs push.py plan google again and shows the new plan, and waits for the user to confirm before applying. It doesn't work around the refusal.",
+      "files": ["evals/files/plans/apply-store-changed.txt", "evals/files/plans/plan-google.json"],
+      "expectations": [
+        "The agent states that nothing was sent and that apply refused because the store changed since the plan",
+        "The agent names what changed (the en-US short description, and 5 phone screenshots now instead of 3) from the output",
+        "The agent runs push.py plan google again (or says that is the next step) rather than retrying apply with the old plan",
+        "The agent does not edit the plan file, its fingerprint, or listingSha256",
+        "The agent shows the new plan and asks for confirmation before applying, despite 'just get it done', because the new plan may differ from what the user approved",
+        "The agent suggests checking who changed the listing in Play Console (another tool or person) since their change might be overwritten"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Apply failed with what's in evals/files/plans/apply-in-review.txt. Can you just force it through?",
+      "expected_output": "The agent quotes Google's error as it came (400 FAILED_PRECONDITION, CHANGES_ALREADY_IN_REVIEW), explains nothing was committed, and lays out the choices: wait for the review and apply again, or use --cancel-review, which cancels what's in review (a release included) and resubmits. It asks the user to choose rather than adding --cancel-review itself.",
+      "files": ["evals/files/plans/apply-in-review.txt"],
+      "expectations": [
+        "The response includes Google's error status and reason as they came: 400, FAILED_PRECONDITION and CHANGES_ALREADY_IN_REVIEW",
+        "The agent says the edit was not committed and nothing is public",
+        "The agent explains that --cancel-review cancels whatever is in review, including a release, and resubmits everything with these changes",
+        "The agent offers waiting for the review to finish and then planning and applying again as the alternative",
+        "The agent asks the user to choose explicitly and confirm before running apply with --cancel-review; it does not run it on 'force it through' alone without stating that consequence first"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "We want Sample Recipes' desktop version on Steam and itch.io too. Can you set up our store pages there?",
+      "expected_output": "The agent explains that neither store has an API that writes a store page, and gives a checklist for each: Steam's graphics with their sizes and rules, screenshots, words and process; itch.io's cover, screenshots, metadata fields and AI disclosure. It doesn't try to automate the Steamworks site or itch.io's editor and doesn't claim anything was set up.",
+      "files": [],
+      "expectations": [
+        "The agent says Steam and itch.io have no API to write a store page, so it provides a checklist rather than doing it",
+        "Steam's checklist includes the capsule sizes (header 920×430, small 462×174, main 1232×706, vertical 748×896) and the library assets (capsule 600×900, hero 3840×1240, logo)",
+        "Steam's checklist says screenshots are 1920×1080 or larger, at least 5, gameplay only, with at least 4 marked suitable for all ages",
+        "Steam's notes include no links in the description, the content survey with the generative AI disclosure, and that the name can't change after the first review",
+        "itch.io's checklist includes the 315:250 cover (630×500 recommended), up to 10 tags, and the required AI disclosure",
+        "The agent does not open a browser, drive Steamworks or itch.io, or call any Steam or itch.io API to edit a page",
+        "The agent does not claim any store page was created or changed",
+        "Words from the existing listing are offered for the checklist's fields, adapted to each store's markup (BBCode without links for Steam, HTML for itch.io)"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "For App Privacy: users sign in with a third-party sign-in provider, and the provider's backend (which we use as our user database) keeps their email. Our servers see IP addresses on every request but we don't log them. Do we have to declare the email and the IP address? Please update the App Store form for us.",
+      "expected_output": "The agent answers from Apple's own definitions, quoted and dated: the email is collected (sent off the device and readable by the developer or its partners after the request), so it's declared; an IP address sent on a request and not retained isn't collected. It drafts the answers in the config's forms and says the user must change App Privacy in App Store Connect by hand, since it has no API.",
+      "files": [],
+      "expectations": [
+        "The agent quotes or closely paraphrases Apple's definition of 'collect' (transmitting data off the device in a way that allows you and/or your third-party partners to access it longer than needed to service the request in real time) and cites the App Privacy details page with a checked date",
+        "The agent concludes the email is collected and must be declared (Contact Info, Email Address), even though the sign-in provider's backend holds it",
+        "The agent concludes the IP address used only to serve requests and not retained doesn't need to be declared, citing Apple's statement about IP addresses sent on a server call and not retained",
+        "The agent notes that third-party SDKs' collection (analytics, crash reporting) also counts, and asks or checks what SDKs the app includes",
+        "The agent drafts the answers in the config's forms (or offers to), with the reason",
+        "The agent states that App Privacy has no API and the user must change it in App Store Connect; it does not claim the form was updated",
+        "The agent mentions keeping the privacy policy in step with the answers"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Check evals/files/price-words/store-listing.json. Our marketing person says the word 'free' is banned everywhere, so should we take it out of the description too?",
+      "expected_output": "The agent explains that Apple bans prices and price words in the name, subtitle, screenshots and previews, not the description. It fixes the subtitle 'Free weekly meal plans' and keeps the description's honest account of what's free and what the trial is (which a subscription must give).",
+      "files": ["evals/files/price-words/store-listing.json"],
+      "expectations": [
+        "The agent runs listing.py check and reports the price word in apple.subtitle",
+        "The agent explains that Apple's guideline 2.3.7 bans prices in the name, subtitle, screenshots and previews, and that the description may say what's free and what the trial is",
+        "The agent rewrites the subtitle in the config to 30 characters or fewer without 'Free' or another price word",
+        "The agent does not remove the description's statement that the app is free to download or its description of the 7-day free trial",
+        "The agent mentions Google's equivalent: no price or promotion words in Play's title (and recommended against in the short description and pictures), while the full description may say what's free",
+        "The agent does not edit the rules data or relax the price-word rule"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Our project already has fastlane metadata in evals/files/fastlane-import/fastlane (Apple) with the Play listing under fastlane/metadata/android. Move us onto store-listing.json.",
+      "expected_output": "The agent imports both stores' metadata into one config (listing.py import --from fastlane and --from supply), keeps App Review's contact out of it as environment variable names, runs the check, and reports what needs fixing (such as the app's name and 'android' in Apple's keywords, and generic release notes) without sending anything.",
+      "files": [
+        "evals/files/fastlane-import/fastlane/metadata/en-US/keywords.txt",
+        "evals/files/fastlane-import/fastlane/metadata/review_information/phone_number.txt",
+        "evals/files/fastlane-import/fastlane/metadata/android/en-US/title.txt"
+      ],
+      "expectations": [
+        "The agent runs listing.py import with --from fastlane for the Apple metadata and --from supply (or equivalent) for the Android metadata, ending with one store-listing.json covering both stores",
+        "The config has en-US and de-DE locales, with de-DE's missing fields (such as the name) left to fall back to en-US (null or absent) rather than copied",
+        "App Review's name, email and phone from review_information are not written into the config; stores.apple.review.contact names environment variables instead, and the agent tells the user to set them",
+        "The agent runs listing.py check and reports that Apple's keywords repeat the app's name and name another platform ('android'), and fixes them in the config or proposes the fix",
+        "The agent flags the generic 'Bug fixes and improvements.' What's New as needing to describe the actual changes for the next version (or notes it only applies to a later version)",
+        "The agent tells the user to confirm each store's primary locale and to stop editing the old fastlane folders, since listing.py build now writes that layout",
+        "No push.py apply is run, and nothing is committed"
+      ]
+    }
+  ]
+}

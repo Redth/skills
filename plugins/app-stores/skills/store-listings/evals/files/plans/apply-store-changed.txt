@@ -1,0 +1,8 @@
+$ python3 scripts/push.py apply plan-google.json
+Reading the store (com.example.samplerecipes, Google Play)...
+Refused: the store changed since you planned: plan again.
+  The fingerprint of what the plan compared against differs:
+    en-US listing: shortDescription differs from when the plan was made
+    en-US phoneScreenshots: 3 pictures then, 5 now
+Nothing was sent. The edit opened to read was deleted.
+exit status 2

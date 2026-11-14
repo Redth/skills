@@ -1,0 +1,2405 @@
+{
+  "$schema": "./rules.schema.json",
+  "$comment": "The App Store's listing rules, from Apple's own pages read on the date in 'checked'. Each rule's 'status' says how sure we are: a rule that isn't 'verified' is reported as a warning whatever its severity. To update a rule, change its values, 'source', 'checked' and 'status' together; never change an 'id' (configs relax rules by id).",
+  "store": "apple",
+  "checked": "2026-11-14",
+  "rules": [
+    {
+      "id": "apple.name.length",
+      "kind": "limit",
+      "applies": {
+        "field": "apple.name"
+      },
+      "min": 2,
+      "max": 30,
+      "count": "characters",
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/app-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Falls back to app.name. Apple's 'characters'; how emoji count is unverified."
+    },
+    {
+      "id": "apple.subtitle.length",
+      "kind": "limit",
+      "applies": {
+        "field": "apple.subtitle"
+      },
+      "max": 30,
+      "count": "characters",
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/app-information",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.promotional_text.length",
+      "kind": "limit",
+      "applies": {
+        "field": "apple.promotionalText"
+      },
+      "max": 170,
+      "count": "characters",
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Changes any time, without review."
+    },
+    {
+      "id": "apple.description.length",
+      "kind": "limit",
+      "applies": {
+        "field": "apple.description"
+      },
+      "max": 4000,
+      "count": "characters",
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Falls back to the locale's shared description."
+    },
+    {
+      "id": "apple.description.required",
+      "kind": "required",
+      "applies": {
+        "field": "apple.description"
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.description.html",
+      "kind": "pattern",
+      "applies": {
+        "field": "apple.description"
+      },
+      "regex": "(?i)<\\s*/?\\s*(a|b|i|u|p|br|ul|ol|li|strong|em|div|span|h[1-6])\\b[^>]*>",
+      "forbid": true,
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Plain text only: 'HTML format isn't supported'. Tags show as written."
+    },
+    {
+      "id": "apple.keywords.length",
+      "kind": "limit",
+      "applies": {
+        "field": "apple.keywords"
+      },
+      "max": 100,
+      "count": "bytes",
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Counted on the keywords joined with commas and no spaces (how they're sent). Apple's product page guide says 100 characters, the version page 100 bytes: bytes (UTF-8) is the stricter."
+    },
+    {
+      "id": "apple.keywords.each_length",
+      "kind": "limit",
+      "applies": {
+        "field": "apple.keywords",
+        "each": true
+      },
+      "min": 3,
+      "count": "characters",
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Each keyword 'greater than two characters'."
+    },
+    {
+      "id": "apple.keywords.commas",
+      "kind": "pattern",
+      "applies": {
+        "field": "apple.keywords",
+        "each": true
+      },
+      "regex": ",",
+      "forbid": true,
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Keywords are separated by commas, so a keyword can't contain one."
+    },
+    {
+      "id": "apple.keywords.duplicates",
+      "kind": "count",
+      "applies": {
+        "field": "apple.keywords"
+      },
+      "unique": true,
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/product-page/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Apple's advice: a repeated keyword wastes bytes."
+    },
+    {
+      "id": "apple.keywords.repeats_name",
+      "kind": "words",
+      "applies": {
+        "field": "apple.keywords"
+      },
+      "wordsFrom": [
+        "apple.name",
+        "apple.subtitle"
+      ],
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Words already in the name or subtitle are indexed already; the version page says not to repeat the app's or company's name."
+    },
+    {
+      "id": "apple.keywords.app_word",
+      "kind": "words",
+      "applies": {
+        "field": "apple.keywords"
+      },
+      "words": [
+        "app",
+        "apps"
+      ],
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/product-page/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Apple's advice: avoid the word 'app' and category names."
+    },
+    {
+      "id": "apple.keywords.other_names",
+      "kind": "checklist",
+      "applies": {
+        "field": "apple.keywords"
+      },
+      "item": "No other apps' or companies' names, trademarks or celebrities' names in the keywords.",
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.whats_new.length",
+      "kind": "limit",
+      "applies": {
+        "field": "apple.whatsNew"
+      },
+      "max": 4000,
+      "count": "characters",
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.whats_new.required",
+      "kind": "required",
+      "applies": {
+        "field": "apple.whatsNew"
+      },
+      "when": {
+        "update": true
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Not on an app's first version; required on every later one."
+    },
+    {
+      "id": "apple.whats_new.specific",
+      "kind": "checklist",
+      "applies": {
+        "field": "apple.whatsNew"
+      },
+      "item": "What's New lists the version's significant changes specifically; generic text only for bug fixes (guideline 2.3.12).",
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.review.notes.length",
+      "kind": "limit",
+      "applies": {
+        "field": "stores.apple.review.notes"
+      },
+      "max": 4000,
+      "count": "bytes",
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Any language."
+    },
+    {
+      "id": "apple.review.phone.format",
+      "kind": "pattern",
+      "applies": {
+        "field": "stores.apple.review.contact.phone"
+      },
+      "regex": "^\\+[1-9][0-9 ().-]{5,}$",
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "The value of the environment variable named by review.contact.phoneEnv, checked at push time: international format with '+' and the country code (numbers-only isn't accepted since 2026-08-19)."
+    },
+    {
+      "id": "apple.review.demo_account",
+      "kind": "checklist",
+      "applies": {
+        "field": "stores.apple.review.demoAccount"
+      },
+      "item": "If anything needs a sign-in, give App Review a demo account that doesn't expire (review.demoAccount).",
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.tv_privacy_text.required",
+      "kind": "required",
+      "applies": {
+        "field": "stores.apple.tvPrivacyText"
+      },
+      "when": {
+        "platform": "TV_OS"
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/app-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "The privacy policy's plain text for Apple TV (a file; Apple TV shows the text, not a link). No length limit is published; texts of over 10,000 characters have been accepted (observed)."
+    },
+    {
+      "id": "apple.tv.controller",
+      "kind": "checklist",
+      "applies": {
+        "field": "apple.description"
+      },
+      "item": "An Apple TV app that requires a game controller says so in its metadata (guideline 2.4.3).",
+      "when": {
+        "platform": "TV_OS"
+      },
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.urls.protocol",
+      "kind": "pattern",
+      "applies": {
+        "fields": [
+          "app.urls.marketing",
+          "app.urls.support",
+          "app.urls.privacy",
+          "app.urls.privacyChoices"
+        ]
+      },
+      "regex": "^https?://[^\\s/$.?#][^\\s]*$",
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "A full URL with its protocol."
+    },
+    {
+      "id": "apple.urls.support.required",
+      "kind": "required",
+      "applies": {
+        "field": "app.urls.support"
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.urls.support.contact",
+      "kind": "checklist",
+      "applies": {
+        "field": "app.urls.support"
+      },
+      "item": "The support URL leads to real contact information (and a legal address, email and phone where local law requires).",
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.urls.privacy.required",
+      "kind": "required",
+      "applies": {
+        "field": "app.urls.privacy"
+      },
+      "when": {
+        "platform": [
+          "IOS",
+          "MAC_OS"
+        ]
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/app-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Required for iOS and macOS apps; app-level, changes release with the next version."
+    },
+    {
+      "id": "apple.urls.unreachable_urls",
+      "kind": "checklist",
+      "applies": {
+        "fields": [
+          "app.urls.marketing",
+          "app.urls.support",
+          "app.urls.privacy",
+          "app.urls.privacyChoices"
+        ]
+      },
+      "item": "Open every URL: App Review does, and a dead link is a rejection. (Scripts here don't reach the network.)",
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "observed"
+    },
+    {
+      "id": "apple.copyright.format",
+      "kind": "pattern",
+      "applies": {
+        "field": "app.copyright"
+      },
+      "regex": "^(19|20)[0-9]{2}(-(19|20)[0-9]{2})? \\S",
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Apple's form is the year and the holder: '2026 Example Studio'."
+    },
+    {
+      "id": "apple.copyright.symbol",
+      "kind": "pattern",
+      "applies": {
+        "field": "app.copyright"
+      },
+      "regex": "(?i)^\\s*(©|\\(c\\)|copyright\\b)",
+      "forbid": true,
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "App Store Connect adds the copyright symbol itself."
+    },
+    {
+      "id": "apple.metadata.prices",
+      "kind": "words",
+      "applies": {
+        "fields": [
+          "apple.name",
+          "apple.subtitle",
+          "apple.keywords",
+          "captions"
+        ]
+      },
+      "words": [
+        "free",
+        "for free",
+        "sale",
+        "on sale",
+        "discount",
+        "discounted",
+        "cheap",
+        "half price",
+        "% off",
+        "$",
+        "€",
+        "£",
+        "¥",
+        "₹",
+        "limited time"
+      ],
+      "severity": "error",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Guideline 2.3.7: no prices or price claims in the name, subtitle, screenshots and previews (and no pricing packed into keywords). Not banned in the description or promotional text, which may describe a free trial. 'free' also matches 'gluten-free': relax by id when it isn't a price."
+    },
+    {
+      "id": "apple.metadata.other_platforms",
+      "kind": "words",
+      "applies": {
+        "fields": [
+          "apple.name",
+          "apple.subtitle",
+          "apple.promotionalText",
+          "apple.description",
+          "apple.keywords",
+          "apple.whatsNew",
+          "captions"
+        ]
+      },
+      "words": [
+        "Android",
+        "Google Play",
+        "Play Store",
+        "Google Play Store",
+        "Galaxy Store",
+        "Amazon Appstore",
+        "AppGallery",
+        "HarmonyOS",
+        "Windows Phone",
+        "BlackBerry",
+        "Tizen",
+        "Aptoide",
+        "F-Droid",
+        "Epic Games Store"
+      ],
+      "severity": "error",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Guideline 2.3.10: no names of other mobile platforms or alternative app marketplaces (status bars and imagery in screenshots too). fastlane precheck's other_platforms."
+    },
+    {
+      "id": "apple.metadata.irrelevant_platforms",
+      "kind": "words",
+      "applies": {
+        "fields": [
+          "apple.name",
+          "apple.subtitle",
+          "apple.promotionalText",
+          "apple.description",
+          "apple.keywords",
+          "apple.whatsNew",
+          "captions"
+        ]
+      },
+      "words": [
+        "Windows",
+        "Linux",
+        "Chromebook",
+        "ChromeOS",
+        "Steam",
+        "itch.io",
+        "Nintendo",
+        "Nintendo Switch",
+        "Xbox",
+        "PlayStation"
+      ],
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Guideline 2.3.10's 'irrelevant information': desktop and game stores aren't named in the guideline, so a warning; drop it if they are relevant (for example a cross-platform save)."
+    },
+    {
+      "id": "apple.description.controller_names",
+      "kind": "words",
+      "applies": {
+        "field": "apple.description"
+      },
+      "words": [
+        "Xbox controller",
+        "Xbox Wireless Controller",
+        "PlayStation controller",
+        "DualSense",
+        "DualShock"
+      ],
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "Naming Xbox or PlayStation controllers is common; whether App Review rules on it is unverified (2.4.3 says 'third-party game controllers')."
+    },
+    {
+      "id": "apple.metadata.for_kids",
+      "kind": "words",
+      "applies": {
+        "fields": [
+          "apple.name",
+          "apple.subtitle",
+          "apple.promotionalText",
+          "apple.description",
+          "apple.keywords",
+          "apple.whatsNew",
+          "captions"
+        ]
+      },
+      "words": [
+        "for kids",
+        "for children"
+      ],
+      "severity": "error",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Guideline 2.3.8: 'For Kids' and 'For Children' are reserved for the Kids category."
+    },
+    {
+      "id": "apple.metadata.claims",
+      "kind": "words",
+      "applies": {
+        "fields": [
+          "apple.name",
+          "apple.subtitle"
+        ]
+      },
+      "words": [
+        "#1",
+        "no. 1",
+        "number one",
+        "best",
+        "top rated",
+        "top-rated",
+        "award-winning",
+        "most popular",
+        "world's best"
+      ],
+      "severity": "error",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Guideline 2.3.7: no unverifiable product claims in the subtitle, and nothing but the app's name in the name."
+    },
+    {
+      "id": "apple.metadata.claims_elsewhere",
+      "kind": "words",
+      "applies": {
+        "fields": [
+          "apple.keywords",
+          "apple.promotionalText",
+          "apple.description",
+          "apple.whatsNew",
+          "captions"
+        ]
+      },
+      "words": [
+        "#1",
+        "no. 1",
+        "number one",
+        "best",
+        "top rated",
+        "top-rated",
+        "award-winning",
+        "most popular"
+      ],
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Guideline 2.3.7 asks for accurate metadata; a claim you can back up (with its source) is fine."
+    },
+    {
+      "id": "apple.metadata.apple_awards",
+      "kind": "words",
+      "applies": {
+        "fields": [
+          "apple.name",
+          "apple.subtitle",
+          "apple.promotionalText",
+          "apple.description",
+          "apple.keywords",
+          "apple.whatsNew",
+          "captions"
+        ]
+      },
+      "words": [
+        "Editors' Choice",
+        "Editor's Choice",
+        "Editors Choice",
+        "App of the Day",
+        "Game of the Day",
+        "App of the Year",
+        "Game of the Year",
+        "Apple Design Award",
+        "Apple Design Awards"
+      ],
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/marketing/guidelines/",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "Apple-designated features and awards ('Editors' Choice', 'App of the Day', Apple Design Awards) only when Apple gave them, worded as Apple's marketing guidelines say. Not in the guidelines' text read 2026-11-14."
+    },
+    {
+      "id": "apple.metadata.placeholder_text",
+      "kind": "words",
+      "applies": {
+        "fields": [
+          "apple.name",
+          "apple.subtitle",
+          "apple.promotionalText",
+          "apple.description",
+          "apple.keywords",
+          "apple.whatsNew",
+          "captions"
+        ]
+      },
+      "words": [
+        "lorem ipsum",
+        "lorem",
+        "ipsum",
+        "placeholder",
+        "TODO",
+        "TBD",
+        "FIXME",
+        "coming soon",
+        "xxx",
+        "[insert",
+        "your text here"
+      ],
+      "severity": "error",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "Guidelines 2.1 and 2.2: nothing unfinished. Not re-read on 2026-11-14. fastlane precheck's placeholder_text."
+    },
+    {
+      "id": "apple.metadata.test_words",
+      "kind": "words",
+      "applies": {
+        "fields": [
+          "apple.name",
+          "apple.subtitle",
+          "apple.promotionalText",
+          "apple.description",
+          "apple.keywords",
+          "apple.whatsNew",
+          "captions"
+        ]
+      },
+      "words": [
+        "beta",
+        "demo",
+        "test build",
+        "testing",
+        "debug",
+        "TestFlight",
+        "pre-release",
+        "alpha version"
+      ],
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "Guideline 2.2: no betas, demos or test versions. fastlane precheck's test_words."
+    },
+    {
+      "id": "apple.screenshots.count",
+      "kind": "count",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "APP_IPHONE_35",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_WATCH_ULTRA",
+          "APP_WATCH_SERIES_10",
+          "APP_WATCH_SERIES_7",
+          "APP_WATCH_SERIES_4",
+          "APP_WATCH_SERIES_3",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ]
+      },
+      "min": 1,
+      "max": 10,
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "1 to 10 per display type, per locale."
+    },
+    {
+      "id": "apple.screenshots.format",
+      "kind": "format",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "APP_IPHONE_35",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_WATCH_ULTRA",
+          "APP_WATCH_SERIES_10",
+          "APP_WATCH_SERIES_7",
+          "APP_WATCH_SERIES_4",
+          "APP_WATCH_SERIES_3",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ]
+      },
+      "formats": [
+        "png",
+        "jpeg"
+      ],
+      "alpha": false,
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "JPEG or PNG; 'Images can't include alpha channels or transparencies' (since 2026-07-08). No colour space or file size stated."
+    },
+    {
+      "id": "apple.screenshots.size",
+      "kind": "size",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "APP_IPHONE_35",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_WATCH_ULTRA",
+          "APP_WATCH_SERIES_10",
+          "APP_WATCH_SERIES_7",
+          "APP_WATCH_SERIES_4",
+          "APP_WATCH_SERIES_3",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ]
+      },
+      "fromSlots": true,
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "A picture must match one of its platform's slot sizes exactly."
+    },
+    {
+      "id": "apple.screenshots.iphone_61.required",
+      "kind": "required",
+      "applies": {
+        "slot": "APP_IPHONE_61"
+      },
+      "when": {
+        "platform": "IOS",
+        "screenKind": "phone"
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "'iPhone: At least one screenshot for iPhone with Dynamic Island (medium display)' (1179x2556 or 1206x2622). Apple's page also keeps scaled fallbacks from the large sets, so a 6.9-inch set alone may be accepted: unverified. Relax this by id only once App Store Connect has taken a listing without it."
+    },
+    {
+      "id": "apple.screenshots.iphone_65.required",
+      "kind": "required",
+      "applies": {
+        "slot": "APP_IPHONE_65"
+      },
+      "when": {
+        "platform": "IOS",
+        "screenKind": "phone",
+        "slotMissing": "APP_IPHONE_67"
+      },
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "Apple's page still says Face ID large is 'Required if app runs on iPhone and screenshots for iPhone with Dynamic Island (large display) aren't provided'. The page contradicts its own medium-display rule."
+    },
+    {
+      "id": "apple.screenshots.ipad_13.required",
+      "kind": "required",
+      "applies": {
+        "slot": "APP_IPAD_PRO_3GEN_129"
+      },
+      "when": {
+        "platform": "IOS",
+        "screenKind": "tablet"
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Required if the app runs on iPad."
+    },
+    {
+      "id": "apple.screenshots.watch.required",
+      "kind": "required",
+      "applies": {
+        "slots": [
+          "APP_WATCH_ULTRA",
+          "APP_WATCH_SERIES_10",
+          "APP_WATCH_SERIES_7",
+          "APP_WATCH_SERIES_4",
+          "APP_WATCH_SERIES_3"
+        ]
+      },
+      "when": {
+        "platform": "IOS",
+        "screenKind": "watch"
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "A watch app needs one Apple Watch set (any one of these display types)."
+    },
+    {
+      "id": "apple.screenshots.watch.same_size",
+      "kind": "checklist",
+      "applies": {
+        "slots": [
+          "APP_WATCH_ULTRA",
+          "APP_WATCH_SERIES_10",
+          "APP_WATCH_SERIES_7",
+          "APP_WATCH_SERIES_4",
+          "APP_WATCH_SERIES_3"
+        ]
+      },
+      "item": "Use the same Apple Watch screenshot size in every localisation.",
+      "when": {
+        "platform": "IOS",
+        "screenKind": "watch"
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.screenshots.mac.required",
+      "kind": "required",
+      "applies": {
+        "slot": "APP_DESKTOP"
+      },
+      "when": {
+        "platform": "MAC_OS"
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.screenshots.tv.required",
+      "kind": "required",
+      "applies": {
+        "slot": "APP_APPLE_TV"
+      },
+      "when": {
+        "platform": "TV_OS"
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.screenshots.vision.required",
+      "kind": "required",
+      "applies": {
+        "slot": "APP_APPLE_VISION_PRO"
+      },
+      "when": {
+        "platform": "VISION_OS"
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.screenshots.iphone_duo.required",
+      "kind": "required",
+      "applies": {
+        "slots": [
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER"
+        ]
+      },
+      "when": {
+        "platform": "IOS",
+        "screenKind": "phone"
+      },
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/release-notes",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "Required from April 2027: Apple's screenshot page says for apps built with the iOS 27.1 SDK or later, its news says for every submission. No API display type yet, so it can't be sent by the API; upload it in App Store Connect. Plan for every iPhone app."
+    },
+    {
+      "id": "apple.screenshots.in_use",
+      "kind": "checklist",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "APP_IPHONE_35",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_WATCH_ULTRA",
+          "APP_WATCH_SERIES_10",
+          "APP_WATCH_SERIES_7",
+          "APP_WATCH_SERIES_4",
+          "APP_WATCH_SERIES_3",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ]
+      },
+      "item": "More than half of each set (per device, per locale) shows the app in use; the rest may be marketing art. Never only a sign-in or splash screen; nothing that misrepresents the UI. A panorama across screenshots is fine.",
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-review/guideline-reference/2-3-3-screenshots",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.screenshots.overlays",
+      "kind": "checklist",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "APP_IPHONE_35",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_WATCH_ULTRA",
+          "APP_WATCH_SERIES_10",
+          "APP_WATCH_SERIES_7",
+          "APP_WATCH_SERIES_4",
+          "APP_WATCH_SERIES_3",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ]
+      },
+      "item": "Text and image overlays don't obscure the app's primary functionality.",
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-review/guideline-reference/2-3-3-screenshots",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.screenshots.all_ages",
+      "kind": "checklist",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "APP_IPHONE_35",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_WATCH_ULTRA",
+          "APP_WATCH_SERIES_10",
+          "APP_WATCH_SERIES_7",
+          "APP_WATCH_SERIES_4",
+          "APP_WATCH_SERIES_3",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ]
+      },
+      "item": "Screenshots and previews suit a 4+ audience even when the app is rated higher (guideline 2.3.8).",
+      "severity": "error",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.screenshots.fictional_data",
+      "kind": "checklist",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "APP_IPHONE_35",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_WATCH_ULTRA",
+          "APP_WATCH_SERIES_10",
+          "APP_WATCH_SERIES_7",
+          "APP_WATCH_SERIES_4",
+          "APP_WATCH_SERIES_3",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ]
+      },
+      "item": "Accounts and personal data shown are fictional, not a real person's; you hold the rights to everything shown (guideline 2.3.9).",
+      "severity": "error",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.screenshots.other_platforms",
+      "kind": "checklist",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "APP_IPHONE_35",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_WATCH_ULTRA",
+          "APP_WATCH_SERIES_10",
+          "APP_WATCH_SERIES_7",
+          "APP_WATCH_SERIES_4",
+          "APP_WATCH_SERIES_3",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ]
+      },
+      "item": "No other mobile platforms' devices, icons or status bars in screenshots or previews (guideline 2.3.10).",
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-review/guideline-reference/2-3-3-screenshots",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.screenshots.device_frames",
+      "kind": "checklist",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "APP_IPHONE_35",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_WATCH_ULTRA",
+          "APP_WATCH_SERIES_10",
+          "APP_WATCH_SERIES_7",
+          "APP_WATCH_SERIES_4",
+          "APP_WATCH_SERIES_3",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ]
+      },
+      "item": "Device frames are Apple's product bezels, unmodified: no tilting, cropping, reflections, shadows, 3D renders or drawn devices; latest-generation devices.",
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/marketing/guidelines/",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "The marketing guidelines say so; whether App Review enforces it on screenshots is unverified (tilted and cropped frames are common in live listings)."
+    },
+    {
+      "id": "apple.previews.count",
+      "kind": "count",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ],
+        "media": "preview"
+      },
+      "min": 0,
+      "max": 3,
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/app-preview-specifications",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Optional; up to 3 per display type and locale."
+    },
+    {
+      "id": "apple.previews.video",
+      "kind": "video",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ],
+        "media": "preview"
+      },
+      "codecs": [
+        "h264",
+        "prores"
+      ],
+      "containers": [
+        "mov",
+        "m4v",
+        "mp4"
+      ],
+      "fps": 30,
+      "minSeconds": 15,
+      "maxSeconds": 30,
+      "fromSlots": true,
+      "audioRequired": false,
+      "maxBytes": 500000000,
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/app-preview-specifications",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "H.264 (up to High Profile Level 4.0, 10-12 Mbps) in .mov/.m4v/.mp4, or ProRes 422 HQ only in .mov; at most 30 fps; 15-30 s; at most 500 MB (counted as 500,000,000 bytes); stereo audio 44.1 or 48 kHz (AAC 256 kbps, or PCM with ProRes). Sizes are each slot's preview sizes; Mac, Apple TV and Vision Pro landscape only. The poster frame defaults to 5 s. Processing takes up to 24 hours."
+    },
+    {
+      "id": "apple.previews.audio_track",
+      "kind": "video",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ],
+        "media": "preview"
+      },
+      "audioRequired": true,
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/app-preview-specifications",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "Uploads without an audio track are reported to fail processing; add a silent stereo track. Apple's page gives the audio format but doesn't say a track is required."
+    },
+    {
+      "id": "apple.previews.screen_captures",
+      "kind": "checklist",
+      "applies": {
+        "slots": [
+          "APP_IPHONE_67",
+          "APP_IPHONE_65",
+          "APP_IPHONE_61",
+          "APP_IPHONE_58",
+          "APP_IPHONE_55",
+          "APP_IPHONE_47",
+          "APP_IPHONE_40",
+          "IPHONE_DUO_OUTER",
+          "IPHONE_DUO_INNER",
+          "APP_IPAD_PRO_3GEN_129",
+          "APP_IPAD_PRO_129",
+          "APP_IPAD_PRO_3GEN_11",
+          "APP_IPAD_105",
+          "APP_IPAD_97",
+          "APP_DESKTOP",
+          "APP_APPLE_TV",
+          "APP_APPLE_VISION_PRO"
+        ],
+        "media": "preview"
+      },
+      "item": "Previews use only screen captures of the app itself (narration and overlays are fine); no hands, devices or footage from elsewhere (guideline 2.3.4).",
+      "severity": "error",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.categories.primary.required",
+      "kind": "required",
+      "applies": {
+        "field": "stores.apple.categories.primary"
+      },
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/app-information",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "apple.categories.known",
+      "kind": "enum",
+      "applies": {
+        "fields": [
+          "stores.apple.categories.primary",
+          "stores.apple.categories.secondary"
+        ]
+      },
+      "valuesFrom": "categories.primary",
+      "severity": "error",
+      "source": "https://developer.apple.com/app-store/categories/",
+      "checked": "2026-11-14",
+      "status": "observed",
+      "note": "App Store Connect's category ids (the API's appCategories); the names are on Apple's categories page, the ids as the API returns them."
+    },
+    {
+      "id": "apple.categories.subcategories.known",
+      "kind": "enum",
+      "applies": {
+        "fields": [
+          "stores.apple.categories.primarySubcategories",
+          "stores.apple.categories.secondarySubcategories"
+        ]
+      },
+      "valuesFrom": "categories.subcategories",
+      "severity": "error",
+      "source": "https://developer.apple.com/app-store/categories/",
+      "checked": "2026-11-14",
+      "status": "observed",
+      "note": "Only Games and Stickers have subcategories; each must belong to its parent (categories.subcategories[parent])."
+    },
+    {
+      "id": "apple.categories.subcategories.count",
+      "kind": "count",
+      "applies": {
+        "fields": [
+          "stores.apple.categories.primarySubcategories",
+          "stores.apple.categories.secondarySubcategories"
+        ]
+      },
+      "min": 0,
+      "max": 2,
+      "severity": "error",
+      "source": "https://developer.apple.com/app-store/categories/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Up to two Games subcategories."
+    },
+    {
+      "id": "apple.age_rating.values",
+      "kind": "enum",
+      "applies": {
+        "field": "stores.apple.ageRating"
+      },
+      "valuesFrom": "ageRating.attributes",
+      "severity": "error",
+      "source": "https://developer.apple.com/documentation/appstoreconnectapi/ageratingdeclarationupdaterequest/data-data.dictionary/attributes-data.dictionary",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Each attribute name and value as the API's AgeRatingDeclaration takes it (ageRating.attributes)."
+    },
+    {
+      "id": "apple.age_rating.required",
+      "kind": "required",
+      "applies": {
+        "field": "stores.apple.ageRating"
+      },
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Every app needs an age rating ('Unrated' can't be published); push.py sends it only with --age-rating."
+    },
+    {
+      "id": "apple.age_rating.contests",
+      "kind": "checklist",
+      "applies": {
+        "field": "stores.apple.ageRating"
+      },
+      "item": "'Contests' includes sport or fitness contests and competing for rankings, rewards or personal goals, not only sweepstakes.",
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions",
+      "checked": "2026-11-14",
+      "status": "verified"
+    }
+  ],
+  "slots": {
+    "$comment": "App Store Connect's screenshot display types. Sizes are portrait [w, h]; either orientation is accepted unless 'orientation' says otherwise ('asListed': exactly the sizes written). A picture's slot is found by its pixel size among the slots of its platform; where a size fits more than one slot (2048x2732 fits both 13-inch slots), the first listed wins. 'fallsBackTo': the slot whose pictures App Store Connect scales down when this one has none. 'preview': the slot's app preview type and accepted video sizes.",
+    "APP_IPHONE_67": {
+      "displayType": "APP_IPHONE_67",
+      "platform": "IOS",
+      "kind": "phone",
+      "device": "iPhone with Dynamic Island, large display (6.9-inch: Air, Pro Max, Plus models)",
+      "sizes": [
+        [
+          1260,
+          2736
+        ],
+        [
+          1290,
+          2796
+        ],
+        [
+          1320,
+          2868
+        ]
+      ],
+      "required": false,
+      "fallsBackTo": null,
+      "preview": {
+        "type": "IPHONE_67",
+        "sizes": [
+          [
+            886,
+            1920
+          ]
+        ]
+      },
+      "status": "verified",
+      "note": "Not required by itself: the required iPhone set is the medium one (APP_IPHONE_61). App Store Connect scales the largest set down for the sizes it fills in."
+    },
+    "APP_IPHONE_65": {
+      "displayType": "APP_IPHONE_65",
+      "platform": "IOS",
+      "kind": "phone",
+      "device": "iPhone with Face ID, large display (6.5-inch: 14 Plus, 11-13 Pro Max, 11, XS Max, XR)",
+      "sizes": [
+        [
+          1242,
+          2688
+        ],
+        [
+          1284,
+          2778
+        ]
+      ],
+      "required": false,
+      "fallsBackTo": "APP_IPHONE_67",
+      "preview": {
+        "type": "IPHONE_65",
+        "sizes": [
+          [
+            886,
+            1920
+          ]
+        ]
+      },
+      "status": "verified",
+      "note": "Apple's page also says it is required when the app runs on iPhone and no Dynamic Island large set is given (rule apple.screenshots.iphone_65.required)."
+    },
+    "APP_IPHONE_61": {
+      "displayType": "APP_IPHONE_61",
+      "platform": "IOS",
+      "kind": "phone",
+      "device": "iPhone with Dynamic Island, medium display (6.1/6.3-inch: Pro, base 15-18, 14 Pro)",
+      "sizes": [
+        [
+          1179,
+          2556
+        ],
+        [
+          1206,
+          2622
+        ]
+      ],
+      "required": true,
+      "requiredWhen": {
+        "platform": "IOS",
+        "screenKind": "phone"
+      },
+      "fallsBackTo": "APP_IPHONE_65",
+      "preview": {
+        "type": "IPHONE_61",
+        "sizes": [
+          [
+            886,
+            1920
+          ]
+        ]
+      },
+      "status": "verified",
+      "note": "Apple's screenshot page: 'At least one screenshot for iPhone with Dynamic Island (medium display)'. The same page keeps scaled fallbacks, so a 6.9-inch set alone may still be accepted: unverified, so make this set. The display type's mapping to this device class is by name only (the API enum has no descriptions)."
+    },
+    "APP_IPHONE_58": {
+      "displayType": "APP_IPHONE_58",
+      "platform": "IOS",
+      "kind": "phone",
+      "device": "iPhone with Face ID, medium display (5.8/6.1-inch: 16e/17e, 11-14 base, X, XS, 11 Pro)",
+      "sizes": [
+        [
+          1080,
+          2340
+        ],
+        [
+          1125,
+          2436
+        ],
+        [
+          1170,
+          2532
+        ]
+      ],
+      "required": false,
+      "fallsBackTo": "APP_IPHONE_61",
+      "preview": {
+        "type": "IPHONE_58",
+        "sizes": [
+          [
+            886,
+            1920
+          ]
+        ]
+      },
+      "status": "verified",
+      "note": "Display type mapping by name only (unverified)."
+    },
+    "APP_IPHONE_55": {
+      "displayType": "APP_IPHONE_55",
+      "platform": "IOS",
+      "kind": "phone",
+      "device": "iPhone with Home button, large display (5.5-inch: 6-8 Plus)",
+      "sizes": [
+        [
+          1242,
+          2208
+        ]
+      ],
+      "required": false,
+      "fallsBackTo": "APP_IPHONE_58",
+      "preview": {
+        "type": "IPHONE_55",
+        "sizes": [
+          [
+            1080,
+            1920
+          ]
+        ]
+      },
+      "status": "verified"
+    },
+    "APP_IPHONE_47": {
+      "displayType": "APP_IPHONE_47",
+      "platform": "IOS",
+      "kind": "phone",
+      "device": "iPhone with Home button, medium display (4.7-inch: SE 2nd/3rd gen, 6-8)",
+      "sizes": [
+        [
+          750,
+          1334
+        ]
+      ],
+      "required": false,
+      "fallsBackTo": "APP_IPHONE_55",
+      "preview": {
+        "type": "IPHONE_47",
+        "sizes": [
+          [
+            750,
+            1334
+          ]
+        ]
+      },
+      "status": "verified"
+    },
+    "APP_IPHONE_40": {
+      "displayType": "APP_IPHONE_40",
+      "platform": "IOS",
+      "kind": "phone",
+      "device": "iPhone with Home button, 4-inch (SE 1st gen, 5, 5S, 5C)",
+      "sizes": [
+        [
+          640,
+          1096
+        ],
+        [
+          640,
+          1136
+        ],
+        [
+          1136,
+          600
+        ],
+        [
+          1136,
+          640
+        ]
+      ],
+      "orientation": "asListed",
+      "required": false,
+      "fallsBackTo": "APP_IPHONE_47",
+      "preview": {
+        "type": "IPHONE_40",
+        "sizes": [
+          [
+            1080,
+            1920
+          ]
+        ]
+      },
+      "status": "verified"
+    },
+    "APP_IPHONE_35": {
+      "displayType": "APP_IPHONE_35",
+      "platform": "IOS",
+      "kind": "phone",
+      "device": "iPhone with Home button, 3.5-inch (4, 4S)",
+      "sizes": [
+        [
+          640,
+          920
+        ],
+        [
+          640,
+          960
+        ],
+        [
+          960,
+          600
+        ],
+        [
+          960,
+          640
+        ]
+      ],
+      "orientation": "asListed",
+      "required": false,
+      "fallsBackTo": "APP_IPHONE_40",
+      "preview": null,
+      "status": "verified",
+      "note": "App previews aren't supported at this size (the API's IPHONE_35 preview type exists but Apple's preview page lists no size)."
+    },
+    "IPHONE_DUO_OUTER": {
+      "displayType": null,
+      "platform": "IOS",
+      "kind": "phone",
+      "device": "iPhone Duo, outer display",
+      "sizes": [
+        [
+          1398,
+          2034
+        ]
+      ],
+      "required": false,
+      "fallsBackTo": null,
+      "preview": {
+        "type": null,
+        "sizes": [
+          [
+            886,
+            1920
+          ]
+        ],
+        "note": "886x1920 per Apple's preview page; no API preview type yet."
+      },
+      "status": "unverified",
+      "note": "New device class (Apple release notes, 2026-10-05). No ScreenshotDisplayType for it yet, so nothing can be sent through the API; App Store Connect's web app takes it. Required from April 2027 (rule apple.screenshots.iphone_duo.required). The key is ours, not Apple's."
+    },
+    "IPHONE_DUO_INNER": {
+      "displayType": null,
+      "platform": "IOS",
+      "kind": "phone",
+      "device": "iPhone Duo, inner display",
+      "sizes": [
+        [
+          2007,
+          2853
+        ]
+      ],
+      "required": false,
+      "fallsBackTo": null,
+      "preview": {
+        "type": null,
+        "sizes": [
+          [
+            886,
+            1920
+          ]
+        ],
+        "note": "886x1920 per Apple's preview page; no API preview type yet."
+      },
+      "status": "unverified",
+      "note": "As IPHONE_DUO_OUTER. The key is ours, not Apple's."
+    },
+    "APP_IPAD_PRO_3GEN_129": {
+      "displayType": "APP_IPAD_PRO_3GEN_129",
+      "platform": "IOS",
+      "kind": "tablet",
+      "device": "iPad 13-inch",
+      "sizes": [
+        [
+          2064,
+          2752
+        ],
+        [
+          2048,
+          2732
+        ]
+      ],
+      "required": true,
+      "requiredWhen": {
+        "platform": "IOS",
+        "screenKind": "tablet"
+      },
+      "fallsBackTo": null,
+      "preview": {
+        "type": "IPAD_PRO_3GEN_129",
+        "sizes": [
+          [
+            1200,
+            1600
+          ]
+        ]
+      },
+      "status": "verified",
+      "note": "Required when the app runs on iPad."
+    },
+    "APP_IPAD_PRO_129": {
+      "displayType": "APP_IPAD_PRO_129",
+      "platform": "IOS",
+      "kind": "tablet",
+      "device": "iPad Pro 12.9-inch (2nd generation)",
+      "sizes": [
+        [
+          2048,
+          2732
+        ]
+      ],
+      "required": false,
+      "fallsBackTo": "APP_IPAD_PRO_3GEN_129",
+      "preview": {
+        "type": "IPAD_PRO_129",
+        "sizes": [
+          [
+            1200,
+            1600
+          ],
+          [
+            900,
+            1200
+          ]
+        ]
+      },
+      "status": "verified",
+      "note": "Same pixel size as the 13-inch slot: a 2048x2732 picture goes to APP_IPAD_PRO_3GEN_129 (listed first) unless the config says otherwise."
+    },
+    "APP_IPAD_PRO_3GEN_11": {
+      "displayType": "APP_IPAD_PRO_3GEN_11",
+      "platform": "IOS",
+      "kind": "tablet",
+      "device": "iPad 11-inch (incl. iPad mini)",
+      "sizes": [
+        [
+          1488,
+          2266
+        ],
+        [
+          1512,
+          2316
+        ],
+        [
+          1668,
+          2420
+        ],
+        [
+          1668,
+          2388
+        ],
+        [
+          1640,
+          2360
+        ]
+      ],
+      "required": false,
+      "fallsBackTo": "APP_IPAD_PRO_3GEN_129",
+      "preview": {
+        "type": "IPAD_PRO_3GEN_11",
+        "sizes": [
+          [
+            1200,
+            1600
+          ]
+        ]
+      },
+      "status": "verified",
+      "note": "iPad mini (A20 Pro) sizes added 2026-11-03 (release notes)."
+    },
+    "APP_IPAD_105": {
+      "displayType": "APP_IPAD_105",
+      "platform": "IOS",
+      "kind": "tablet",
+      "device": "iPad 10.5-inch",
+      "sizes": [
+        [
+          1668,
+          2224
+        ]
+      ],
+      "required": false,
+      "fallsBackTo": "APP_IPAD_PRO_129",
+      "preview": {
+        "type": "IPAD_105",
+        "sizes": [
+          [
+            1200,
+            1600
+          ]
+        ]
+      },
+      "status": "verified"
+    },
+    "APP_IPAD_97": {
+      "displayType": "APP_IPAD_97",
+      "platform": "IOS",
+      "kind": "tablet",
+      "device": "iPad 9.7-inch",
+      "sizes": [
+        [
+          1536,
+          2008
+        ],
+        [
+          1536,
+          2048
+        ],
+        [
+          768,
+          1004
+        ],
+        [
+          768,
+          1024
+        ]
+      ],
+      "required": false,
+      "fallsBackTo": "APP_IPAD_105",
+      "preview": {
+        "type": "IPAD_97",
+        "sizes": [
+          [
+            900,
+            1200
+          ]
+        ]
+      },
+      "status": "verified"
+    },
+    "APP_WATCH_ULTRA": {
+      "displayType": "APP_WATCH_ULTRA",
+      "platform": "IOS",
+      "kind": "watch",
+      "device": "Apple Watch Ultra (Ultra 1-4)",
+      "sizes": [
+        [
+          422,
+          514
+        ],
+        [
+          410,
+          502
+        ]
+      ],
+      "orientation": "portrait",
+      "required": false,
+      "fallsBackTo": null,
+      "preview": null,
+      "status": "verified",
+      "note": "Watch screenshots are part of the iOS version. Use one Watch size across every localisation. Which display type takes Ultra 3/4's 422x514 is by name only (unverified)."
+    },
+    "APP_WATCH_SERIES_10": {
+      "displayType": "APP_WATCH_SERIES_10",
+      "platform": "IOS",
+      "kind": "watch",
+      "device": "Apple Watch Series 10-12",
+      "sizes": [
+        [
+          416,
+          496
+        ]
+      ],
+      "orientation": "portrait",
+      "required": false,
+      "fallsBackTo": null,
+      "preview": null,
+      "status": "verified"
+    },
+    "APP_WATCH_SERIES_7": {
+      "displayType": "APP_WATCH_SERIES_7",
+      "platform": "IOS",
+      "kind": "watch",
+      "device": "Apple Watch Series 7-9",
+      "sizes": [
+        [
+          396,
+          484
+        ]
+      ],
+      "orientation": "portrait",
+      "required": false,
+      "fallsBackTo": null,
+      "preview": null,
+      "status": "verified"
+    },
+    "APP_WATCH_SERIES_4": {
+      "displayType": "APP_WATCH_SERIES_4",
+      "platform": "IOS",
+      "kind": "watch",
+      "device": "Apple Watch Series 4-6, SE",
+      "sizes": [
+        [
+          368,
+          448
+        ]
+      ],
+      "orientation": "portrait",
+      "required": false,
+      "fallsBackTo": null,
+      "preview": null,
+      "status": "verified"
+    },
+    "APP_WATCH_SERIES_3": {
+      "displayType": "APP_WATCH_SERIES_3",
+      "platform": "IOS",
+      "kind": "watch",
+      "device": "Apple Watch Series 1-3",
+      "sizes": [
+        [
+          312,
+          390
+        ]
+      ],
+      "orientation": "portrait",
+      "required": false,
+      "fallsBackTo": null,
+      "preview": null,
+      "status": "verified"
+    },
+    "APP_DESKTOP": {
+      "displayType": "APP_DESKTOP",
+      "platform": "MAC_OS",
+      "kind": "desktop",
+      "device": "Mac",
+      "sizes": [
+        [
+          1280,
+          800
+        ],
+        [
+          1440,
+          900
+        ],
+        [
+          2560,
+          1600
+        ],
+        [
+          2880,
+          1800
+        ]
+      ],
+      "orientation": "landscape",
+      "required": true,
+      "requiredWhen": {
+        "platform": "MAC_OS"
+      },
+      "fallsBackTo": null,
+      "preview": {
+        "type": "DESKTOP",
+        "sizes": [
+          [
+            1920,
+            1080
+          ]
+        ],
+        "orientation": "landscape",
+        "note": "16:9, unlike the Mac's 16:10 screenshots."
+      },
+      "status": "verified",
+      "note": "16:10 only."
+    },
+    "APP_APPLE_TV": {
+      "displayType": "APP_APPLE_TV",
+      "platform": "TV_OS",
+      "kind": "tv",
+      "device": "Apple TV",
+      "sizes": [
+        [
+          1920,
+          1080
+        ],
+        [
+          3840,
+          2160
+        ]
+      ],
+      "orientation": "landscape",
+      "required": true,
+      "requiredWhen": {
+        "platform": "TV_OS"
+      },
+      "fallsBackTo": null,
+      "preview": {
+        "type": "APPLE_TV",
+        "sizes": [
+          [
+            1920,
+            1080
+          ]
+        ],
+        "orientation": "landscape"
+      },
+      "status": "verified"
+    },
+    "APP_APPLE_VISION_PRO": {
+      "displayType": "APP_APPLE_VISION_PRO",
+      "platform": "VISION_OS",
+      "kind": "xr",
+      "device": "Apple Vision Pro",
+      "sizes": [
+        [
+          3840,
+          2160
+        ]
+      ],
+      "orientation": "landscape",
+      "required": true,
+      "requiredWhen": {
+        "platform": "VISION_OS"
+      },
+      "fallsBackTo": null,
+      "preview": {
+        "type": "APPLE_VISION_PRO",
+        "sizes": [
+          [
+            3840,
+            2160
+          ]
+        ],
+        "orientation": "landscape"
+      },
+      "status": "verified"
+    }
+  },
+  "categories": {
+    "$comment": "App Store Connect's category ids (status observed: the ids as the API's appCategories returns them; the names are on Apple's categories page). 'Kids' is set through Made for Kids (ageRating.kidsAgeBand), not chosen here; Safari Extensions' id is unverified and left out.",
+    "source": "https://developer.apple.com/app-store/categories/",
+    "checked": "2026-11-14",
+    "status": "observed",
+    "primary": [
+      "BOOKS",
+      "BUSINESS",
+      "DEVELOPER_TOOLS",
+      "EDUCATION",
+      "ENTERTAINMENT",
+      "FINANCE",
+      "FOOD_AND_DRINK",
+      "GAMES",
+      "GRAPHICS_AND_DESIGN",
+      "HEALTH_AND_FITNESS",
+      "LIFESTYLE",
+      "MAGAZINES_AND_NEWSPAPERS",
+      "MEDICAL",
+      "MUSIC",
+      "NAVIGATION",
+      "NEWS",
+      "PHOTO_AND_VIDEO",
+      "PRODUCTIVITY",
+      "REFERENCE",
+      "SHOPPING",
+      "SOCIAL_NETWORKING",
+      "SPORTS",
+      "STICKERS",
+      "TRAVEL",
+      "UTILITIES",
+      "WEATHER"
+    ],
+    "subcategories": {
+      "GAMES": [
+        "GAMES_ACTION",
+        "GAMES_ADVENTURE",
+        "GAMES_BOARD",
+        "GAMES_CARD",
+        "GAMES_CASINO",
+        "GAMES_CASUAL",
+        "GAMES_FAMILY",
+        "GAMES_MUSIC",
+        "GAMES_PUZZLE",
+        "GAMES_RACING",
+        "GAMES_ROLE_PLAYING",
+        "GAMES_SIMULATION",
+        "GAMES_SPORTS",
+        "GAMES_STRATEGY",
+        "GAMES_TRIVIA",
+        "GAMES_WORD"
+      ],
+      "STICKERS": [
+        "STICKERS_ANIMALS",
+        "STICKERS_ART",
+        "STICKERS_BIRTHDAYS",
+        "STICKERS_CELEBRATIONS",
+        "STICKERS_CELEBRITIES",
+        "STICKERS_EMOJI_AND_EXPRESSIONS",
+        "STICKERS_FASHION",
+        "STICKERS_GAMING",
+        "STICKERS_KIDS_AND_FAMILY",
+        "STICKERS_MOVIES_AND_TV",
+        "STICKERS_MUSIC",
+        "STICKERS_PEOPLE",
+        "STICKERS_PLACES_AND_OBJECTS",
+        "STICKERS_SPORTS_AND_ACTIVITIES"
+      ]
+    },
+    "maxSubcategories": 2
+  },
+  "ageRating": {
+    "$comment": "The age rating declaration's attributes as App Store Connect's API takes them (AgeRatingDeclarationUpdateRequest, read 2026-11-14). Frequency attributes accept all five values in the API; which pair the questionnaire shows for each (INFREQUENT_OR_MILD/FREQUENT_OR_INTENSE or INFREQUENT/FREQUENT) is unverified. Ratings: 4+, 9+, 13+, 16+, 18+, Unrated. 'group' is the questionnaire's section.",
+    "source": "https://developer.apple.com/documentation/appstoreconnectapi/ageratingdeclarationupdaterequest/data-data.dictionary/attributes-data.dictionary",
+    "definitions": "https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions",
+    "checked": "2026-11-14",
+    "status": "verified",
+    "attributes": {
+      "parentalControls": {
+        "type": "boolean",
+        "group": "In-App Controls"
+      },
+      "ageAssurance": {
+        "type": "boolean",
+        "group": "In-App Controls"
+      },
+      "unrestrictedWebAccess": {
+        "type": "boolean",
+        "group": "Capabilities",
+        "note": "16+"
+      },
+      "userGeneratedContent": {
+        "type": "boolean",
+        "group": "Capabilities"
+      },
+      "socialMedia": {
+        "type": "boolean",
+        "group": "Capabilities",
+        "note": "13+; added 2026-07-09"
+      },
+      "socialMediaAgeRestricted": {
+        "type": "boolean",
+        "group": "Capabilities",
+        "note": "Social media turned off for users under 13."
+      },
+      "messagingAndChat": {
+        "type": "boolean",
+        "group": "Capabilities"
+      },
+      "advertising": {
+        "type": "boolean",
+        "group": "Capabilities"
+      },
+      "matureOrSuggestiveThemes": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Mature Themes"
+      },
+      "horrorOrFearThemes": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Mature Themes"
+      },
+      "profanityOrCrudeHumor": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Mature Themes"
+      },
+      "alcoholTobaccoOrDrugUseOrReferences": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Mature Themes"
+      },
+      "medicalOrTreatmentInformation": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Medical or Wellness"
+      },
+      "healthOrWellnessTopics": {
+        "type": "boolean",
+        "group": "Medical or Wellness"
+      },
+      "sexualContentOrNudity": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Sexuality or Nudity"
+      },
+      "sexualContentGraphicAndNudity": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Sexuality or Nudity"
+      },
+      "violenceCartoonOrFantasy": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Violence",
+        "note": "Infrequent 9+, frequent 13+."
+      },
+      "violenceRealistic": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Violence"
+      },
+      "violenceRealisticProlongedGraphicOrSadistic": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Violence"
+      },
+      "gunsOrOtherWeapons": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Violence"
+      },
+      "gambling": {
+        "type": "boolean",
+        "group": "Chance-Based Activities"
+      },
+      "gamblingSimulated": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Chance-Based Activities"
+      },
+      "contests": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "INFREQUENT_OR_MILD",
+          "FREQUENT_OR_INTENSE",
+          "INFREQUENT",
+          "FREQUENT"
+        ],
+        "group": "Chance-Based Activities",
+        "note": "Infrequent 4+, frequent 13+. Includes sport and fitness contests and competing for rankings or rewards."
+      },
+      "lootBox": {
+        "type": "boolean",
+        "group": "Chance-Based Activities",
+        "note": "9+"
+      },
+      "kidsAgeBand": {
+        "type": "string",
+        "values": [
+          "FIVE_AND_UNDER",
+          "SIX_TO_EIGHT",
+          "NINE_TO_ELEVEN"
+        ],
+        "group": "Made for Kids",
+        "note": "null when not made for kids; can't be undone once approved."
+      },
+      "ageRatingOverrideV2": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "NINE_PLUS",
+          "THIRTEEN_PLUS",
+          "SIXTEEN_PLUS",
+          "EIGHTEEN_PLUS",
+          "UNRATED"
+        ],
+        "group": "Override"
+      },
+      "ageRatingOverride": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "NINE_PLUS",
+          "THIRTEEN_PLUS",
+          "SIXTEEN_PLUS",
+          "SEVENTEEN_PLUS",
+          "UNRATED"
+        ],
+        "group": "Override",
+        "note": "Deprecated: use ageRatingOverrideV2."
+      },
+      "koreaAgeRatingOverride": {
+        "type": "string",
+        "values": [
+          "NONE",
+          "ALL",
+          "TWELVE_PLUS",
+          "FIFTEEN_PLUS",
+          "NINETEEN_PLUS"
+        ],
+        "group": "Regional"
+      },
+      "gracRatingClassificationNumber": {
+        "type": "string",
+        "group": "Regional",
+        "note": "Korea's GRAC classification number, when required."
+      },
+      "developerAgeRatingInfoUrl": {
+        "type": "uri",
+        "group": "Regional"
+      }
+    }
+  }
+}

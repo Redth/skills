@@ -1,0 +1,153 @@
+{
+  "$schema": "../../../schema/store-listing.schema.json",
+  "$comment": "A complete example for the invented app Sample Recipes by Example Studio: English and German, the App Store on iPhone and iPad, Google Play on phones and 10-inch tablets. Every value is made up.",
+  "version": 1,
+  "app": {
+    "name": "Sample Recipes",
+    "ids": {
+      "apple": { "bundleId": "com.example.samplerecipes", "appId": "1234567890" },
+      "google": { "package": "com.example.samplerecipes" }
+    },
+    "copyright": "2026 Example Studio",
+    "contact": { "email": "support@example.com", "phone": null, "website": "https://example.com" },
+    "urls": {
+      "marketing": "https://example.com",
+      "support": "https://example.com/support",
+      "privacy": "https://example.com/privacy",
+      "privacyChoices": null
+    }
+  },
+  "primaryLocale": "en-US",
+  "locales": {
+    "en-US": {
+      "description": "Plan a week of meals in minutes.\n\nPick the recipes you like and Sample Recipes lays them out across the week, scales each one to the people at your table and turns the lot into one grocery list, sorted by aisle.\n\n- A week at a glance: drag a meal to another day and the list follows.\n- Cook from what you have: tell it what's in the pantry and it suggests recipes that use it up.\n- Cooking mode: big text, steps one at a time, the screen kept awake.\n- Your own recipes: type them in or paste a link, and they plan like any other.\n\nQuestions or ideas? Write to support@example.com.",
+      "apple": {
+        "name": null,
+        "subtitle": "Plan meals in minutes",
+        "keywords": ["cooking", "dinner ideas", "grocery list", "weekly menu", "pantry", "batch cooking", "leftovers", "healthy eating"],
+        "promotionalText": "Fresh this month: plan a whole week from what's already in your fridge.",
+        "whatsNew": "Cook from what you have: tell Sample Recipes what's in your pantry and it suggests recipes that use it up. The grocery list now sorts by aisle.",
+        "description": null
+      },
+      "google": {
+        "title": "Sample Recipes: Meal Planner",
+        "shortDescription": "Plan a week of meals in minutes, with one grocery list for all of it.",
+        "fullDescription": null,
+        "video": null,
+        "releaseNotes": "Cook from what you have: Sample Recipes suggests recipes that use up your pantry. The grocery list now sorts by aisle."
+      },
+      "altText": { "featureGraphic": "A phone showing a week of planned dinners next to a grocery list" }
+    },
+    "de-DE": {
+      "description": "Plane eine Woche voller Mahlzeiten in wenigen Minuten.\n\nWähle die Rezepte, die dir gefallen, und Sample Recipes verteilt sie auf die Woche, rechnet jedes auf die Personen an deinem Tisch um und macht daraus eine Einkaufsliste, nach Gängen im Laden sortiert.\n\n- Die Woche im Blick: Zieh ein Gericht auf einen anderen Tag, und die Liste folgt.\n- Koch mit dem, was da ist: Sag der App, was im Vorrat ist, und sie schlägt Rezepte vor, die es aufbrauchen.\n- Kochmodus: große Schrift, ein Schritt nach dem anderen, der Bildschirm bleibt an.\n- Eigene Rezepte: Tipp sie ein oder füge einen Link ein, und sie lassen sich planen wie alle anderen.\n\nFragen oder Ideen? Schreib an support@example.com.",
+      "apple": {
+        "subtitle": "Mahlzeiten schnell planen",
+        "keywords": ["kochen", "abendessen", "einkaufsliste", "wochenplan", "vorrat", "resteverwertung", "gesund essen"],
+        "promotionalText": "Neu in diesem Monat: Plane eine ganze Woche mit dem, was schon im Kühlschrank ist.",
+        "whatsNew": "Koch mit dem, was da ist: Sample Recipes schlägt Rezepte vor, die deinen Vorrat aufbrauchen. Die Einkaufsliste ist jetzt nach Gängen sortiert."
+      },
+      "google": {
+        "title": "Sample Recipes: Essensplaner",
+        "shortDescription": "Plane eine Woche Mahlzeiten in Minuten, mit einer Einkaufsliste für alles.",
+        "releaseNotes": "Koch mit dem, was da ist: Sample Recipes schlägt Rezepte vor, die deinen Vorrat aufbrauchen. Die Einkaufsliste ist jetzt nach Gängen sortiert."
+      },
+      "altText": { "featureGraphic": "Ein Telefon mit einer Woche geplanter Abendessen neben einer Einkaufsliste" }
+    }
+  },
+  "screenshots": {
+    "folder": "screenshots",
+    "shots": [
+      { "id": "week", "screens": null, "stores": null },
+      { "id": "recipe", "screens": null, "stores": null },
+      { "id": "grocery-list", "screens": null, "stores": null },
+      { "id": "pantry", "screens": null, "stores": null },
+      { "id": "cooking-mode", "screens": ["iphone", "android-phone"], "stores": null }
+    ]
+  },
+  "screens": {
+    "iphone": { "kind": "phone" },
+    "ipad": { "kind": "tablet" },
+    "android-phone": { "kind": "phone" },
+    "android-tablet": { "kind": "tablet" }
+  },
+  "stores": {
+    "apple": {
+      "enabled": true,
+      "categories": {
+        "primary": "FOOD_AND_DRINK",
+        "primarySubcategories": [],
+        "secondary": "LIFESTYLE",
+        "secondarySubcategories": []
+      },
+      "platforms": {
+        "IOS": { "screens": ["iphone", "ipad"], "previews": {} },
+        "MAC_OS": null,
+        "TV_OS": null,
+        "VISION_OS": null
+      },
+      "ageRating": {
+        "parentalControls": false,
+        "ageAssurance": false,
+        "unrestrictedWebAccess": false,
+        "userGeneratedContent": false,
+        "socialMedia": false,
+        "socialMediaAgeRestricted": false,
+        "messagingAndChat": false,
+        "advertising": false,
+        "matureOrSuggestiveThemes": "NONE",
+        "horrorOrFearThemes": "NONE",
+        "profanityOrCrudeHumor": "NONE",
+        "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+        "medicalOrTreatmentInformation": "NONE",
+        "healthOrWellnessTopics": false,
+        "sexualContentOrNudity": "NONE",
+        "sexualContentGraphicAndNudity": "NONE",
+        "violenceCartoonOrFantasy": "NONE",
+        "violenceRealistic": "NONE",
+        "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+        "gunsOrOtherWeapons": "NONE",
+        "gambling": false,
+        "gamblingSimulated": "NONE",
+        "contests": "NONE",
+        "lootBox": false,
+        "kidsAgeBand": null
+      },
+      "review": {
+        "notes": "Nothing needs a sign-in. To see the pantry suggestions, open Pantry, add two or three ingredients, then tap Suggest.",
+        "contact": {
+          "firstNameEnv": "APPLE_REVIEW_FIRST_NAME",
+          "lastNameEnv": "APPLE_REVIEW_LAST_NAME",
+          "phoneEnv": "APPLE_REVIEW_PHONE",
+          "emailEnv": "APPLE_REVIEW_EMAIL"
+        },
+        "demoAccount": null
+      },
+      "tvPrivacyText": null
+    },
+    "google": {
+      "enabled": true,
+      "defaultLanguage": "en-US",
+      "category": "FOOD_AND_DRINK",
+      "slots": { "phone": "android-phone", "tablet7": null, "tablet10": "android-tablet", "tv": null, "wear": null },
+      "graphics": {
+        "icon": "graphics/icon-512.png",
+        "featureGraphic": "graphics/feature-1024x500.png",
+        "tvBanner": null
+      },
+      "dataSafetyCsv": null
+    },
+    "amazon": { "enabled": false },
+    "steam": { "enabled": false },
+    "itch": { "enabled": false }
+  },
+  "forms": {
+    "$comment": "Drafted answers for forms with no API, printed by the checklist.",
+    "applePrivacy": "No data collected: recipes, plans and lists stay on the device.",
+    "googleContentRating": "Reference, news or educational; no violence, no user interaction, no purchases.",
+    "googleTargetAudience": "18 and over"
+  },
+  "rules": {
+    "extraForbiddenWords": [],
+    "relax": []
+  }
+}

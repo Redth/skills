@@ -1,0 +1,11 @@
+$ python3 scripts/push.py apply plan-google.json
+Reading the store (com.example.samplerecipes, Google Play)...
+The store matches the plan. Applying 3 actions.
+  1 google.listing.update en-US: done
+  2 google.images.replace en-US phoneScreenshots: done (4 uploaded)
+  3 google.listing.update de-DE: done
+Committing the edit (changesInReviewBehavior=ERROR_IF_IN_REVIEW)...
+Google Play answered 400 FAILED_PRECONDITION:
+  {"error": {"code": 400, "status": "FAILED_PRECONDITION", "message": "Changes are sent for review automatically. The query parameter changesInReviewBehavior=ERROR_IF_IN_REVIEW was set and there are changes already in review.", "details": [{"reason": "CHANGES_ALREADY_IN_REVIEW"}]}}
+The edit was not committed; nothing is public. The edit was kept, as Play does with this error.
+exit status 1
