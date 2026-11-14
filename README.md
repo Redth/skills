@@ -15,6 +15,7 @@ skills).
 | Plugin | Elevator pitch | Jump to |
 |---|---|---|
 | **`skill-reflect`** | A privacy-conscious feedback loop that analyzes how session skills actually performed, returns actionable findings plus evals in chat, and can optionally save or route them to authors. | [↓ skill-reflect](#skill-reflect) |
+| **`app-stores`** | Your app's store listing from one config to the App Store and Google Play: checked offline against each store's rules (dated, sourced data), previewed as each store's page, then sent with a plan you read first. Any app, any stack. | [↓ app-stores](#app-stores) |
 
 ---
 
@@ -154,6 +155,32 @@ engine, wiring reflection into more skills, and dedupe behavior). Binding spec:
 
 ---
 
+# app-stores
+
+**Getting an app's store listing right means knowing every store's rules, and they change.** `app-stores` keeps
+the listing in one `store-listing.json`, checks it offline against each store's rules (kept as data, each rule
+with its source, the date it was checked and whether it's verified), builds fastlane-compatible output, shows each
+store's page before anything is sent, and sends through the stores' own APIs only after you've read the plan.
+
+- 📋 **One config, every store:** words per locale, screenshots per screen, categories, age rating and review notes.
+- 📏 **Rules as data:** limits counted the way each store counts them, price words only where a store bans them,
+  required screenshot sizes, and checklists for what no script can decide.
+- 👀 **Plan, then apply:** `push.py plan` only reads; `push.py apply` does exactly that plan and refuses if the
+  store changed since.
+- 🔒 **No network by default:** only `push.py` reaches a network, only the stores' own APIs. Keys come from
+  environment variables, never the config. Stdlib Python 3.8+, `openssl`, and Chrome for previews.
+
+Skills: `store-listings` (now: the App Store and Google Play). To follow: `store-screenshots` (#12, designed
+screenshots per store), `store-capture` (#13, capture on any stack), `store-signing` (#14), `game-achievements`
+(#15). Details, quick starts and the contributor guide: [plugins/app-stores/README.md](./plugins/app-stores/README.md).
+
+```text
+/plugin marketplace add Redth/skills
+/plugin install app-stores@redth-skills
+```
+
+---
+
 ## Repository layout
 
 ```
@@ -168,6 +195,7 @@ vendoring/                        # copy skill-reflect into your own plugin, pre
 examples/                         # sample artifacts + sample evals
 docs/                             # CONTRACT.md (the interface spec every component honors) + design docs
 tools/                            # local validation gates + tools/ab_eval/ (A/B skill-change eval harness)
+plugins/app-stores/               # the app-stores plugin (its own CONTRACT.md, shared/, skills/, tools/)
 ```
 
 ## Contributing

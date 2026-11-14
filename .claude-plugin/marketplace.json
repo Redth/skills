@@ -19,6 +19,15 @@
         "./skills/skill-reflect",
         "./skills/skill-reflect-maintainer"
       ]
+    },
+    {
+      "name": "app-stores",
+      "description": "Take an app's store listing from one config to the App Store and Google Play: words per locale, store rules as dated and sourced data checked offline, fastlane-compatible output, a preview of each store's page, and a look-first send (plan, then apply exactly that plan). Any app, any stack. Stdlib Python; network only when sending, only to the stores' own APIs.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./plugins/app-stores/skills/store-listings"
+      ]
     }
   ]
 }
