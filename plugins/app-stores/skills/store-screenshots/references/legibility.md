@@ -14,29 +14,46 @@ Apple doesn't publish the search row's sizes. The estimate the mocks use (derive
 - How many product-page shots show before scrolling isn't documented; practitioners say the first two portrait
   shots, and iOS 27's header pushes them down.
 
-## The caption-size rule (about 9% of the slot's width)
+## The caption-size rule (9.5u on a tall shot)
 
-iOS's minimum text size is 11 pt and its default 17 pt
-(https://developer.apple.com/design/human-interface-guidelines/typography). For a caption in the search row to read
-as 11 pt, its font size must be about **9 to 10% of the slot's width** on a portrait phone shot (about 120 to 130 px
-on a 1320-px shot). A single landscape shot needs about 3%. Top apps' captions measure 5 to 9% by eye: readable on the
-product page, marginal in search.
+u is 1% of the slot's width. iOS's minimum text size is 11 pt and its default 17 pt
+(https://developer.apple.com/design/human-interface-guidelines/typography). At about 118 pt a shot, a caption in the
+search row reads as 11 pt when its font size is about **9.5u** on a portrait phone shot (about 125 px on a 1320-px
+shot). A single landscape shot needs about 3u.
 
-**How the config expresses it:** `theme.caption.sizePct` is the font size it starts at and `floorPct` the smallest it
-may shrink to, both as a percentage of the slot's width. The caption shrinks from one toward the other until it fits
-in `maxLines` (2).
+What strong sets do (16 top-captioned iPhone sets measured 2026-11-14; font sizes estimated from ink height, plus or
+minus 10 to 15%): a median headline of **8.9u** (middle half 7.6 to 10.3u, range 5.9 to 12u), two lines, leading
+about 1.1, 12 to 18 characters a line. iPad (mid) sets: 4.2 to 6.1u. The generators: goldie 8.2u
+(https://github.com/software-mansion-labs/goldie/blob/699578c/src/layouts.ts), the ParthJadhav skill 9.2u
+(https://github.com/ParthJadhav/app-store-screenshots/blob/e889033/skills/app-store-screenshots/template/src/lib/layouts.ts),
+fastlane frameit 10% of the width (https://github.com/fastlane/fastlane/blob/ca02a52/frameit/lib/frameit/editor.rb),
+Koubou "minimum 10vw, recommended 11-14vw" (https://github.com/bitomule/koubou/blob/11c5a12/skills/koubou/design-guide.md).
+Vendor guides that say 56 to 72 px on a 1290-px canvas (4.3 to 5.6u) are half what good sets do: too small in search.
+
+| Aspect class | Starts at | Floor | Shots 1-3 warn under |
+|---|---|---|---|
+| tall (iPhone, Play phone) | 9.5u | 7u (about 12 pt on the product page) | 9.5u |
+| mid (iPad) | about 6.1u | about 4.5u | 6u |
+| square (Wear) | about 8u | about 5.9u | none |
+| wide (landscape, TV, Mac) | about 4.6u | about 3.4u | 4u |
+
+**How the config expresses it:** `caption.sizePct` (theme or style) is the font size it starts at and `floorPct`
+the smallest it may shrink to, both in u on a tall slot; other aspect classes scale them (mid 0.64, square 0.84, wide
+0.48). The defaults are 9.5 and 7. The caption shrinks from one toward the other until it fits in `maxLines` (2), and
+keeps room for two lines at its starting size so the device and the caption's top stay put across the set.
 
 **How to check it:**
 
-1. In `<out>/render-report.json`, each file's `caption.fontPx` over its `width` is the size it rendered at (`105.6 /
-   1320` is 8%); `atFloor: true` means it shrank all the way.
-2. `sheet.py --png` draws shots 1 to 3 in the search row at its real width and prints each caption's size in points.
+1. In `<out>/render-report.json`, each file's `caption.fontPx` over its `width` is the size it rendered at (`125.4 /
+   1320` is 9.5u); `atFloor: true` means it shrank all the way. `check.py --json` lists it as `captionU`.
+2. `check.py` warns (`design.caption.search_size`) when one of shots 1 to 3 comes out under the table's size, and
+   gives the size in points in Apple's search row for Apple phone targets.
+3. `sheet.py --png` draws shots 1 to 3 in the search row at its real width and prints each caption's size in points.
    Open `<out>/sheets/` and read them there: 11 pt or more for shots 1 to 3 is the aim.
-3. Under 11 pt in search: fewer words (so it fits bigger), a bigger `sizePct` for the first shots, or a layout that
-   gives the caption more width. Never a lower floor to make a long caption fit.
+4. Under 11 pt in search: fewer words (so it fits bigger), a bigger `sizePct`, or a layout that gives the caption
+   more width. Never a lower floor to make a long caption fit.
 
-The floor the check enforces is the least legible a caption may be anywhere, not a target. The example config's 8%
-start and 6% floor read well on the product page; shots 1 to 3 of a portrait phone set want 9% or more.
+The floor is the least legible a caption may be anywhere, not a target.
 
 ## Words and lines
 

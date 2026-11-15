@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """check.py: check a rendered screenshot set against each store's rules and the design's own limits.
 
-    check.py [--config store-screenshots.json] [--listing store-listing.json] [--report render-report.json] [--json]
+    check.py [--config store-screenshots.json] [--listing store-listing.json] [--report render-report.json]
+             [--baseline [design/baseline] | --no-baseline] [--json]
 
 Reads ``<out>/render-report.json`` (what ``render.py`` wrote: every file with its caption, frame and boxes) and
 the PNGs themselves, then decides what a script can:
@@ -15,6 +16,15 @@ the PNGs themselves, then decides what a script can:
 - the store's ``design`` table: frames, backgrounds and captions per slot (none on Wear OS), a user's Apple
   bezel used as is, more than half of an Apple set showing the app in use, Play's UI in the first three;
 - seams of a panorama, captures shown larger than they are, and what fell back to the primary locale.
+
+- the set's own consistency: the device in the same place on every non-hero shot of a target (0.2u) and the
+  caption's top too (0.5u); shots 1-3's captions big enough for search (9.5u on a tall slot);
+- with a style: its copy rules (words, lines, case), its roles; with a locked style, a config theme that
+  contradicts it (an error) and layouts outside its roles;
+- with an approved baseline (``design/baseline``, used by itself when it's there): the locked style unchanged (an
+  error otherwise), and each file's drift from its baseline counterpart (caption size, top, height and lines, the
+  device's box and frame, tilt, text share, ink, accent, background, layout) past the style's ``drift``
+  tolerances (warnings: the user decides).
 
 What it can't decide is listed for a person to check by eye. ``store-listing.json`` (beside the config, or
 ``--listing``) is read when present: its ``stores.google.slots`` say which Play slot each target fills, its
@@ -38,6 +48,7 @@ from appstores_lib import jsonio  # noqa: E402
 from appstores_lib import png  # noqa: E402
 from appstores_lib import rules  # noqa: E402
 from appstores_lib import text as textlib  # noqa: E402
+import styles  # noqa: E402
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILL_DIR = os.path.dirname(SCRIPTS_DIR)
@@ -60,6 +71,14 @@ SEARCH_MARGIN_PT = 16.0
 SEARCH_GAP_PT = 8.0
 SEARCH_SHOTS = 3
 MIN_TEXT_PT = 11.0
+
+# Shots 1-3's caption in u (1% of the width) by aspect class: at about 118 pt in Apple's search row, 9.5u on a tall
+# shot is 11 pt (screenshot-craft research; mid and wide from the iPad and landscape sets). Square: none.
+FIRST_SHOTS_MIN_U = {"tall": 9.5, "mid": 6.0, "wide": 4.0}
+# Inside one set: the device box (x, y, width) and the caption's top across non-hero shots of a layout (u).
+SET_DEVICE_TOLERANCE_U = 0.2
+SET_CAPTION_TOLERANCE_U = 0.5
+DEVICE_LAYOUTS = ("framed", "framed-bleed", "tilt", "pair", "callout")
 
 MIN_CONTRAST = 4.5
 MAX_CAPTION_LINES = 2
@@ -262,14 +281,26 @@ class Inputs:
     """Everything a check or a sheet reads: the design config, the render report, ``store-listing.json`` when
     there is one, and each store's rules and ``design`` table."""
 
-    def __init__(self, config_path, listing_path=None, rules_dir=RULES_DIR, report_path=None):
+    def __init__(self, config_path, listing_path=None, rules_dir=RULES_DIR, report_path=None, style_path=None):
         if not os.path.isfile(config_path):
             raise UsageError("no design config at %s (pass --config)" % config_path)
         self.config_path = config_path
         self.base = os.path.dirname(os.path.abspath(config_path))
-        self.config = jsonio.load(config_path)
-        if not isinstance(self.config, dict):
+        self.raw_config = jsonio.load(config_path)
+        if not isinstance(self.raw_config, dict):
             raise UsageError("%s isn't a JSON object" % config_path)
+        self.design_dir = styles.design_dir(config_path, self.raw_config)
+        self.style_path = styles.style_path_for(config_path, self.raw_config, style_path)
+        self.style = None
+        if self.style_path:
+            try:
+                self.style = styles.load_style(self.style_path)
+            except styles.StyleError as e:
+                raise UsageError(str(e))
+        try:
+            self.config = styles.apply(self.raw_config, self.style)
+        except styles.StyleError as e:
+            raise UsageError(str(e))
         self.out = os.path.join(self.base, self.config.get("out") or "screenshots")
         self.report_path = report_path or os.path.join(self.out, "render-report.json")
         if not os.path.isfile(self.report_path):
@@ -722,9 +753,10 @@ def _no_space_script(text):
 class Check:
     """One run of the check over a rendered set."""
 
-    def __init__(self, inputs, report):
+    def __init__(self, inputs, report, baseline=None):
         self.inputs = inputs
         self.report = report
+        self.baseline = baseline
         self.pixels = {}
         self.not_on_disk = collections.OrderedDict()
         self.search_small = collections.OrderedDict()
@@ -749,12 +781,20 @@ class Check:
         for f in inputs.files:
             self.check_file(f)
         for (store, loc, tid), e in self.search_small.items():
+            if e["shown"]:
+                sizes = ", ".join("%.1f pt (%s)" % (pt, shot) for shot, _u, pt in e["shots"])
+                where_said = "in Apple's search row (each shot about %d pt wide) would be about %s" % (
+                    round(e["shown"]), sizes)
+                need = max(e["need"], 100.0 * MIN_TEXT_PT / e["shown"])
+            else:
+                where_said = "are %s" % ", ".join("%.1fu (%s)" % (u, shot) for shot, u, _pt in e["shots"])
+                need = e["need"]
             self.report.add(store, own_finding(
                 "design.caption.search_size", "warning", "%s/%s" % (loc, tid),
-                "captions in Apple's search row (each shot about %d pt wide) would be about %s: under iOS's 11 pt "
-                "minimum; about %d px (%.1f%% of the width) reaches it. A derived estimate: look at the search-row "
-                "sheet" % (round(e["shown"]), ", ".join("%.1f pt (%s)" % (pt, shot) for shot, pt in e["shots"]),
-                           math.ceil(MIN_TEXT_PT * e["width"] / e["shown"]), 100.0 * MIN_TEXT_PT / e["shown"])))
+                "captions on the first shots %s: under %.1fu (%.1f%% of the width), the size that reads at search "
+                "size%s; about %d px reaches it. A derived estimate: look at the %s sheet"
+                % (where_said, need, need, " (iOS's 11 pt minimum)" if e["shown"] else "",
+                   math.ceil(need * e["width"] / 100.0), "search-row" if e["shown"] else "listing's")))
         for (store, loc, tid), shots in self.not_on_disk.items():
             self.report.add(store, own_finding(
                 "design.missing", "error", "%s/%s" % (loc, tid),
@@ -763,6 +803,10 @@ class Check:
         self.check_words()
         self.check_counts()
         self.check_sets()
+        self.check_consistency()
+        self.check_style()
+        if self.baseline is not None:
+            self.check_baseline()
         self.check_fallbacks()
         self.checklist()
 
@@ -935,20 +979,25 @@ class Check:
         if cap.get("missingGlyphs"):
             self.report.add(store, own_finding("design.glyphs", "error", "%s caption" % where,
                                                self._glyph_message(cap["missingGlyphs"])))
-        if store == "apple" and self.inputs.slot_kind("apple", slot) == "phone":
-            w, h = f.get("width"), f.get("height")
-            size = self.inputs.target_size(f.get("target")) or ((w, h) if w and h else None)
-            if size:
+        w, h = f.get("width"), f.get("height")
+        size = self.inputs.target_size(f.get("target")) or ((w, h) if w and h else None)
+        if size and cap.get("fontPx"):
+            u = 100.0 * float(cap["fontPx"]) / size[0]
+            self.report.measure(f.get("path"), "captionU", round(u, 2))
+            apple_phone = store == "apple" and self.inputs.slot_kind("apple", slot) == "phone"
+            pt = None
+            if apple_phone:
                 pt = points_at(cap.get("fontPx"), size[0], search_shot_points(size[0], size[1]))
-                order = self.inputs.shots_for(f.get("target"))
-                first = f.get("shot") in order[:(1 if size[0] > size[1] else SEARCH_SHOTS)]
-                if pt is not None:
-                    self.report.measure(f.get("path"), "searchPt", round(pt, 1))
-                if pt is not None and first and pt < MIN_TEXT_PT:
-                    shown = search_shot_points(size[0], size[1])
-                    key = (store, f.get("locale"), f.get("target"))
-                    entry = self.search_small.setdefault(key, {"shots": [], "shown": shown, "width": size[0]})
-                    entry["shots"].append((f.get("shot"), pt))
+                self.report.measure(f.get("path"), "searchPt", round(pt, 1))
+            order = self.inputs.shots_for(f.get("target"))
+            first = f.get("shot") in order[:(1 if apple_phone and size[0] > size[1] else SEARCH_SHOTS)]
+            need = FIRST_SHOTS_MIN_U.get(aspect_class(size[0], size[1]))
+            if first and need is not None and (u < need - 1e-6 or (pt is not None and pt < MIN_TEXT_PT)):
+                key = (store, f.get("locale"), f.get("target"))
+                entry = self.search_small.setdefault(key, {"shots": [], "need": need, "width": size[0],
+                                                           "shown": search_shot_points(size[0], size[1])
+                                                           if apple_phone else None})
+                entry["shots"].append((f.get("shot"), u, pt))
 
     @staticmethod
     def _glyph_message(missing):
@@ -1307,6 +1356,147 @@ class Check:
                         "every %s screenshot has words or art over it; leave at least one unaltered (a gameplay "
                         "or fullbleed shot with no caption)" % slot))
 
+    # -- the set's consistency, the style and the baseline ------------------------------------------
+
+    def check_consistency(self):
+        """Inside each set (a locale's shots for a target), shots of one layout keep one device box (x, y, width
+        within 0.2u) and one caption top (0.5u). The hero may break the grid; nothing else should."""
+        groups = collections.OrderedDict()
+        for f in self.inputs.files:
+            if f.get("layout") == "hero" or f.get("role") == "hero" or not f.get("width"):
+                continue
+            groups.setdefault((f.get("store") or "design", f.get("locale"), f.get("target"), f.get("layout")),
+                              []).append(f)
+        order = self.inputs.shot_order()
+        for (store, loc, tid, layout), files in groups.items():
+            if len(files) < 2:
+                continue
+            files.sort(key=lambda f: order.get(f.get("shot"), 1 << 20))
+            u = files[0]["width"] / 100.0
+            if layout in DEVICE_LAYOUTS:
+                ref = _box(_get(files[0], "frame", "box"))
+                odd = []
+                for f in files[1:]:
+                    b = _box(_get(f, "frame", "box"))
+                    if ref and b and max(abs(b[i] - ref[i]) for i in (0, 1, 2)) / u > SET_DEVICE_TOLERANCE_U:
+                        odd.append("%s (%.1fu)" % (f.get("shot"), max(abs(b[i] - ref[i]) for i in (0, 1, 2)) / u))
+                if odd:
+                    self.report.add(store, own_finding(
+                        "design.set.device", "warning", "%s/%s %s" % (loc, tid, layout),
+                        "the device moves between shots of one layout: %s from %s's (keep it within %.1fu: "
+                        "well-made sets lock it)" % (", ".join(odd), files[0].get("shot"), SET_DEVICE_TOLERANCE_U)))
+            tops = [(f, _box(_get(f, "caption", "box"))) for f in files if _has_caption(f)]
+            tops = [(f, b) for f, b in tops if b]
+            if len(tops) > 1:
+                ref = tops[0][1][1]
+                odd = ["%s (%.1fu)" % (f.get("shot"), abs(b[1] - ref) / u) for f, b in tops[1:]
+                       if abs(b[1] - ref) / u > SET_CAPTION_TOLERANCE_U]
+                if odd:
+                    self.report.add(store, own_finding(
+                        "design.set.caption", "warning", "%s/%s %s" % (loc, tid, layout),
+                        "the caption's top moves between shots: %s from %s's (keep it within %.1fu)"
+                        % (", ".join(odd), tops[0][0].get("shot"), SET_CAPTION_TOLERANCE_U)))
+
+    def check_style(self):
+        """A style's rules: its copy (words, lines, case) as warnings; its roles' maxPerSet; with a locked style,
+        a config theme key that contradicts it (an error) and a shot's own layout outside its roles."""
+        style = self.inputs.style
+        if not style:
+            return
+        rel = os.path.relpath(self.inputs.style_path, self.inputs.base)
+        if style.get("locked"):
+            for path, mine, theirs in styles.theme_conflicts(self.inputs.raw_config.get("theme"), style.get("theme")):
+                self.report.add("design", own_finding(
+                    "design.style.theme_override", "error", path,
+                    "the config sets %s to %s but the locked style (%s) says %s: the style wins, so remove it from "
+                    "the config (changing the look is a new approval with the user)" % (
+                        path, jsonio.canonical(mine), rel, jsonio.canonical(theirs))))
+            allowed = styles.role_layouts(style)
+            for shot in self.inputs.raw_config.get("shots") or []:
+                layout = shot.get("layout") if isinstance(shot, dict) else None
+                if layout and layout not in allowed:
+                    self.report.add("design", own_finding(
+                        "design.style.layout_outside_roles", "warning", "shot %s" % shot.get("id"),
+                        "uses the %s layout, which none of the locked style's roles use (%s): give it a role, or "
+                        "agree a new look with the user" % (layout, ", ".join(allowed) or "none")))
+        roles = style.get("roles") or {}
+        for tid in self.inputs.targets:
+            counts = collections.Counter(s.get("role") for s in self.inputs.shots
+                                         if s.get("role") and (s.get("targets") is None or tid in s["targets"]))
+            for role, n in counts.items():
+                most = (roles.get(role) or {}).get("maxPerSet")
+                if isinstance(most, int) and n > most:
+                    self.report.add("design", own_finding(
+                        "design.style.role_count", "warning", tid,
+                        "%d shots have the %s role; the style allows %d a set" % (n, role, most)))
+        rules_ = style.get("copy") or {}
+        if not rules_:
+            return
+        seen = set()
+        for f in self.inputs.files:
+            if not _has_caption(f):
+                continue
+            cap = f["caption"]
+            text = cap["text"]
+            where = self.where(f)
+            limit = rules_.get("maxLines")
+            if isinstance(limit, int) and isinstance(cap.get("lines"), int) and cap["lines"] > limit:
+                self.report.add("design", own_finding(
+                    "design.style.copy.lines", "warning", where,
+                    "caption runs to %d lines; the style's copy rules say %d at most" % (cap["lines"], limit)))
+            key = (f.get("locale"), f.get("shot"), text)
+            if key in seen:
+                continue
+            seen.add(key)
+            where = "%s %s" % (f.get("locale"), f.get("shot"))
+            limit = rules_.get("maxWords")
+            if isinstance(limit, int) and not _no_space_script(text) and _word_count(text) > limit:
+                self.report.add("design", own_finding(
+                    "design.style.copy.words", "warning", where,
+                    "\"%s\" has %d words; the style's copy rules say %d at most" % (text, _word_count(text), limit)))
+            want = rules_.get("case")
+            if want and want != "any" and not _no_space_script(text):
+                drawn = cap.get("case")
+                if not case_ok(text, want, drawn):
+                    self.report.add("design", own_finding(
+                        "design.style.copy.case", "warning", where,
+                        "\"%s\" isn't in %s case, as the style's copy rules ask" % (text, want)))
+
+    def check_baseline(self):
+        """The locked style unchanged since the approved baseline (an error), and each file's drift from its
+        baseline counterpart past the style's tolerances (warnings)."""
+        b = self.baseline
+        inputs = self.inputs
+        self.report.note("compared with the baseline approved %s (%s)%s" % (
+            b.meta.get("approvedAt") or "?", os.path.relpath(b.folder),
+            ": %s" % b.meta["note"] if b.meta.get("note") else ""))
+        style = inputs.style
+        if b.meta.get("styleSha256"):
+            if style is None:
+                self.report.add("design", own_finding(
+                    "design.baseline.style_changed", "error", "style",
+                    "the baseline locked a style (%s) but the config names none: put it back, or approve a new "
+                    "baseline with the user" % b.meta.get("style")))
+            elif style.get("locked") and styles.style_sha256(style) != b.meta["styleSha256"]:
+                self.report.add("design", own_finding(
+                    "design.baseline.style_changed", "error", os.path.relpath(inputs.style_path, inputs.base),
+                    "the locked style changed since the baseline was approved: approve a new baseline with the "
+                    "user, or put it back (design/baseline/%s is the approved one)" % styles.STYLE_NAME))
+            elif not style.get("locked"):
+                self.report.note("the style is unlocked (decisions.md says why): drift is measured against the "
+                                 "last baseline; approve a new one once the user agrees the new look")
+        tol = styles.drift_tolerances(style or b.style)
+        pairs, new, gone = match_baseline(inputs.files, b.files, inputs.primary)
+        for cur, base in pairs:
+            for message in drift_messages(cur, base, tol):
+                self.report.add("design", own_finding("design.baseline.drift", "warning", self.where(cur),
+                                                      message))
+        if new:
+            self.report.note("no baseline counterpart (new since the baseline, compared by role or layout where "
+                             "one matched): %s" % ", ".join(new))
+        if gone:
+            self.report.note("in the baseline but not in this set: %s" % ", ".join(gone))
+
     # -- fallbacks and the checklist -----------------------------------------------------------------
 
     def check_fallbacks(self):
@@ -1384,20 +1574,247 @@ class Check:
                 r.look(store, rule.id, rule.get("item"), rule.source, rule.status)
 
 
+def aspect_class(width, height):
+    """The aspect class of a slot: tall (w/h under 0.6), mid (0.6-0.85), square (0.85-1.2) or wide."""
+    a = width / float(height)
+    if a < 0.6:
+        return "tall"
+    if a < 0.85:
+        return "mid"
+    if a <= 1.2:
+        return "square"
+    return "wide"
+
+
+def _plain(text):
+    return text.replace("*", "").replace("\\n", " ").replace("\n", " ").strip()
+
+
+def case_ok(text, want, drawn=None):
+    """True if ``text`` is in ``want`` case (sentence, title, upper, lower), as drawn (``drawn``: the caption's
+    ``case`` setting, ``upper`` or ``lower``, changes what's seen)."""
+    t = _plain(text)
+    if drawn == "upper":
+        t = t.upper()
+    elif drawn == "lower":
+        t = t.lower()
+    letters = [c for c in t if c.isalpha()]
+    if not letters:
+        return True
+    if want == "upper":
+        return t == t.upper()
+    if want == "lower":
+        return t == t.lower()
+    words = [w for w in re.findall(r"[^\W\d_][\w'’-]*", t)]
+    long_words = [w for w in words[1:] if len(w) >= 4]
+    if want == "title":
+        return all(w[0].isupper() for w in [words[0]] + long_words) if words else True
+    if want == "sentence":
+        if len(letters) > 3 and t == t.upper():
+            return False
+        if letters[0].upper() != letters[0].lower() and not letters[0].isupper():
+            return False
+        if len(long_words) >= 2 and all(w[0].isupper() for w in long_words):
+            return False
+        return True
+    return True
+
+
+def _lab(rgb):
+    """CIE L*a*b* (D65) of an sRGB colour."""
+    lin = [_LINEAR[c] for c in rgb]
+    x = (0.4124 * lin[0] + 0.3576 * lin[1] + 0.1805 * lin[2]) / 0.95047
+    y = (0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]) / 1.0
+    z = (0.0193 * lin[0] + 0.1192 * lin[1] + 0.9505 * lin[2]) / 1.08883
+
+    def f(t):
+        return t ** (1.0 / 3) if t > 0.008856 else 7.787 * t + 16.0 / 116
+    fx, fy, fz = f(x), f(y), f(z)
+    return 116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)
+
+
+def delta_e(a, b):
+    """CIE76 delta E between two CSS colours, or ``None`` when one can't be read."""
+    ca, cb = parse_colour(a), parse_colour(b)
+    if ca is None or cb is None:
+        return None
+    la, lb = _lab(ca), _lab(cb)
+    return math.sqrt(sum((la[i] - lb[i]) ** 2 for i in range(3)))
+
+
+class Baseline:
+    """An approved baseline (``design/baseline``): its ``baseline.json``, its render report's files and its
+    copy of the style."""
+
+    def __init__(self, folder):
+        self.folder = folder
+        meta_path = os.path.join(folder, "baseline.json")
+        if not os.path.isfile(meta_path):
+            raise UsageError("no baseline at %s (baseline.py approve makes one, with the user's say)" % folder)
+        try:
+            self.meta = jsonio.load(meta_path)
+            report = jsonio.load(os.path.join(folder, self.meta.get("report") or "render-report.json"))
+        except (OSError, jsonio.JsonError) as e:
+            raise UsageError("the baseline at %s can't be read: %s" % (folder, e))
+        self.report = report
+        self.files = [f for f in (report.get("files") or []) if isinstance(f, dict)]
+        self.style = None
+        style_copy = os.path.join(folder, styles.STYLE_NAME)
+        if os.path.isfile(style_copy):
+            try:
+                self.style = jsonio.load(style_copy)
+            except jsonio.JsonError:
+                self.style = None
+
+    def path(self, f):
+        """A baseline file's PNG."""
+        return os.path.join(self.folder, f.get("path") or "")
+
+
+def match_baseline(files, base_files, primary):
+    """Pair each current file with its baseline counterpart: the same locale, target and shot; else the primary
+    locale's; else, for a shot new since the baseline, one of the same target with the same role, else the same
+    layout. Returns ``(pairs, new, gone)``: ``[(current, baseline)]``, the current files that had no counterpart
+    of their own shot (``locale/target/shot``), and the baseline's target/shot pairs no longer in the set."""
+    index = {}
+    for b in base_files:
+        index.setdefault((b.get("locale"), b.get("target"), b.get("shot")), b)
+    pairs, new = [], []
+    for f in files:
+        loc, tid, shot = f.get("locale"), f.get("target"), f.get("shot")
+        b = index.get((loc, tid, shot)) or index.get((primary, tid, shot))
+        if b is None:
+            new.append("%s/%s/%s" % (loc, tid, shot))
+            same = [x for x in base_files if x.get("target") == tid and x.get("locale") in (loc, primary)]
+            if f.get("role"):
+                b = next((x for x in same if x.get("role") == f.get("role")), None)
+            if b is None:
+                b = next((x for x in same if x.get("layout") == f.get("layout")), None)
+        if b is not None:
+            pairs.append((f, b))
+    have = set((f.get("target"), f.get("shot")) for f in files)
+    gone = sorted(set("%s/%s" % (b.get("target"), b.get("shot")) for b in base_files
+                      if (b.get("target"), b.get("shot")) not in have))
+    return pairs, new, gone
+
+
+def drift_messages(cur, base, tol):
+    """What moved between a file and its baseline counterpart past the tolerances (``styles.DEFAULT_DRIFT``'s
+    keys), one message each."""
+    out = []
+    w = float(cur.get("width") or 0) or 1.0
+    bw = float(base.get("width") or 0) or w
+
+    def u(v, width):
+        return 100.0 * float(v) / width
+
+    if cur.get("layout") != base.get("layout"):
+        out.append("layout is %s; the baseline's was %s" % (cur.get("layout"), base.get("layout")))
+    c, b = cur.get("caption"), base.get("caption")
+    c = c if isinstance(c, dict) and c.get("text") is not None else None
+    b = b if isinstance(b, dict) and b.get("text") is not None else None
+    if bool(c) != bool(b):
+        out.append("has a caption; the baseline's had none" if c else "has no caption; the baseline's had one")
+    if c and b:
+        if c.get("fontPx") and b.get("fontPx"):
+            cu, bu = u(c["fontPx"], w), u(b["fontPx"], bw)
+            change = (cu - bu) / bu if bu else 0
+            if abs(change) > tol["captionSize"] + 1e-9:
+                out.append("caption size %.1fu, the baseline's %.1fu (%+.0f%%; tolerance %.0f%%)" % (
+                    cu, bu, 100 * change, 100 * tol["captionSize"]))
+        cb, bb = _box(c.get("box")), _box(b.get("box"))
+        if cb and bb:
+            top = abs(u(cb[1], w) - u(bb[1], bw))
+            if top > 100 * tol["captionPosition"] + 1e-9:
+                out.append("caption top %.1fu, the baseline's %.1fu (tolerance %.1fu)" % (
+                    u(cb[1], w), u(bb[1], bw), 100 * tol["captionPosition"]))
+            size_drift = any(m.startswith("caption size") for m in out)
+            if c.get("lines") == b.get("lines") and not size_drift:
+                height = abs(u(cb[3], w) - u(bb[3], bw))
+                if height > 100 * tol["captionPosition"] + 1e-9:
+                    out.append("caption height %.1fu, the baseline's %.1fu (tolerance %.1fu)" % (
+                        u(cb[3], w), u(bb[3], bw), 100 * tol["captionPosition"]))
+        if c.get("lines") != b.get("lines"):
+            out.append("caption runs to %s lines; the baseline's %s" % (c.get("lines"), b.get("lines")))
+        for key, label in (("ink", "caption ink"), ("accent", "accent")):
+            if c.get(key) and b.get(key):
+                d = delta_e(c[key], b[key])
+                if d is not None and d > tol["colour"]:
+                    out.append("%s %s, the baseline's %s (delta E %.1f)" % (label, c[key], b[key], d))
+            elif bool(c.get(key)) != bool(b.get(key)) and key == "accent":
+                out.append("%s an accent word" % ("has" if c.get(key) else "no longer has"))
+        cs, bs = c.get("textShare"), b.get("textShare")
+        if isinstance(cs, (int, float)) and isinstance(bs, (int, float)) and abs(cs - bs) > tol["textShare"] + 1e-9:
+            out.append("words cover %.0f%% of the picture, the baseline's %.0f%%" % (100 * cs, 100 * bs))
+    fc, fb = cur.get("frame"), base.get("frame")
+    nc = fc.get("name") if isinstance(fc, dict) else None
+    nb = fb.get("name") if isinstance(fb, dict) else None
+    if (nc or "none") != (nb or "none"):
+        out.append("frame %s, the baseline's %s" % (nc or "none", nb or "none"))
+    elif isinstance(fc, dict) and isinstance(fb, dict):
+        xc, xb = _box(fc.get("box")), _box(fb.get("box"))
+        if xc and xb:
+            moved = []
+            for i, name in enumerate(("x", "y", "width", "height")):
+                d = abs(u(xc[i], w) - u(xb[i], bw))
+                if d > 100 * tol["deviceBox"] + 1e-9:
+                    moved.append("%s %.1fu, was %.1fu" % (name, u(xc[i], w), u(xb[i], bw)))
+            if moved:
+                out.append("the device moved: %s (tolerance %.1fu)" % ("; ".join(moved), 100 * tol["deviceBox"]))
+        if bool(fc.get("tilted")) != bool(fb.get("tilted")):
+            out.append("the device is %s; the baseline's wasn't" % "tilted" if fc.get("tilted") else
+                       "the device isn't tilted; the baseline's was")
+    if (cur.get("tilt") or None) != (base.get("tilt") or None) and cur.get("tilt") and base.get("tilt"):
+        out.append("tilts %s; the baseline's tilted %s" % (cur.get("tilt"), base.get("tilt")))
+    gc, gb = cur.get("background"), base.get("background")
+    if isinstance(gc, dict) and isinstance(gb, dict):
+        if gc.get("kind") != gb.get("kind"):
+            out.append("background %s, the baseline's %s" % (gc.get("kind"), gb.get("kind")))
+        else:
+            cc, cbg = gc.get("colours") or [], gb.get("colours") or []
+            far = [d for d in (delta_e(x, y) for x, y in zip(cc, cbg)) if d is not None and d > tol["colour"]]
+            if far or len(cc) != len(cbg):
+                out.append("background colours %s, the baseline's %s" % (" ".join(cc), " ".join(cbg)))
+            if gc.get("image") != gb.get("image"):
+                out.append("background image %s, the baseline's %s" % (gc.get("image"), gb.get("image")))
+    return out
+
+
 def _num(v):
     if isinstance(v, (int, float)):
         return ("%.1f" % v).rstrip("0").rstrip(".")
     return "?"
 
 
-def run_check(config_path, listing_path=None, rules_dir=RULES_DIR, report_path=None):
-    """Check a rendered set; return the ``Report``. Raises ``UsageError`` for a missing config or report."""
+AUTO = "auto"
+
+
+def find_baseline(inputs, baseline=AUTO):
+    """The ``Baseline`` to compare with: ``None`` (none asked for, or none approved yet with ``AUTO``), the design
+    folder's ``baseline/`` (``AUTO`` or ``""``), or a folder given."""
+    if baseline is None:
+        return None
+    if baseline in (AUTO, ""):
+        folder = os.path.join(inputs.design_dir, "baseline")
+        if baseline == AUTO and not os.path.isfile(os.path.join(folder, "baseline.json")):
+            return None
+    else:
+        folder = baseline
+    return Baseline(folder)
+
+
+def run_check(config_path, listing_path=None, rules_dir=RULES_DIR, report_path=None, baseline=AUTO,
+              style_path=None):
+    """Check a rendered set; return the ``Report``. ``baseline``: ``AUTO`` (the approved one when there is one),
+    ``None`` (no drift check), ``""`` (the design folder's, required) or a folder. Raises ``UsageError`` for a
+    missing config, report or asked-for baseline."""
     try:
-        inputs = Inputs(config_path, listing_path, rules_dir, report_path)
+        inputs = Inputs(config_path, listing_path, rules_dir, report_path, style_path)
+        base = find_baseline(inputs, baseline)
     except jsonio.JsonError as e:
         raise UsageError(str(e))
     report = Report(os.path.relpath(config_path), inputs.relax())
-    Check(inputs, report).run()
+    Check(inputs, report, base).run()
     return report
 
 
@@ -1409,6 +1826,10 @@ def parser():
     p.add_argument("--listing", help="store-listing.json (default: beside the config, if there)")
     p.add_argument("--report", help="the render report (default: <out>/render-report.json); its files' paths "
                    "stay relative to <out>")
+    p.add_argument("--baseline", nargs="?", const="", default=AUTO, metavar="DIR",
+                   help="compare with an approved baseline (default: <design>/baseline, used by itself when it's "
+                   "there)")
+    p.add_argument("--no-baseline", action="store_true", help="don't compare with the baseline")
     p.add_argument("--json", action="store_true", help="print the findings as JSON")
     return p
 
@@ -1420,7 +1841,8 @@ def main(argv=None):
     except SystemExit as e:
         return EXIT_OK if e.code in (0, None) else EXIT_USAGE
     try:
-        report = run_check(args.config, args.listing, report_path=args.report)
+        report = run_check(args.config, args.listing, report_path=args.report,
+                           baseline=None if args.no_baseline else args.baseline)
     except UsageError as e:
         sys.stderr.write("check.py: %s\n" % e)
         return EXIT_USAGE

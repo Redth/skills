@@ -61,5 +61,17 @@ Run on the rendered files and the sheets before handing a set to `store-listings
 18. **look.** A product page optimisation (Apple) or store listing experiment (Play) proposed for the first-shot
     choice, with the after-install measure named ([evidence.md](evidence.md)).
 
+## Consistency and the baseline
+
+19. **check.py, then look.** One system inside the set: the device in the same place on every non-hero shot of a
+    layout (within 0.2u) and the caption's top too (0.5u); shots 1 to 3's captions at least 9.5u on a tall slot (6u
+    mid, 4u wide). The hero may break the grid.
+20. **check.py.** With a style: its copy rules (words, lines, case); with a locked style, no config theme key
+    against it (an error), no layout outside its roles, roles within their `maxPerSet`.
+21. **check.py, then look** (an update to an approved set). The locked style unchanged since the baseline (an error
+    otherwise); each drift warning shown to the user with `sheet.py --compare design/baseline`, and accepted or
+    fixed by them ([baseline.md](baseline.md)).
+22. **look.** The user picked the direction and approved the set; `design/decisions.md` says so in their words.
+
 Also checked, not numbered: captures never shown larger than they are (`captureScale` over 1.0 is a finding), and
 every file's inputs unchanged since its render (`render.py --force` if in doubt).

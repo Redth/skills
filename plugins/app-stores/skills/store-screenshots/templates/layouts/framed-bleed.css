@@ -4,10 +4,10 @@
   cut off, and the words are centred (a little high) in the room above it. The commonest app pattern.
 */
 .slot[data-layout="framed-bleed"] {
-  --device-w: 84;
-  --bleed: 0.14;
-  --caption-bias: 0.42;
+  --device-w: 86;
+  --bleed: 0.12;
+  --caption-bias: 0.38;
 }
-body[data-aspect="mid"] .slot[data-layout="framed-bleed"] { --device-w: 84; --bleed: 0.16; }
+body[data-aspect="mid"] .slot[data-layout="framed-bleed"] { --device-w: 86; --bleed: 0.16; }
 body[data-aspect="square"] .slot[data-layout="framed-bleed"] { --device-w: 66; --bleed: 0.2; }
 body[data-aspect="wide"] .slot[data-layout="framed-bleed"] { --device-w: 78; --bleed: 0.12; --caption-bias: 0.5; }

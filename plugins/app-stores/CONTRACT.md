@@ -658,16 +658,16 @@ project beside the config (paths relative to it), under `design/` unless the con
 ```json
 {
   "version": 1, "name": "Bold caption on brand colour", "locked": false,
-  "traits": { "captionPosition": "top", "captionSize": "large", "captionWeight": "heavy", "captionCase": "sentence",
-              "emphasis": "accent-word", "device": "bleed", "background": "brand-gradient", "density": "airy",
-              "colour": "brand-dark", "mood": "confident" },
+  "traits": { "captionPosition": "top", "captionSize": "loud", "captionWeight": "heavy", "captionCase": "sentence",
+              "emphasis": "accent-word", "device": "realistic", "devicePlacement": "bleed-bottom",
+              "background": "brand-colour", "density": "standard", "colour": "monochrome-brand", "mood": "bold" },
   "theme": { "…": "the same object as the config's theme (§8.2)" },
   "roles": { "hero": { "layout": "hero" }, "feature": { "layout": "framed-bleed" },
              "detail": { "layout": "callout" }, "accent": { "layout": "tilt", "maxPerSet": 1 },
              "gameplay": { "layout": "fullbleed" } },
   "stores": { "google": { "frame": "none" } },
   "copy": { "maxWords": 5, "maxLines": 2, "case": "sentence", "emphasis": "one accent word at most" },
-  "drift": { "captionSize": 0.08, "captionPosition": 0.03, "deviceBox": 0.04, "textShare": 0.05 }
+  "drift": { "…": "tolerances: see schema/screenshot-style.schema.json and references/baseline.md" }
 }
 ```
 

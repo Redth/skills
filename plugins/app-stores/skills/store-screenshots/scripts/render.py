@@ -2,7 +2,11 @@
 """render.py: render an app's store screenshots from its captures and one design (``store-screenshots.json``).
 
     render.py [--config store-screenshots.json] [--locales en-US,de-DE] [--targets iphone,ipad]
-              [--shots plan,recipe] [--out screenshots] [--force]
+              [--shots plan,recipe] [--style screenshot-style.json] [--out screenshots] [--force]
+
+With a style (the config's ``"style"``, or ``--style`` for an exploration), the config's theme and stores merge
+under the style's (the style wins) and a shot's ``role`` gives its layout (styles.py). ``--out`` renders somewhere
+else (``design/explore/<direction>``) without touching the set.
 
 For every locale x target x shot the config asks for, it resolves the settings (theme, then the shot, then the
 target's store's overrides, then the target's own), the words (each string falling back to the primary locale's)
@@ -37,6 +41,7 @@ from appstores_lib import chrome  # noqa: E402
 from appstores_lib import jsonio  # noqa: E402
 from appstores_lib import png  # noqa: E402
 from appstores_lib import schema  # noqa: E402
+import styles  # noqa: E402
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILL_DIR = os.path.dirname(SCRIPTS_DIR)
@@ -58,8 +63,10 @@ DEFAULT_LAYOUT = "framed-bleed"
 DEFAULT_FRAME = "phone"
 CAPTURE_EXTS = (".png", ".jpg", ".jpeg")
 RTL_LANGUAGES = ("ar", "arc", "ckb", "dv", "fa", "he", "iw", "ks", "ku", "ps", "sd", "ug", "ur", "yi")
-DEFAULT_CAPTION = {"placement": "top", "align": "center", "maxLines": 2, "weight": 800, "sizePct": 8.0,
-                   "floorPct": 6.0, "font": None, "plate": "solid"}
+# 9.5u starts a tall slot's caption at about 11 pt in Apple's search row; 7u is about 12 pt on the product page
+# (references/legibility.md, from the screenshot-craft measurements).
+DEFAULT_CAPTION = {"placement": "top", "align": "center", "maxLines": 2, "weight": 800, "sizePct": 9.5,
+                   "floorPct": 7.0, "font": None, "plate": "solid", "case": None}
 DEFAULT_PALETTE = {"background": "#101418", "ink": "#FFFFFF", "accent": "#FFC94D"}
 
 
@@ -129,8 +136,8 @@ def load_schema():
     return jsonio.load(SCHEMA_PATH)
 
 
-def load_config(path):
-    """Read and validate a config; raise ``UsageError`` with every problem found."""
+def load_raw_config(path):
+    """Read and validate a config as written (no style applied); raise ``UsageError`` with every problem."""
     if not os.path.isfile(path):
         raise UsageError("no config at %s (pass --config)" % path)
     try:
@@ -140,9 +147,31 @@ def load_config(path):
     problems = schema.validate(cfg, load_schema())
     if problems:
         raise UsageError("%s doesn't match the schema:\n  %s" % (path, "\n  ".join(problems)))
+    return cfg
+
+
+def load_config(path, style=None):
+    """Read and validate a config and apply its style (``style``, a path, overrides the config's ``"style"``);
+    raise ``UsageError`` with every problem found. The result carries ``_style`` (``None`` or a dict: ``path``,
+    ``data``, ``sha256``) and ``_raw`` (the config as written)."""
+    raw = load_raw_config(path)
+    style_path = styles.style_path_for(path, raw, style)
+    data = None
+    if style_path:
+        try:
+            data = styles.load_style(style_path)
+        except styles.StyleError as e:
+            raise UsageError(str(e))
+    try:
+        cfg = styles.apply(raw, data)
+    except styles.StyleError as e:
+        raise UsageError("%s: %s" % (path, e))
     problems = semantic_problems(cfg)
     if problems:
         raise UsageError("%s:\n  %s" % (path, "\n  ".join(problems)))
+    cfg["_raw"] = raw
+    cfg["_style"] = None if data is None else {"path": style_path, "data": data,
+                                                "sha256": styles.style_sha256(data)}
     return cfg
 
 
@@ -353,7 +382,7 @@ class Resolver:
                            "placement": style.get("placement"), "align": style.get("align"),
                            "maxLines": style.get("maxLines"), "weight": style.get("weight"),
                            "sizePct": style.get("sizePct"), "floorPct": style.get("floorPct"),
-                           "font": style.get("font"), "plate": style.get("plate")}
+                           "font": style.get("font"), "plate": style.get("plate"), "case": style.get("case")}
         pair = None
         if st["layout"] == "pair" and shot.get("pair"):
             spec = shot["pair"]
@@ -455,7 +484,8 @@ class Resolver:
                "slot": {"width": target["width"], "height": target["height"]},
                "theme": theme, "panorama": panorama, "slots": slots}
         return {"job": job, "files": sorted(set(files)), "fallbacks": fallbacks,
-                "layout": slots[index]["layout"], "capturePath": slots[index]["capturePath"]}
+                "layout": slots[index]["layout"], "capturePath": slots[index]["capturePath"],
+                "role": shot.get("role"), "tilt": slots[index]["tilt"] if slots[index]["layout"] == "tilt" else None}
 
     def inputs_hash(self, unit, templates_digest):
         """The hash of everything that goes into one file: the job (with each file's path replaced by its
@@ -476,6 +506,25 @@ class Resolver:
         view = {"renderer": RENDERER_VERSION, "templates": templates_digest, "job": scrub(unit["job"]),
                 "size": [unit["width"], unit["height"]]}
         return sha256_bytes(jsonio.canonical(view).encode("utf-8"))
+
+
+def background_summary(theme):
+    """What a file's background is, for the report and the baseline's drift check: its ``kind``, its colours
+    (``#RRGGBB``, in the order drawn) and, for an image, the image's hash."""
+    bg = theme.get("background") or {}
+    pal = theme.get("palette") or {}
+    kind = bg.get("kind") or "glow"
+    colours = [pal.get("background")]
+    if kind == "gradient":
+        colours = [pal.get("background2") or pal.get("background"), pal.get("background")]
+    elif kind == "glow":
+        colours = [pal.get("background"), pal.get("accent")]
+    out = {"kind": kind, "colours": [c.upper() if isinstance(c, str) else c for c in colours if c]}
+    if bg.get("angle") is not None:
+        out["angle"] = bg["angle"]
+    if kind == "image" and bg.get("url"):
+        out["image"] = urllib.parse.unquote(bg["url"].rsplit("/", 1)[-1])
+    return out
 
 
 def _page_frame(frame):
@@ -502,7 +551,8 @@ def file_entry(unit, page, out_path, inputs):
     fb = unit["fallbacks"]
     entry = {
         "path": unit["path"], "locale": unit["locale"], "target": unit["target"], "store": unit["store"],
-        "shot": unit["shot"], "layout": unit["layout"], "width": unit["width"], "height": unit["height"],
+        "shot": unit["shot"], "role": unit.get("role"), "layout": unit["layout"], "tilt": unit.get("tilt"),
+        "width": unit["width"], "height": unit["height"],
         "aspectClass": aspect_class(unit["width"], unit["height"]),
         "capture": unit["capturePath"],
         "captureFallback": bool(fb["captures"]) and unit["capturePath"] in fb["captures"],
@@ -513,6 +563,7 @@ def file_entry(unit, page, out_path, inputs):
         "callout": page.get("callout"),
         "captureScale": page.get("captureScale"),
         "seams": page.get("seams") or [],
+        "background": unit.get("background"),
         "lang": page.get("lang"), "dir": page.get("dir"),
         "sha256": png.sha256(out_path),
         "inputsSha256": inputs,
@@ -538,10 +589,35 @@ def load_previous(out):
     return {f.get("path"): f for f in old.get("files") or [] if isinstance(f, dict)}
 
 
+def expected(config_path, style=None, out=None):
+    """What a render of the config (and style) now would write, without rendering: ``(resolver, {path: inputs
+    hash})`` for every file it asks for (files that can't be rendered map to ``None``). baseline.py compares it
+    with the render report to tell whether the report is current."""
+    cfg = load_config(config_path, style)
+    res = Resolver(cfg, config_path, out)
+    templates_digest = sha256_bytes((_dir_digest(TEMPLATES_DIR) + _dir_digest(FRAMES_DIR)).encode("ascii"))
+    found = {}
+    for u in res.units():
+        found[u["path"]] = None if "error" in u else res.inputs_hash(u, templates_digest)
+    return res, found
+
+
+def style_entry(cfg, config_path):
+    """The report's ``style``: the style a render used (``None`` without one)."""
+    st = cfg.get("_style")
+    if not st:
+        return None
+    base = os.path.dirname(os.path.abspath(config_path))
+    data = st["data"]
+    return {"path": os.path.relpath(st["path"], base).replace(os.sep, "/"), "name": data.get("name"),
+            "sha256": st["sha256"], "locked": bool(data.get("locked")), "traits": data.get("traits") or {}}
+
+
 def run(config_path, locales=None, targets=None, shots=None, out=None, force=False, browser=None,
-        log=print, now=None):
-    """Render; return ``(exit_code, report)``. ``browser`` is an open ``chrome.Chrome`` to reuse (tests)."""
-    cfg = load_config(config_path)
+        log=print, now=None, style=None):
+    """Render; return ``(exit_code, report)``. ``browser`` is an open ``chrome.Chrome`` to reuse (tests);
+    ``style`` a style file to use instead of the config's."""
+    cfg = load_config(config_path, style)
     for name, wanted, known in (("locale", locales, cfg["locales"]), ("target", targets, list(cfg["targets"])),
                                 ("shot", shots, [s["id"] for s in cfg["shots"]])):
         for w in wanted or []:
@@ -558,11 +634,14 @@ def run(config_path, locales=None, targets=None, shots=None, out=None, force=Fal
             errors.append({"path": u["path"], "error": u["error"]})
             continue
         u["inputs"] = res.inputs_hash(u, templates_digest)
+        u["background"] = background_summary(u["job"]["theme"])
         old = previous.get(u["path"])
         out_path = os.path.join(res.out, u["path"])
         if (not force and old and old.get("inputsSha256") == u["inputs"] and os.path.isfile(out_path)
                 and old.get("sha256") == png.sha256(out_path) and not old.get("errors")):
-            entries[u["path"]] = old
+            fresh = dict(old)
+            fresh.update({"role": u.get("role"), "tilt": u.get("tilt"), "background": u["background"]})
+            entries[u["path"]] = fresh
             continue
         todo.append(u)
 
@@ -610,6 +689,7 @@ def run(config_path, locales=None, targets=None, shots=None, out=None, force=Fal
     inputs = sha256_bytes("".join(e.get("inputsSha256", "") for e in files).encode("ascii"))
     stamp = (now or datetime.datetime.now(datetime.timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
     report = {"version": 1, "renderedAt": stamp, "config": os.path.basename(config_path),
+              "configSha256": styles.config_sha256(cfg["_raw"]), "style": style_entry(cfg, config_path),
               "inputsSha256": inputs, "rendered": rendered, "unchanged": len(units) - len(todo) - sum(
                   1 for u in units if "error" in u),
               "files": files, "errors": errors}
@@ -665,7 +745,10 @@ def parser():
     p.add_argument("--locales", help="only these locales (comma-separated)")
     p.add_argument("--targets", help="only these targets (comma-separated)")
     p.add_argument("--shots", help="only these shots (comma-separated)")
-    p.add_argument("--out", help="the output folder (default: the config's 'out')")
+    p.add_argument("--out", help="the output folder, relative to the config (default: its 'out'); for an "
+                   "exploration, design/explore/<direction>")
+    p.add_argument("--style", help="a screenshot-style.json to render with instead of the config's style (an "
+                   "exploration: pair it with --out)")
     p.add_argument("--force", action="store_true", help="render every file, changed or not")
     return p
 
@@ -674,7 +757,7 @@ def main(argv=None, browser=None):
     args = parser().parse_args(argv)
     try:
         code, _ = run(args.config, _csv(args.locales), _csv(args.targets), _csv(args.shots), args.out, args.force,
-                      browser=browser)
+                      browser=browser, style=args.style)
         return code
     except UsageError as e:
         print("error: %s" % e, file=sys.stderr)

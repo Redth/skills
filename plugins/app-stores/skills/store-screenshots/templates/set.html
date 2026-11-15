@@ -452,6 +452,10 @@
       if (cap.proof) { s.proof = make("div", "proof", block); s.proof.innerHTML = richText(cap.proof); }
       if (cap.font) block.style.setProperty("--font-caption", '"' + cap.font + '", ' + SYSTEM_STACK);
       if (cap.weight) block.style.setProperty("--caption-weight", String(cap.weight));
+      if (cap["case"] === "upper" || cap["case"] === "lower") {
+        s.caption.style.textTransform = cap["case"] === "upper" ? "uppercase" : "lowercase";
+        if (cap["case"] === "upper") s.caption.style.letterSpacing = "0.01em";
+      }
       s.block = block;
     }
     if (layout === "fullbleed" || layout === "gameplay" || layout === "band") {
@@ -497,6 +501,7 @@
       leading: cssNum(style, "--caption-leading", 1.06),
       platePad: cssNum(style, "--plate-pad", 3.2) * u,
       bandPad: cssNum(style, "--band-pad", 6) * u,
+      reserveLines: cssNum(style, "--caption-reserve-lines", 2),
       pairOverlap: cssNum(style, "--pair-overlap", 0.36),
       pairStagger: cssNum(style, "--pair-stagger", 0.06),
       companion: cssNum(style, "--companion-w", 0.42),
@@ -517,13 +522,13 @@
     s.fit = null;
 
     // 1. The caption: its block's width, then its size.
-    var ch = 0;
+    var ch = 0, chR = 0;
     if (s.block) {
       var blockW = availW;
       if (s.plate) blockW = availW - 2 * P.platePad;
       s.block.style.width = blockW + "px";
-      var base = (cap.sizePct || 8) / 100 * W * P.factor * P.captionScale;
-      var floor = (cap.floorPct || 6) / 100 * W * P.factor * P.captionScale;
+      var base = (cap.sizePct || 9.5) / 100 * W * P.factor * P.captionScale;
+      var floor = (cap.floorPct || 7) / 100 * W * P.factor * P.captionScale;
       if (floor > base) floor = base;
       s.block.style.setProperty("--caption-base", base + "px");
       var maxLines = (cap.maxLines || 2) + P.extraLines;
@@ -532,7 +537,15 @@
         s.fit.sizePx = base; s.fit.floorPx = floor; s.fit.maxLines = maxLines;
       }
       ch = s.block.getBoundingClientRect().height;
+      // The block keeps room for --caption-reserve-lines lines at the starting size even when the words take
+      // fewer, so every shot of a set puts its caption's top and its device in the same place.
+      if (s.caption && cap.text && s.fit) {
+        var capH = s.caption.getBoundingClientRect().height;
+        var want = Math.min(P.reserveLines, maxLines) * base * P.leading;
+        if (want > capH) chR = ch + (want - capH);
+      }
     }
+    if (!chR) chR = ch;
 
     // 2. The picture, by layout.
     if (s.fill) {
@@ -576,18 +589,18 @@
     var group = groupShape(s, P);   // the devices' arrangement, in a unit box: { w, h, items: [...] }
     var gw, gh, gx, gy;
     if (s.layout === "framed") {
-      var regionH = H - P.padTop - P.padBottom - (ch ? ch + P.gap : 0);
+      var regionH = H - P.padTop - P.padBottom - (chR ? chR + P.gap : 0);
       gw = Math.min(P.deviceW, stageW, regionH * group.w / group.h);
       if (P.deviceH) gw = Math.min(gw, P.deviceH * group.w / group.h);
       gh = gw * group.h / group.w;
-      var total = (ch ? ch + P.gap : 0) + gh;
+      var total = (chR ? chR + P.gap : 0) + gh;
       var start = P.padTop + Math.max(0, (H - P.padTop - P.padBottom - total)) * 0.5;
       if (placement === "bottom") {
         gy = start;
         if (s.block) s.block.style.top = (gy + gh + P.gap) + "px";
       } else {
         if (s.block) s.block.style.top = start + "px";
-        gy = start + (ch ? ch + P.gap : 0);
+        gy = start + (chR ? chR + P.gap : 0);
       }
     } else {
       gw = Math.min(P.deviceW, stageW);
@@ -595,21 +608,21 @@
       gh = gw * group.h / group.w;
       var bleed = P.bleed;
       if (placement === "bottom") {
-        var maxBottom = H - P.padBottom - (ch ? ch + P.gap : 0);
+        var maxBottom = H - P.padBottom - (chR ? chR + P.gap : 0);
         var gBottom = Math.min(maxBottom, (1 - bleed) * gh);
         gy = gBottom - gh;
         if (s.block) {
-          var free = (H - P.padBottom - ch) - (gBottom + P.gap);
+          var free = (H - P.padBottom - chR) - (gBottom + P.gap);
           s.block.style.top = (gBottom + P.gap + Math.max(0, free) * (1 - P.bias)) + "px";
         }
       } else {
-        var minTop = P.padTop + (ch ? ch + P.gap : 0);
+        var minTop = P.padTop + (chR ? chR + P.gap : 0);
         gy = Math.max(minTop, H - (1 - bleed) * gh);
-        var blockTop = P.padTop + Math.max(0, gy - P.gap - P.padTop - ch) * P.bias;
+        var blockTop = P.padTop + Math.max(0, gy - P.gap - P.padTop - chR) * P.bias;
         if (s.block) s.block.style.top = blockTop + "px";
         // --anchor-gap: the device comes up to this far under the words (never further down than the bleed
         // puts it), so a tall slot's hero, tilt or pair doesn't leave a hole between the words and the device.
-        if (P.anchorGap > 0 && ch) gy = Math.max(minTop, Math.min(gy, blockTop + ch + P.anchorGap));
+        if (P.anchorGap > 0 && chR) gy = Math.max(minTop, Math.min(gy, blockTop + chR + P.anchorGap));
       }
     }
     gx = SL + (stageW - gw) / 2;
@@ -743,7 +756,8 @@
         ink: captionItem ? captionItem.ink : null,
         accent: s.caption && s.caption.querySelector("em") ? hex(parseColour(getComputedStyle(s.caption.querySelector("em")).color)) : null,
         placement: s.el.dataset.placement,
-        align: cap.align || "center"
+        align: cap.align || "center",
+        "case": cap["case"] || "none"
       };
       if (s.plate) r.caption.plate = box(rel(s.plate.getBoundingClientRect(), origin));
       if (s.band) r.caption.band = box(rel(s.band.getBoundingClientRect(), origin));

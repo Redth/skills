@@ -19,7 +19,7 @@ Stores and forms with no API get a checklist with the answers drafted. Any app, 
 | Skill | Status | What it does | Issue |
 |---|---|---|---|
 | [`store-listings`](./skills/store-listings/) | 0.1.0 | the config and its importers (fastlane, Triple-T, Expo); the words and their checks; building each store's output; page previews; plan and apply for Apple and Google; forms with no API as drafted answers; checklists for Steam and itch.io | [#11](https://github.com/Redth/skills/issues/11) |
-| [`store-screenshots`](./skills/store-screenshots/) | 0.1.0 | the brief and a storyboard agreed before rendering; layouts (full-bleed, band, framed, cut off, tilt, pair, callout, hero, gameplay) and drawn device frames; every size and locale from one design through headless Chrome; mocks of Apple's search row, the product page and Play's listing; screenshot checks per store | [#12](https://github.com/Redth/skills/issues/12) |
+| [`store-screenshots`](./skills/store-screenshots/) | 0.1.0 | the user's examples, two to four rendered directions, one iterated into an approved baseline that later updates are checked against; the brief and a storyboard agreed before rendering; layouts (full-bleed, band, framed, cut off, tilt, pair, callout, hero, gameplay) and drawn device frames; eight starting styles; every size and locale from one design through headless Chrome; mocks of Apple's search row, the product page and Play's listing; screenshot checks per store | [#12](https://github.com/Redth/skills/issues/12) |
 | `store-capture` | proposed | screenshots and previews from any stack: `simctl`, `adb` and headless Chrome drivers, importers for fastlane snapshot and screengrab, Maestro, Playwright and others | [#13](https://github.com/Redth/skills/issues/13) |
 | `store-signing` | to follow | signing, notarising and uploading builds to TestFlight, Play, Amazon, Steam and itch.io | [#14](https://github.com/Redth/skills/issues/14) |
 | `game-achievements` | to follow, if it earns its place | Game Center and Play Games achievements from one list | [#15](https://github.com/Redth/skills/issues/15) |
@@ -50,6 +50,8 @@ checks and sends them. Each works alone: `store-listings` takes PNGs from any to
 >
 > Design our App Store and Play screenshots from these captures.
 >
+> Make this release's screenshots match the ones we did last time.
+>
 > Our German captions don't fit: fix them.
 
 The usual flow, which the skill walks an agent through:
@@ -66,9 +68,15 @@ python3 <skill>/scripts/push.py apply plan-google.json               # only when
 And for designed screenshots (`store-screenshots`), after you've agreed the storyboard with the agent:
 
 ```sh
+python3 <skill>/scripts/sheet.py --inspiration --png        # your examples, described, for you to confirm
+python3 <skill>/scripts/render.py --style design/directions/bold/screenshot-style.json --out design/explore/bold --shots plan,recipe,shop --targets iphone
+python3 <skill>/scripts/sheet.py --directions design/explore/bold,design/explore/calm --png
 python3 <skill>/scripts/render.py                # store-screenshots.json → screenshots/<locale>/<screen>/<shot>.png
 python3 <skill>/scripts/sheet.py --png           # Apple's search row, the product page, Play, a contact sheet
-python3 <skill>/scripts/check.py                 # sizes, caption fit and floor, words, frames, contrast, per store
+python3 <skill>/scripts/check.py                 # sizes, caption fit and floor, words, frames, contrast, per store;
+                                                 # drift from the approved baseline once there is one
+python3 <skill>/scripts/baseline.py approve --note "what you approved"   # locks the look for later updates
+python3 <skill>/scripts/sheet.py --compare design/baseline --png         # every update: baseline beside now
 ```
 
 The rendered folder is `store-listing.json`'s screenshots folder: `listing.py check` takes it from there.

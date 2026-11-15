@@ -1,0 +1,85 @@
+{
+  "$schema": "../schema/screenshot-style.schema.json",
+  "$comment": "Suits consumer, education, wellness and kids-adjacent apps with a mascot or an illustration system. Loud heavy words with a colour word, a saturated background with a soft glow, frameless screens. The pattern of Headspace and Duolingo (described, never copied). A colour per shot or the brand's shapes and mascot need art the user owns: the templates draw one colour a set.",
+  "version": 1,
+  "name": "Playful saturated",
+  "locked": false,
+  "traits": {
+    "captionPosition": "top",
+    "captionAlign": "center",
+    "captionSize": "loud",
+    "captionWeight": "heavy",
+    "captionCase": "sentence",
+    "emphasis": "accent-word",
+    "lines": "two",
+    "support": "none",
+    "device": "frameless",
+    "devicePlacement": "bleed-bottom",
+    "deviceSize": "standard",
+    "background": "brand-colour",
+    "colour": "one-accent",
+    "density": "standard",
+    "decoration": "shapes",
+    "mood": "playful",
+    "story": "parallel"
+  },
+  "theme": {
+    "palette": {
+      "background": "#FFB524",
+      "ink": "#21123D",
+      "accent": "#7A1FE0"
+    },
+    "background": {
+      "kind": "glow"
+    },
+    "caption": {
+      "placement": "top",
+      "align": "center",
+      "maxLines": 2,
+      "weight": 900,
+      "sizePct": 11.0,
+      "floorPct": 7.5
+    },
+    "frame": "none"
+  },
+  "roles": {
+    "hero": {
+      "layout": "hero"
+    },
+    "feature": {
+      "layout": "framed-bleed"
+    },
+    "whole": {
+      "layout": "framed"
+    },
+    "detail": {
+      "layout": "callout"
+    },
+    "accent": {
+      "layout": "tilt",
+      "maxPerSet": 1
+    },
+    "pair": {
+      "layout": "pair",
+      "maxPerSet": 1
+    }
+  },
+  "stores": {
+    "google": {
+      "frame": "none"
+    }
+  },
+  "copy": {
+    "maxWords": 4,
+    "maxLines": 2,
+    "case": "sentence",
+    "emphasis": "one colour word a caption"
+  },
+  "drift": {
+    "captionSize": 0.05,
+    "captionPosition": 0.005,
+    "deviceBox": 0.01,
+    "textShare": 0.03,
+    "colour": 2
+  }
+}

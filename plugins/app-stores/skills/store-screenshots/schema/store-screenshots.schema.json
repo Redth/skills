@@ -13,6 +13,8 @@
     "primaryLocale": { "$comment": "What every other locale's strings and captures fall back to. Must be in locales.", "$ref": "#/$defs/locale" },
     "locales": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/locale" } },
     "theme": { "$ref": "#/$defs/theme" },
+    "style": { "$comment": "A screenshot-style.json (relative to this file): its theme and stores merge over these (the style wins) and its roles give shots with a role their layout. Locked once a baseline is approved (baseline.py).", "$ref": "#/$defs/path" },
+    "design": { "$comment": "The design folder: inspiration, directions, explorations, decisions.md and the approved baseline. Default 'design'.", "$ref": "#/$defs/path" },
     "targets": {
       "$comment": "The output screens, by the screen names store-listing.json uses.",
       "type": "object",
@@ -81,7 +83,8 @@
         "sizePct": { "$comment": "The caption's size as a % of the slot's width on a tall (portrait phone) slot; other aspect classes scale it (mid 0.66, square 0.78, wide 0.42).", "type": ["number", "null"], "minimum": 1, "maximum": 30 },
         "floorPct": { "$comment": "The smallest it may shrink to fit, on the same scale. A caption that won't fit at the floor fails the render.", "type": ["number", "null"], "minimum": 1, "maximum": 30 },
         "font": { "$comment": "A family from theme.fonts, or null for the system's.", "type": ["string", "null"] },
-        "plate": { "$comment": "fullbleed only: solid (a rounded plate), scrim (a fade from the edge) or none.", "enum": ["solid", "scrim", "none", null] }
+        "plate": { "$comment": "fullbleed only: solid (a rounded plate), scrim (a fade from the edge) or none.", "enum": ["solid", "scrim", "none", null] },
+        "case": { "$comment": "Drawn as written (none, the default), in capitals (upper) or lower case (lower). The strings stay as written.", "enum": ["none", "upper", "lower", null] }
       }
     },
     "background": {
@@ -170,6 +173,7 @@
         "$comment": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
         "capture": { "$comment": "The capture's screen id.", "$ref": "#/$defs/id" },
+        "role": { "$comment": "With a style: the style's role (hero, feature, detail, accent, gameplay...) whose layout this shot takes when it gives none.", "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
         "layout": { "$ref": "#/$defs/layout" },
         "frame": { "$ref": "#/$defs/frame" },
         "caption": { "$comment": "A string key.", "type": ["string", "null"] },

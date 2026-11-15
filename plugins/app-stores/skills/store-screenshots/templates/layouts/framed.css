@@ -3,9 +3,9 @@
   centred together in the slot. The only layout for a user's own Apple bezel, which must be shown whole.
 */
 .slot[data-layout="framed"] {
-  --device-w: 78;
-  --gap: 6;
+  --device-w: 76;
+  --gap: 9;
 }
-body[data-aspect="mid"] .slot[data-layout="framed"] { --device-w: 76; --gap: 4.5; }
+body[data-aspect="mid"] .slot[data-layout="framed"] { --device-w: 80; --gap: 7; }
 body[data-aspect="square"] .slot[data-layout="framed"] { --device-w: 60; }
 body[data-aspect="wide"] .slot[data-layout="framed"] { --device-w: 72; --gap: 2.6; }

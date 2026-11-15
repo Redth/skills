@@ -6,7 +6,7 @@
 .slot[data-layout="hero"] {
   --device-w: 80;
   --bleed: 0.34;
-  --caption-scale: 1.22;
+  --caption-scale: 1.12;
   --caption-extra-lines: 1;
   --caption-bias: 0.4;
   --caption-leading: 1.04;

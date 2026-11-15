@@ -58,7 +58,9 @@ The examples use the invented app "Sample Recipes" by Example Studio.
 | `out` | path | where the rendered files go; make it `store-listing.json`'s `screenshots.folder` |
 | `primaryLocale` | BCP 47 | the locale every other falls back to, string by string and capture by capture |
 | `locales` | list | the locales to render, the primary among them |
-| `theme` | object | the look shared by every shot (below) |
+| `theme` | object | the look shared by every shot (below); with a style, what the style doesn't set |
+| `style` | path | a `screenshot-style.json` whose theme and stores win over these, and whose roles give shots their layouts ([style.md](style.md)) |
+| `design` | path | the design folder: inspiration, directions, explorations, `decisions.md`, the baseline (default `design`; [baseline.md](baseline.md)) |
 | `targets` | object | the output screens, by id (below) |
 | `shots` | list | the set, in the order the stores show it (below) |
 | `panorama` | object or `null` | shots that share one canvas ([panoramas.md](panoramas.md)) |
@@ -94,7 +96,9 @@ PNGs work renamed into it. A target's `capture` names the device folder, a shot'
   - `sizePct`: the font size it starts at, as a percentage of the slot's width.
   - `floorPct`: the smallest it may shrink to. A caption that won't fit `maxLines` at the floor fails the render.
   - `font`: the family, from `fonts`.
-  Sizing: [legibility.md](legibility.md).
+  - `case`: `upper` or `lower` draws the words in that case (the strings stay as written); default as written.
+  Sizing: [legibility.md](legibility.md). The defaults are `sizePct` 9.5 and `floorPct` 7 (the size that reads in
+  Apple's search row, and about 12 pt on the product page).
 - `frame`: a drawn frame (`phone`, `phone-landscape`, `tablet`, `tablet-landscape`, `laptop`, `desktop`, `tv`,
   `watch`), `"none"`, or a frame file of the user's own ([frames.md](frames.md)).
 
@@ -121,13 +125,22 @@ The set, in order. Each:
 |---|---|
 | `id` | **the shot id in `store-listing.json`'s `screenshots.shots`**: the file's name |
 | `capture` | the capture screen id (the file name in each device's folder) |
-| `layout` | `fullbleed`, `band`, `framed`, `framed-bleed`, `tilt`, `pair`, `callout`, `hero`, `gameplay` ([layouts.md](layouts.md)) |
+| `role` | with a style: one of its roles (`hero`, `feature`, `detail`, `accent`...), which gives the layout when the shot gives none |
+| `layout` | `fullbleed`, `band`, `framed`, `framed-bleed`, `tilt`, `pair`, `callout`, `hero`, `gameplay` ([layouts.md](layouts.md)); beats the role's |
 | `caption`, `kicker`, `proof` | string keys in `strings` (the caption, a small line above it, a proof line under a hero) |
 | `targets` | the target ids it's made for; `null` or absent: all |
 | `tilt` | `left` \| `right`, for `tilt` |
 | `callout` | `{ "rect": [x, y, w, h], "scale": s }`: the part of the capture to enlarge, as fractions of it, and by how much |
 | `pair` | a second capture screen id, for `pair` |
 | `at` | `top` \| `bottom`, where `fullbleed`'s plate sits |
+
+## `style`
+
+`"style": "screenshot-style.json"` names the look ([style.md](style.md)). The config's `theme` and `stores` are
+merged under the style's, key by key: the style wins. Once a baseline is approved the style is locked: keep the
+look in the style and out of the config's `theme` (a contradicting key is a check error), and give shots roles rather
+than layouts. `render.py --style FILE --out design/explore/<name>` renders with another style for an exploration
+without touching the set.
 
 ## `stores`
 
@@ -149,7 +162,11 @@ goes to, or give a store its own key through a separate shot.
 - `<out>/render-report.json`: what each file is and how it came out (the caption's size, lines and fit, its share of
   the picture, the frame's box, fallbacks, seams, a hash). The check and the sheets read it. Rendering is cached on
   the hash of each file's inputs; `render.py --force` renders everything again.
-- `<out>/sheets/*.png` (from `sheet.py --png`): the mock-ups and the contact sheet.
+- `<out>/sheets/*.png` (from `sheet.py --png`): the mock-ups and the contact sheet; `compare-<target>.png` from
+  `sheet.py --compare`.
+- The report also records the `style` used (path, name, hash, traits), `configSha256`, and per file its `role`,
+  `tilt` and `background` (`kind`, `colours`), for the baseline's drift check.
+- `<design>/`: the inspiration, directions, explorations, `decisions.md` and `baseline/` ([baseline.md](baseline.md)).
 
 `store-listings` reads only the locales and screens its own config names, so the report and the sheets beside them
 are left alone. Don't hand-edit rendered files: change the config and render again.

@@ -57,9 +57,15 @@ people see. A landscape set shows only shot 1 in search.
 
 **Grade B (derived arithmetic on official type sizes).**
 
-On a portrait phone in Apple's search row, a caption needs a font size of about 9% of the slot's width to read as
-iOS's 11-point minimum. Most top apps' captions measure 5 to 9%: readable on the product page, marginal in search.
-Check it on the mock at real size rather than trusting the number: [legibility.md](legibility.md).
+On a portrait phone in Apple's search row (each shot about 118 pt wide), a caption needs a font size of about 9.5%
+of the slot's width (9.5u) to read as iOS's 11-point minimum
+(https://developer.apple.com/design/human-interface-guidelines/typography). Sixteen well-regarded top-captioned sets
+measured on 2026-11-14 put the headline at a median of about 8.9u (middle half 7.6 to 10.3u); the open-source
+generators agree (goldie 8.2u, https://github.com/software-mansion-labs/goldie/blob/699578c/src/layouts.ts;
+fastlane frameit 10% of the width, https://github.com/fastlane/fastlane/blob/ca02a52/frameit/lib/frameit/editor.rb).
+Vendor guides that give 56 to 72 px on a 1290-px canvas (4.3 to 5.6u) are half that, and too small in search. So the
+templates start at 9.5u with a 7u floor, and the check warns when shots 1 to 3 come out under 9.5u. Check it on the
+mock at real size rather than trusting the number: [legibility.md](legibility.md).
 
 ## 5. One set per store, not one set for all
 
@@ -116,8 +122,14 @@ a seam margin, rebuilt per device size, checked in right-to-left storefronts: [p
 ## 11. One visual system
 
 **Grade A.** Apple: "Consider using similar visual style, such as color palette, iconography, fonts, message, and
-tone." Every sampled app holds one caption style and place, one frame and one palette, changing only colour or
-tilt as accents. A dark-mode shot if the app has dark mode (https://developer.apple.com/app-store/product-page/).
+tone." (https://developer.apple.com/app-store/asset-best-practices/) Every sampled app holds one caption style and
+place, one frame and one palette, changing only colour or tilt as accents. Measured shot by shot, well-made sets
+(Things, Notion, Airbnb, Bears Gratitude, Crouton, Strava) keep the device's box identical on every non-hero shot
+(to 0.1u) and the caption's top within 0.5u; the hero is the one shot allowed to break the grid. The generators
+reserve one caption block for the whole set so devices line up (goldie's `copyHeightRatio`, frameit's
+`title_min_height`). `check.py` warns when a set's device moves more than 0.2u or its caption top more than 0.5u,
+and the baseline keeps the same system across updates ([baseline.md](baseline.md)). A dark-mode shot if the app
+has dark mode (https://developer.apple.com/app-store/product-page/).
 
 ## 12. Localise with room to grow
 

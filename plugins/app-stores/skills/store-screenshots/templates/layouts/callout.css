@@ -4,10 +4,10 @@
   that part sits on the screen. It's the app's own pixels, enlarged: never redrawn.
 */
 .slot[data-layout="callout"] {
-  --device-w: 84;
-  --bleed: 0.14;
+  --device-w: 86;
+  --bleed: 0.12;
 }
-body[data-aspect="mid"] .slot[data-layout="callout"] { --device-w: 84; --bleed: 0.16; }
+body[data-aspect="mid"] .slot[data-layout="callout"] { --device-w: 86; --bleed: 0.16; }
 body[data-aspect="square"] .slot[data-layout="callout"] { --device-w: 66; --bleed: 0.2; }
 body[data-aspect="wide"] .slot[data-layout="callout"] { --device-w: 78; --bleed: 0.12; --caption-bias: 0.5; }
 

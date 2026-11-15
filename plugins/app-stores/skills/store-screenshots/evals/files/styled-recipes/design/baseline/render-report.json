@@ -1,0 +1,997 @@
+{
+  "version": 1,
+  "renderedAt": "2026-11-10T14:55:00Z",
+  "config": "store-screenshots.json",
+  "configSha256": "6352ea5e7bff210debcec4826bbe5b0dce56d5e2b7c9ea28d705c04794c4e6c5",
+  "style": {
+    "path": "screenshot-style.json",
+    "name": "Sample Recipes bold green",
+    "sha256": "a4b9bcf66c84c25a5bec7973a2d4d8d8429a3fea5c87f170dba9a21844586b03",
+    "locked": false,
+    "traits": {
+      "captionPosition": "top",
+      "captionAlign": "center",
+      "captionSize": "standard",
+      "captionWeight": "heavy",
+      "captionCase": "sentence",
+      "emphasis": "accent-word",
+      "lines": "two",
+      "support": "none",
+      "device": "realistic",
+      "devicePlacement": "bleed-bottom",
+      "deviceSize": "standard",
+      "background": "brand-colour",
+      "colour": "monochrome-brand",
+      "density": "standard",
+      "decoration": "none",
+      "mood": "bold",
+      "story": "parallel"
+    }
+  },
+  "inputsSha256": "b0114e05d46cbe59d73c4e73893e0b5e37987d7d53058efa7ba6dd0829a6b54d",
+  "rendered": 4,
+  "unchanged": 8,
+  "files": [
+    {
+      "path": "en-US/iphone/plan.png",
+      "locale": "en-US",
+      "target": "iphone",
+      "store": "apple",
+      "shot": "plan",
+      "role": "feature",
+      "layout": "framed-bleed",
+      "tilt": null,
+      "width": 1320,
+      "height": 2868,
+      "aspectClass": "tall",
+      "capture": "../recipes/captures/en-US/iphone-6.9/plan.png",
+      "captureFallback": false,
+      "stringFallback": false,
+      "fallbacks": {
+        "captures": [],
+        "strings": []
+      },
+      "caption": {
+        "text": "Plan a week in minutes",
+        "lines": 2,
+        "maxLines": 2,
+        "fontPx": 125.4,
+        "sizePx": 125.4,
+        "floorPx": 92.4,
+        "atFloor": false,
+        "fits": true,
+        "hyphenated": false,
+        "box": [
+          326,
+          252,
+          668,
+          282
+        ],
+        "textShare": 0.0498,
+        "missingGlyphs": [],
+        "kicker": null,
+        "proof": null,
+        "ink": "#FFFFFF",
+        "accent": "#FFC94D",
+        "placement": "top",
+        "align": "center",
+        "case": "none"
+      },
+      "frame": {
+        "name": "phone",
+        "role": "main",
+        "box": [
+          106,
+          809,
+          1109,
+          2340
+        ],
+        "kind": "drawn",
+        "drawn": true,
+        "maker": null,
+        "tilted": false,
+        "cropped": true,
+        "overlapped": false,
+        "captureScale": 0.795
+      },
+      "callout": null,
+      "captureScale": 0.795,
+      "seams": [],
+      "background": {
+        "kind": "color",
+        "colours": [
+          "#0E3B2E"
+        ]
+      },
+      "lang": "en-US",
+      "dir": "ltr",
+      "sha256": "4c295270c6b0e4ace72afa0899e4c71b08265e0ed61653539785497d7b4e261d",
+      "inputsSha256": "a2d202a9e82c71e5607fdd26844c55b2158f67a4286d155120613b29535faf6e"
+    },
+    {
+      "path": "en-US/iphone/recipe.png",
+      "locale": "en-US",
+      "target": "iphone",
+      "store": "apple",
+      "shot": "recipe",
+      "role": "feature",
+      "layout": "framed-bleed",
+      "tilt": null,
+      "width": 1320,
+      "height": 2868,
+      "aspectClass": "tall",
+      "capture": "../recipes/captures/en-US/iphone-6.9/recipe.png",
+      "captureFallback": false,
+      "stringFallback": false,
+      "fallbacks": {
+        "captures": [],
+        "strings": []
+      },
+      "caption": {
+        "text": "Every recipe, step by step",
+        "lines": 2,
+        "maxLines": 2,
+        "fontPx": 125.4,
+        "sizePx": 125.4,
+        "floorPx": 92.4,
+        "atFloor": false,
+        "fits": true,
+        "hyphenated": false,
+        "box": [
+          296,
+          252,
+          728,
+          282
+        ],
+        "textShare": 0.0543,
+        "missingGlyphs": [],
+        "kicker": null,
+        "proof": null,
+        "ink": "#FFFFFF",
+        "accent": null,
+        "placement": "top",
+        "align": "center",
+        "case": "none"
+      },
+      "frame": {
+        "name": "phone",
+        "role": "main",
+        "box": [
+          106,
+          809,
+          1109,
+          2340
+        ],
+        "kind": "drawn",
+        "drawn": true,
+        "maker": null,
+        "tilted": false,
+        "cropped": true,
+        "overlapped": false,
+        "captureScale": 0.795
+      },
+      "callout": null,
+      "captureScale": 0.795,
+      "seams": [],
+      "background": {
+        "kind": "color",
+        "colours": [
+          "#0E3B2E"
+        ]
+      },
+      "lang": "en-US",
+      "dir": "ltr",
+      "sha256": "5a7f74b7c3952b85ace36fe2f566bbc8a34bb4dff9d4085cc69f6d7b7e8bb1cf",
+      "inputsSha256": "21ab502578e2d2115b7a6fb231ff0d71cae703810dfcff1aad6ce79291eab1ec"
+    },
+    {
+      "path": "en-US/iphone/shopping.png",
+      "locale": "en-US",
+      "target": "iphone",
+      "store": "apple",
+      "shot": "shopping",
+      "role": "detail",
+      "layout": "callout",
+      "tilt": null,
+      "width": 1320,
+      "height": 2868,
+      "aspectClass": "tall",
+      "capture": "../recipes/captures/en-US/iphone-6.9/shopping.png",
+      "captureFallback": false,
+      "stringFallback": false,
+      "fallbacks": {
+        "captures": [],
+        "strings": []
+      },
+      "caption": {
+        "text": "Your list, sorted by aisle",
+        "lines": 2,
+        "maxLines": 2,
+        "fontPx": 125.4,
+        "sizePx": 125.4,
+        "floorPx": 92.4,
+        "atFloor": false,
+        "fits": true,
+        "hyphenated": false,
+        "box": [
+          249,
+          252,
+          821,
+          282
+        ],
+        "textShare": 0.0613,
+        "missingGlyphs": [],
+        "kicker": null,
+        "proof": null,
+        "ink": "#FFFFFF",
+        "accent": null,
+        "placement": "top",
+        "align": "center",
+        "case": "none"
+      },
+      "frame": {
+        "name": "phone",
+        "role": "main",
+        "box": [
+          106,
+          809,
+          1109,
+          2340
+        ],
+        "kind": "drawn",
+        "drawn": true,
+        "maker": null,
+        "tilted": false,
+        "cropped": true,
+        "overlapped": true,
+        "captureScale": 0.795
+      },
+      "callout": {
+        "box": [
+          92,
+          1213,
+          1135,
+          164
+        ],
+        "rect": [
+          0.05,
+          0.17,
+          0.9,
+          0.06
+        ],
+        "scale": 1.202,
+        "captureScale": 0.956,
+        "moved": false
+      },
+      "captureScale": 0.795,
+      "seams": [],
+      "background": {
+        "kind": "color",
+        "colours": [
+          "#0E3B2E"
+        ]
+      },
+      "lang": "en-US",
+      "dir": "ltr",
+      "sha256": "78eba11c964bc23c5e92d51ba82d2b1835b7ff25a0db184f1954eed42f41da70",
+      "inputsSha256": "51541c10b248c7efca97fc277cf77141081e8501349fc34717218c7728f8712b"
+    },
+    {
+      "path": "en-US/iphone/profile.png",
+      "locale": "en-US",
+      "target": "iphone",
+      "store": "apple",
+      "shot": "profile",
+      "role": "feature",
+      "layout": "framed-bleed",
+      "tilt": null,
+      "width": 1320,
+      "height": 2868,
+      "aspectClass": "tall",
+      "capture": "../recipes/captures/en-US/iphone-6.9/profile.png",
+      "captureFallback": false,
+      "stringFallback": false,
+      "fallbacks": {
+        "captures": [],
+        "strings": []
+      },
+      "caption": {
+        "text": "Your tastes, remembered",
+        "lines": 2,
+        "maxLines": 2,
+        "fontPx": 125.4,
+        "sizePx": 125.4,
+        "floorPx": 92.4,
+        "atFloor": false,
+        "fits": true,
+        "hyphenated": false,
+        "box": [
+          293,
+          252,
+          734,
+          282
+        ],
+        "textShare": 0.0547,
+        "missingGlyphs": [],
+        "kicker": null,
+        "proof": null,
+        "ink": "#FFFFFF",
+        "accent": null,
+        "placement": "top",
+        "align": "center",
+        "case": "none"
+      },
+      "frame": {
+        "name": "phone",
+        "role": "main",
+        "box": [
+          106,
+          809,
+          1109,
+          2340
+        ],
+        "kind": "drawn",
+        "drawn": true,
+        "maker": null,
+        "tilted": false,
+        "cropped": true,
+        "overlapped": false,
+        "captureScale": 0.795
+      },
+      "callout": null,
+      "captureScale": 0.795,
+      "seams": [],
+      "background": {
+        "kind": "color",
+        "colours": [
+          "#0E3B2E"
+        ]
+      },
+      "lang": "en-US",
+      "dir": "ltr",
+      "sha256": "066bf4158bba545221affa54e85cc258ea721ececc941fd1f57a278c7209b8b2",
+      "inputsSha256": "57ae3fb026f5cd9637a8c33ce74410907bcf6664f4a155342cae0d5914ff623e"
+    },
+    {
+      "path": "en-US/iphone-medium/plan.png",
+      "locale": "en-US",
+      "target": "iphone-medium",
+      "store": "apple",
+      "shot": "plan",
+      "role": "feature",
+      "layout": "framed-bleed",
+      "tilt": null,
+      "width": 1206,
+      "height": 2622,
+      "aspectClass": "tall",
+      "capture": "../recipes/captures/en-US/iphone-6.9/plan.png",
+      "captureFallback": false,
+      "stringFallback": false,
+      "fallbacks": {
+        "captures": [],
+        "strings": []
+      },
+      "caption": {
+        "text": "Plan a week in minutes",
+        "lines": 2,
+        "maxLines": 2,
+        "fontPx": 114.6,
+        "sizePx": 114.6,
+        "floorPx": 84.4,
+        "atFloor": false,
+        "fits": true,
+        "hyphenated": false,
+        "box": [
+          298,
+          230,
+          610,
+          259
+        ],
+        "textShare": 0.0499,
+        "missingGlyphs": [],
+        "kicker": null,
+        "proof": null,
+        "ink": "#FFFFFF",
+        "accent": "#FFC94D",
+        "placement": "top",
+        "align": "center",
+        "case": "none"
+      },
+      "frame": {
+        "name": "phone",
+        "role": "main",
+        "box": [
+          96,
+          741,
+          1013,
+          2138
+        ],
+        "kind": "drawn",
+        "drawn": true,
+        "maker": null,
+        "tilted": false,
+        "cropped": true,
+        "overlapped": false,
+        "captureScale": 0.727
+      },
+      "callout": null,
+      "captureScale": 0.727,
+      "seams": [],
+      "background": {
+        "kind": "color",
+        "colours": [
+          "#0E3B2E"
+        ]
+      },
+      "lang": "en-US",
+      "dir": "ltr",
+      "sha256": "89fb6235fbf68dda1a3a155af320ae5f1abb291b351e1ea7b031646a607812f3",
+      "inputsSha256": "d539b31246a52bfab11c93734323b6350fcab2749dad2398acc1838507da26f1"
+    },
+    {
+      "path": "en-US/iphone-medium/recipe.png",
+      "locale": "en-US",
+      "target": "iphone-medium",
+      "store": "apple",
+      "shot": "recipe",
+      "role": "feature",
+      "layout": "framed-bleed",
+      "tilt": null,
+      "width": 1206,
+      "height": 2622,
+      "aspectClass": "tall",
+      "capture": "../recipes/captures/en-US/iphone-6.9/recipe.png",
+      "captureFallback": false,
+      "stringFallback": false,
+      "fallbacks": {
+        "captures": [],
+        "strings": []
+      },
+      "caption": {
+        "text": "Every recipe, step by step",
+        "lines": 2,
+        "maxLines": 2,
+        "fontPx": 114.6,
+        "sizePx": 114.6,
+        "floorPx": 84.4,
+        "atFloor": false,
+        "fits": true,
+        "hyphenated": false,
+        "box": [
+          270,
+          230,
+          665,
+          259
+        ],
+        "textShare": 0.0544,
+        "missingGlyphs": [],
+        "kicker": null,
+        "proof": null,
+        "ink": "#FFFFFF",
+        "accent": null,
+        "placement": "top",
+        "align": "center",
+        "case": "none"
+      },
+      "frame": {
+        "name": "phone",
+        "role": "main",
+        "box": [
+          96,
+          741,
+          1013,
+          2138
+        ],
+        "kind": "drawn",
+        "drawn": true,
+        "maker": null,
+        "tilted": false,
+        "cropped": true,
+        "overlapped": false,
+        "captureScale": 0.727
+      },
+      "callout": null,
+      "captureScale": 0.727,
+      "seams": [],
+      "background": {
+        "kind": "color",
+        "colours": [
+          "#0E3B2E"
+        ]
+      },
+      "lang": "en-US",
+      "dir": "ltr",
+      "sha256": "52a6f7815c99b23506da8abc4ad211433e02323e39f0a1f631c36c1c7bcaf4c9",
+      "inputsSha256": "28905693f23174b3964486283ad4162ccbecd2cdbf5de4bfd96c7623de80260e"
+    },
+    {
+      "path": "en-US/iphone-medium/shopping.png",
+      "locale": "en-US",
+      "target": "iphone-medium",
+      "store": "apple",
+      "shot": "shopping",
+      "role": "detail",
+      "layout": "callout",
+      "tilt": null,
+      "width": 1206,
+      "height": 2622,
+      "aspectClass": "tall",
+      "capture": "../recipes/captures/en-US/iphone-6.9/shopping.png",
+      "captureFallback": false,
+      "stringFallback": false,
+      "fallbacks": {
+        "captures": [],
+        "strings": []
+      },
+      "caption": {
+        "text": "Your list, sorted by aisle",
+        "lines": 2,
+        "maxLines": 2,
+        "fontPx": 114.6,
+        "sizePx": 114.6,
+        "floorPx": 84.4,
+        "atFloor": false,
+        "fits": true,
+        "hyphenated": false,
+        "box": [
+          228,
+          230,
+          750,
+          259
+        ],
+        "textShare": 0.0614,
+        "missingGlyphs": [],
+        "kicker": null,
+        "proof": null,
+        "ink": "#FFFFFF",
+        "accent": null,
+        "placement": "top",
+        "align": "center",
+        "case": "none"
+      },
+      "frame": {
+        "name": "phone",
+        "role": "main",
+        "box": [
+          96,
+          741,
+          1013,
+          2138
+        ],
+        "kind": "drawn",
+        "drawn": true,
+        "maker": null,
+        "tilted": false,
+        "cropped": true,
+        "overlapped": true,
+        "captureScale": 0.727
+      },
+      "callout": {
+        "box": [
+          84,
+          1110,
+          1037,
+          150
+        ],
+        "rect": [
+          0.05,
+          0.17,
+          0.9,
+          0.06
+        ],
+        "scale": 1.202,
+        "captureScale": 0.873,
+        "moved": false
+      },
+      "captureScale": 0.727,
+      "seams": [],
+      "background": {
+        "kind": "color",
+        "colours": [
+          "#0E3B2E"
+        ]
+      },
+      "lang": "en-US",
+      "dir": "ltr",
+      "sha256": "d6a6b47f5680f12b32ce8dd1c7ee42da668ee482f39a1468c7797e51e64ca733",
+      "inputsSha256": "8154f11c6bf425c55c1ab004fee1bc6dc0142139bc057a19254f70dc185157d8"
+    },
+    {
+      "path": "en-US/iphone-medium/profile.png",
+      "locale": "en-US",
+      "target": "iphone-medium",
+      "store": "apple",
+      "shot": "profile",
+      "role": "feature",
+      "layout": "framed-bleed",
+      "tilt": null,
+      "width": 1206,
+      "height": 2622,
+      "aspectClass": "tall",
+      "capture": "../recipes/captures/en-US/iphone-6.9/profile.png",
+      "captureFallback": false,
+      "stringFallback": false,
+      "fallbacks": {
+        "captures": [],
+        "strings": []
+      },
+      "caption": {
+        "text": "Your tastes, remembered",
+        "lines": 2,
+        "maxLines": 2,
+        "fontPx": 114.6,
+        "sizePx": 114.6,
+        "floorPx": 84.4,
+        "atFloor": false,
+        "fits": true,
+        "hyphenated": false,
+        "box": [
+          268,
+          230,
+          670,
+          259
+        ],
+        "textShare": 0.0548,
+        "missingGlyphs": [],
+        "kicker": null,
+        "proof": null,
+        "ink": "#FFFFFF",
+        "accent": null,
+        "placement": "top",
+        "align": "center",
+        "case": "none"
+      },
+      "frame": {
+        "name": "phone",
+        "role": "main",
+        "box": [
+          96,
+          741,
+          1013,
+          2138
+        ],
+        "kind": "drawn",
+        "drawn": true,
+        "maker": null,
+        "tilted": false,
+        "cropped": true,
+        "overlapped": false,
+        "captureScale": 0.727
+      },
+      "callout": null,
+      "captureScale": 0.727,
+      "seams": [],
+      "background": {
+        "kind": "color",
+        "colours": [
+          "#0E3B2E"
+        ]
+      },
+      "lang": "en-US",
+      "dir": "ltr",
+      "sha256": "cfa5ffca9cc75bfc2c0c1d51c4c007ea82335e743a83b34469483000121558b8",
+      "inputsSha256": "44c39aa066a4479d2e272aec34b8a1952db9ae1f3e9d304a7f2941d78c418905"
+    },
+    {
+      "path": "en-US/android-phone/plan.png",
+      "locale": "en-US",
+      "target": "android-phone",
+      "store": "google",
+      "shot": "plan",
+      "role": "feature",
+      "layout": "framed-bleed",
+      "tilt": null,
+      "width": 1080,
+      "height": 1920,
+      "aspectClass": "tall",
+      "capture": "../recipes/captures/en-US/android-phone/plan.png",
+      "captureFallback": false,
+      "stringFallback": false,
+      "fallbacks": {
+        "captures": [],
+        "strings": []
+      },
+      "caption": {
+        "text": "Plan a week in minutes",
+        "lines": 2,
+        "maxLines": 2,
+        "fontPx": 102.6,
+        "sizePx": 102.6,
+        "floorPx": 75.6,
+        "atFloor": false,
+        "fits": true,
+        "hyphenated": false,
+        "box": [
+          267,
+          143,
+          547,
+          232
+        ],
+        "textShare": 0.0611,
+        "missingGlyphs": [],
+        "kicker": null,
+        "proof": null,
+        "ink": "#FFFFFF",
+        "accent": "#FFC94D",
+        "placement": "top",
+        "align": "center",
+        "case": "none"
+      },
+      "frame": {
+        "name": "none",
+        "role": "main",
+        "box": [
+          86,
+          501,
+          907,
+          1613
+        ],
+        "kind": "none",
+        "drawn": null,
+        "maker": null,
+        "tilted": false,
+        "cropped": true,
+        "overlapped": false,
+        "captureScale": 0.84
+      },
+      "callout": null,
+      "captureScale": 0.84,
+      "seams": [],
+      "background": {
+        "kind": "color",
+        "colours": [
+          "#0E3B2E"
+        ]
+      },
+      "lang": "en-US",
+      "dir": "ltr",
+      "sha256": "0de71c9befeaace7349db84a7bbfab43aa7d61a2e229dbf5ba21d74ca4a4163b",
+      "inputsSha256": "a448b356d2f56c80186a0502be39a3ed2ce795cb7e5e17dd1fbb4390e95d7a2a"
+    },
+    {
+      "path": "en-US/android-phone/recipe.png",
+      "locale": "en-US",
+      "target": "android-phone",
+      "store": "google",
+      "shot": "recipe",
+      "role": "feature",
+      "layout": "framed-bleed",
+      "tilt": null,
+      "width": 1080,
+      "height": 1920,
+      "aspectClass": "tall",
+      "capture": "../recipes/captures/en-US/android-phone/recipe.png",
+      "captureFallback": false,
+      "stringFallback": false,
+      "fallbacks": {
+        "captures": [],
+        "strings": []
+      },
+      "caption": {
+        "text": "Every recipe, step by step",
+        "lines": 2,
+        "maxLines": 2,
+        "fontPx": 102.6,
+        "sizePx": 102.6,
+        "floorPx": 75.6,
+        "atFloor": false,
+        "fits": true,
+        "hyphenated": false,
+        "box": [
+          242,
+          143,
+          596,
+          232
+        ],
+        "textShare": 0.0666,
+        "missingGlyphs": [],
+        "kicker": null,
+        "proof": null,
+        "ink": "#FFFFFF",
+        "accent": null,
+        "placement": "top",
+        "align": "center",
+        "case": "none"
+      },
+      "frame": {
+        "name": "none",
+        "role": "main",
+        "box": [
+          86,
+          501,
+          907,
+          1613
+        ],
+        "kind": "none",
+        "drawn": null,
+        "maker": null,
+        "tilted": false,
+        "cropped": true,
+        "overlapped": false,
+        "captureScale": 0.84
+      },
+      "callout": null,
+      "captureScale": 0.84,
+      "seams": [],
+      "background": {
+        "kind": "color",
+        "colours": [
+          "#0E3B2E"
+        ]
+      },
+      "lang": "en-US",
+      "dir": "ltr",
+      "sha256": "0d7d397ad6ed0040f9148b7d1c71bfcbc8924aca408ad4c577d53143e4a1f0a3",
+      "inputsSha256": "1c73958343bb619fe53915d6c63a13306b10ef7e110fc7f1f01a22870736ab5b"
+    },
+    {
+      "path": "en-US/android-phone/shopping.png",
+      "locale": "en-US",
+      "target": "android-phone",
+      "store": "google",
+      "shot": "shopping",
+      "role": "detail",
+      "layout": "callout",
+      "tilt": null,
+      "width": 1080,
+      "height": 1920,
+      "aspectClass": "tall",
+      "capture": "../recipes/captures/en-US/android-phone/shopping.png",
+      "captureFallback": false,
+      "stringFallback": false,
+      "fallbacks": {
+        "captures": [],
+        "strings": []
+      },
+      "caption": {
+        "text": "Your list, sorted by aisle",
+        "lines": 2,
+        "maxLines": 2,
+        "fontPx": 102.6,
+        "sizePx": 102.6,
+        "floorPx": 75.6,
+        "atFloor": false,
+        "fits": true,
+        "hyphenated": false,
+        "box": [
+          204,
+          143,
+          672,
+          232
+        ],
+        "textShare": 0.0751,
+        "missingGlyphs": [],
+        "kicker": null,
+        "proof": null,
+        "ink": "#FFFFFF",
+        "accent": null,
+        "placement": "top",
+        "align": "center",
+        "case": "none"
+      },
+      "frame": {
+        "name": "none",
+        "role": "main",
+        "box": [
+          86,
+          501,
+          907,
+          1613
+        ],
+        "kind": "none",
+        "drawn": null,
+        "maker": null,
+        "tilted": false,
+        "cropped": true,
+        "overlapped": true,
+        "captureScale": 0.84
+      },
+      "callout": {
+        "box": [
+          76,
+          768,
+          929,
+          110
+        ],
+        "rect": [
+          0.05,
+          0.17,
+          0.9,
+          0.06
+        ],
+        "scale": 1.138,
+        "captureScale": 0.956,
+        "moved": false
+      },
+      "captureScale": 0.84,
+      "seams": [],
+      "background": {
+        "kind": "color",
+        "colours": [
+          "#0E3B2E"
+        ]
+      },
+      "lang": "en-US",
+      "dir": "ltr",
+      "sha256": "963521135b1a2ba00e3f6a5ae1ea505c857f7df49d20e9af8d77ba7013a9b06e",
+      "inputsSha256": "7ca473d9815bd58104f3a2f57e9bab2a56d71541227bf587658cca1a56180364"
+    },
+    {
+      "path": "en-US/android-phone/profile.png",
+      "locale": "en-US",
+      "target": "android-phone",
+      "store": "google",
+      "shot": "profile",
+      "role": "feature",
+      "layout": "framed-bleed",
+      "tilt": null,
+      "width": 1080,
+      "height": 1920,
+      "aspectClass": "tall",
+      "capture": "../recipes/captures/en-US/android-phone/profile.png",
+      "captureFallback": false,
+      "stringFallback": false,
+      "fallbacks": {
+        "captures": [],
+        "strings": []
+      },
+      "caption": {
+        "text": "Your tastes, remembered",
+        "lines": 2,
+        "maxLines": 2,
+        "fontPx": 102.6,
+        "sizePx": 102.6,
+        "floorPx": 75.6,
+        "atFloor": false,
+        "fits": true,
+        "hyphenated": false,
+        "box": [
+          240,
+          143,
+          600,
+          232
+        ],
+        "textShare": 0.0671,
+        "missingGlyphs": [],
+        "kicker": null,
+        "proof": null,
+        "ink": "#FFFFFF",
+        "accent": null,
+        "placement": "top",
+        "align": "center",
+        "case": "none"
+      },
+      "frame": {
+        "name": "none",
+        "role": "main",
+        "box": [
+          86,
+          501,
+          907,
+          1613
+        ],
+        "kind": "none",
+        "drawn": null,
+        "maker": null,
+        "tilted": false,
+        "cropped": true,
+        "overlapped": false,
+        "captureScale": 0.84
+      },
+      "callout": null,
+      "captureScale": 0.84,
+      "seams": [],
+      "background": {
+        "kind": "color",
+        "colours": [
+          "#0E3B2E"
+        ]
+      },
+      "lang": "en-US",
+      "dir": "ltr",
+      "sha256": "1d7d3facd18b30905bb60451d61f7e7fe4de055ae76e445261f6c4e3f202808a",
+      "inputsSha256": "e591211e71f5bb37154e8fb4b6f5a080bd28e787e862e2893784026dc572c039"
+    }
+  ],
+  "errors": []
+}

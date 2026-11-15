@@ -10,7 +10,7 @@
     "fonts": [],
     "palette": { "background": "#0E3B2E", "ink": "#FFFFFF", "accent": "#FFC94D" },
     "background": { "kind": "glow" },
-    "caption": { "placement": "top", "align": "center", "maxLines": 2, "weight": 800, "sizePct": 8.5, "floorPct": 6.0 },
+    "caption": { "placement": "top", "align": "center", "maxLines": 2, "weight": 800, "sizePct": 9.5, "floorPct": 7.0 },
     "frame": "phone"
   },
   "targets": {

@@ -2,6 +2,9 @@
 """sheet.py: the rendered set at the size the stores show it, for judging legibility (and a contact sheet).
 
     sheet.py [--config store-screenshots.json] [--report render-report.json] [--listing store-listing.json] [--png]
+    sheet.py --inspiration [--design design] [--png]
+    sheet.py --directions design/explore/a,design/explore/b [--png]
+    sheet.py --compare design/baseline [--png]
 
 Writes ``<out>/sheets/``:
 
@@ -13,6 +16,16 @@ Writes ``<out>/sheets/``:
 - ``play-listing-<locale>.html``: Google Play's listing on a phone with the phone screenshots' row;
 - ``contact-sheet.html``: every target x locale x shot, panoramas' seams shown as red gutters, fallbacks and
   caption problems badged.
+
+The design sheets, for choosing and keeping a look (references/baseline.md):
+
+- ``--inspiration``: ``<design>/sheets/inspiration.png``, the user's examples from ``<design>/inspiration/`` with
+  what they like and don't, each one's traits and the summary for the user to confirm;
+- ``--directions a,b,c``: ``<design>/sheets/directions.png``, each explored render folder's first three shots at
+  Apple's search-row size (each caption's size in points) and the product page's, with the direction's name and
+  traits;
+- ``--compare <folder>``: ``<out>/sheets/compare-<target>.png``, each shot beside its counterpart in the baseline
+  (or a previous render), with what drifted past the style's tolerances under the pair.
 
 With ``--png`` each page is rendered through headless Chrome to ``<out>/sheets/<name>.png`` (the whole page), for
 an agent to look at. Every mock is an approximation of the store, labelled as such; the sizes are derived, not
@@ -33,6 +46,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import check  # noqa: E402
+import styles  # noqa: E402
 from appstores_lib import chrome  # noqa: E402
 from appstores_lib import jsonio  # noqa: E402
 from appstores_lib import rules  # noqa: E402
@@ -340,7 +354,8 @@ class Sheets:
         """Write every page and the stylesheet; return ``[(html name, (css width, css height, scale), png name)]``."""
         if os.path.isdir(self.folder):
             for name in os.listdir(self.folder):
-                if name.endswith((".html", ".png", ".css")):
+                if name.endswith((".html", ".png")) and name.startswith(
+                        ("search-row-", "product-page-", "play-listing-", "contact-sheet")):
                     os.unlink(os.path.join(self.folder, name))
         os.makedirs(self.folder, exist_ok=True)
         shutil.copyfile(os.path.join(MOCKS, "mocks.css"), os.path.join(self.folder, "mocks.css"))
@@ -378,6 +393,247 @@ class Sheets:
         return done
 
 
+# ---------------------------------------------------------------------------------------------------------
+# The design sheets: the inspiration board, directions side by side, and before/after pairs.
+
+DESIGN_WIDTH = 1240
+INSPIRATION_WIDTH = 1040
+COMPARE_WIDTH = 1240
+
+
+def _page(title, lede, body, css="design.css"):
+    return ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<title>%s</title>\n'
+            '<link rel="stylesheet" href="%s">\n</head>\n<body>\n<h1>%s</h1>\n<p class="lede">%s</p>\n%s\n</body>\n'
+            '</html>\n' % (_esc(title), css, _esc(title), lede, body))
+
+
+def _chips(traits):
+    """Trait chips: ``name value`` for each trait (a list's values joined)."""
+    if not isinstance(traits, dict) or not traits:
+        return '<div class="chips"><span class="chip">no traits written down</span></div>'
+    out = []
+    for k, v in traits.items():
+        if k.startswith("$"):
+            continue
+        value = " / ".join(v) if isinstance(v, list) else str(v)
+        out.append('<span class="chip"><b>%s</b>%s</span>' % (_esc(k), _esc(value)))
+    return '<div class="chips">%s</div>' % "".join(out)
+
+
+def _rel(path, folder):
+    return os.path.relpath(path, folder).replace(os.sep, "/")
+
+
+def _write_pages(folder, pages, prefixes):
+    """Write ``pages`` ([(name, html, (css width, scale))]) and design.css into ``folder``, after removing the
+    old pages whose names start with one of ``prefixes``; return ``[(html name, view, png name)]``."""
+    os.makedirs(folder, exist_ok=True)
+    for name in os.listdir(folder):
+        if name.endswith((".html", ".png")) and name.startswith(tuple(prefixes)):
+            os.unlink(os.path.join(folder, name))
+    shutil.copyfile(os.path.join(MOCKS, "design.css"), os.path.join(folder, "design.css"))
+    out = []
+    for name, text, (width, scale) in pages:
+        with open(os.path.join(folder, name + ".html"), "w", encoding="utf-8") as f:
+            f.write(text)
+        out.append((name + ".html", (width, 400, scale), name + ".png"))
+    return out
+
+
+def render_pages(folder, pages):
+    """Render written pages to PNG (the whole page); return the PNG paths."""
+    done = []
+    with chrome.Chrome() as browser:
+        for page, (w, h, scale), name in pages:
+            out = os.path.join(folder, name)
+            browser.render(os.path.join(folder, page), w * scale, h * scale, out, scale=scale,
+                           full_page=MAX_PAGE_HEIGHT)
+            done.append(out)
+    return done
+
+
+def inspiration_page(design):
+    """The inspiration board from ``<design>/inspiration/inspiration.json``: each example with its source, what
+    the user likes and doesn't, its traits, and the summary for the user to confirm."""
+    folder = os.path.join(design, "inspiration")
+    path = os.path.join(folder, "inspiration.json")
+    if not os.path.isfile(path):
+        raise check.UsageError("no %s: put the user's examples in %s and describe them there first" % (
+            path, folder))
+    data = jsonio.load(path)
+    problems = styles.validate_inspiration(data)
+    if problems:
+        raise check.UsageError("%s doesn't match the inspiration shape:\n  %s" % (path, "\n  ".join(problems)))
+    sheets = os.path.join(design, "sheets")
+    summary = data.get("summary") or {}
+    confirmed = summary.get("confirmedByUser") is True
+    head = ('<section class="card"><h2>What these have in common <small>the summary</small></h2>%s%s'
+            '<p class="confirmed %s">%s</p></section>' % (
+                _chips(summary.get("traits")),
+                '<p class="muted">%s</p>' % _esc(summary["notes"]) if summary.get("notes") else "",
+                "yes" if confirmed else "no",
+                "Confirmed by the user." if confirmed else "Not confirmed yet: ask the user whether this is what they "
+                "like before proposing directions."))
+    cards = []
+    for ex in data.get("examples") or []:
+        verdict = ex.get("verdict") or ("dislike" if ex.get("dislikes") and not ex.get("likes") else "like")
+        img_path = os.path.join(folder, ex["file"])
+        pic = ('<img src="%s" alt="">' % _esc(_rel(img_path, sheets)) if os.path.isfile(img_path)
+               else '<div class="missing-shot">%s<br>not found</div>' % _esc(ex["file"]))
+        notes = "".join('<li class="like">%s</li>' % _esc(x) for x in ex.get("likes") or []) + \
+            "".join('<li class="dislike">%s</li>' % _esc(x) for x in ex.get("dislikes") or [])
+        cards.append('<div class="example %s"><div class="pic">%s</div><div class="verdict %s">%s</div><h3>%s</h3>'
+                     '<p class="muted">%s</p><ul class="notes">%s</ul>%s</div>' % (
+                         verdict, pic, verdict, "liked" if verdict == "like" else "not this",
+                         _esc(ex["file"]), _esc(ex.get("source") or "source not noted"), notes, _chips(ex.get("traits"))))
+    body = head + '<div class="examples">%s</div>' % "".join(cards)
+    lede = ("The examples the user gave, with what they like (+) and don't (&minus;) in each and its traits. Examples "
+            "inform the style only: never their marks, illustrations or trade dress.")
+    return sheets, [("inspiration", _page("Inspiration", lede, body), (INSPIRATION_WIDTH, 2))]
+
+
+def _load_out(folder):
+    path = os.path.join(folder, "render-report.json")
+    if not os.path.isfile(path):
+        raise check.UsageError("no render report in %s (render it first: render.py --style ... --out %s)" % (
+            folder, folder))
+    report = jsonio.load(path)
+    return report, [f for f in report.get("files") or [] if isinstance(f, dict)]
+
+
+def directions_page(design, folders):
+    """Each explored direction's first three shots of one target: at Apple's search-row size with the caption's
+    size in points, then at the product page's size, labelled with the direction's name and traits."""
+    sheets = os.path.join(design, "sheets")
+    cards = []
+    for folder in folders:
+        report, files = _load_out(folder)
+        style = report.get("style") or {}
+        name = style.get("name") or os.path.basename(os.path.normpath(folder))
+        if not files:
+            cards.append('<section class="card"><h2>%s</h2><p class="muted">nothing rendered</p></section>'
+                         % _esc(name))
+            continue
+        target = files[0].get("target")
+        locale = files[0].get("locale")
+        mine = [f for f in files if f.get("target") == target and f.get("locale") == locale][:check.SEARCH_SHOTS]
+        w, h = int(mine[0].get("width") or 1), int(mine[0].get("height") or 1)
+        landscape = w > h
+        shown = check.search_shot_points(w, h)
+        large = PRODUCT_PAGE["phone"][3 if landscape else 2]
+        small_row, large_row = [], []
+        for f in mine:
+            src = _esc(_rel(os.path.join(folder, f.get("path") or ""), sheets))
+            cap = f.get("caption") if isinstance(f.get("caption"), dict) and f["caption"].get("text") else None
+            pt = check.points_at(cap.get("fontPx"), w, shown) if cap else None
+            label = ('<div class="pt none">no caption</div>' if pt is None else '<div class="pt%s">%.1f pt%s</div>' % (
+                " low" if pt < check.MIN_TEXT_PT else "", pt, " &#9888; under 11" if pt < check.MIN_TEXT_PT else ""))
+            small_row.append('<div class="shot"><img src="%s" style="width:%.1fpx;height:%.1fpx" alt="">%s</div>' % (
+                src, shown, shown * h / float(w), label))
+            large_row.append('<div class="shot"><img src="%s" style="width:%dpx;height:%.1fpx" alt="">'
+                             '<div class="name">%s</div></div>' % (src, large, large * h / float(w),
+                                                                     _esc(f.get("shot"))))
+        cards.append(
+            '<section class="card"><h2>%s <small>%s &middot; %s &middot; %s</small></h2>%s<div class="direction">'
+            '<div><p class="row-label">In search (%d pt a shot)</p><div class="search-frame"><div class="strip">%s'
+            '</div></div></div><div><p class="row-label">On the product page (%d pt a shot)</p>'
+            '<div class="strip large">%s</div></div></div></section>' % (
+                _esc(name), _esc(_rel(folder, os.path.dirname(design))), _esc(target), _esc(locale),
+                _chips(style.get("traits")), round(shown), "".join(small_row), large, "".join(large_row)))
+    lede = ("Each direction's first shots as a shopper meets them: in Apple's search row (three a row, each caption's "
+            "size in points; under 11 pt is hard to read) and on the product page. Sizes are derived, not measured "
+            "on a device. Pick one with the user; open the files themselves for full size.")
+    return sheets, [("directions", _page("Directions", lede, "".join(cards)), (DESIGN_WIDTH, 2))]
+
+
+def compare_pages(inputs, folder):
+    """Pairs per target x shot: ``folder``'s (a baseline or a previous render) on the left, the current on the
+    right, with the drift past the style's tolerances written under each."""
+    base_report, base_files = _load_out(folder)
+    sheets = os.path.join(inputs.out, "sheets")
+    meta_path = os.path.join(folder, "baseline.json")
+    meta = jsonio.load(meta_path) if os.path.isfile(meta_path) else None
+    base_style = None
+    if os.path.isfile(os.path.join(folder, styles.STYLE_NAME)):
+        base_style = jsonio.load(os.path.join(folder, styles.STYLE_NAME))
+    tol = styles.drift_tolerances(inputs.style or base_style)
+    pairs, _new, gone = check.match_baseline(inputs.files, base_files, inputs.primary)
+    paired = dict((id(c), b) for c, b in pairs)
+    label = "Baseline (%s)" % (meta.get("approvedAt") or "")[:10] if meta else "Before"
+    pages = []
+    order = inputs.shot_order()
+    for tid in inputs.targets:
+        cur = [f for f in inputs.files if f.get("target") == tid]
+        if not cur:
+            continue
+        cur.sort(key=lambda f: (inputs.locales.index(f.get("locale")) if f.get("locale") in inputs.locales else 99,
+                                order.get(f.get("shot"), 1 << 20)))
+        cards = []
+        drifted = 0
+        for f in cur:
+            b = paired.get(id(f))
+            right = '<img src="%s" alt="">' % _esc(_rel(inputs.path(f.get("path") or ""), sheets))
+            if b is None:
+                left = '<div class="missing">no counterpart</div>'
+                found = ['<li class="note">new since then, and nothing of its role or layout to compare with</li>']
+            else:
+                left = '<img src="%s" alt="">' % _esc(_rel(os.path.join(folder, b.get("path") or ""), sheets))
+                messages = check.drift_messages(f, b, tol)
+                found = ['<li>%s</li>' % _esc(m) for m in messages] or [
+                    '<li class="ok">no drift past the tolerances</li>']
+                if (b.get("shot"), b.get("locale")) != (f.get("shot"), f.get("locale")):
+                    found.insert(0, '<li class="note">compared with %s/%s (its %s)</li>' % (
+                        _esc(b.get("locale")), _esc(b.get("shot")), "role" if b.get("role") and
+                        b.get("role") == f.get("role") else "layout"))
+                drifted += bool(messages)
+            cards.append('<div class="pair%s"><h3>%s <small>%s</small></h3><div class="sides"><div class="side">'
+                         '<p class="row-label">%s</p>%s</div><div class="side"><p class="row-label">Now</p>%s</div>'
+                         '</div><ul class="findings">%s</ul></div>' % (
+                             " drift" if any(not x.startswith('<li class="ok') and not x.startswith('<li class="note')
+                                             for x in found) else "",
+                             _esc(f.get("shot")), _esc(f.get("locale")), _esc(label), left, right, "".join(found)))
+        lede = ("%s on the left, the current render of %s on the right; under each pair what moved past the style's "
+                "drift tolerances (caption size %.0f%%, caption position %.1fu, device box %.1fu, text share %.0f%%, "
+                "colours delta E %.0f). Drift is for the user to decide on, not an error. %d of %d pairs drifted.%s" % (
+                    _esc(label), _esc(tid), 100 * tol["captionSize"], 100 * tol["captionPosition"],
+                    100 * tol["deviceBox"], 100 * tol["textShare"], tol["colour"], drifted, len(cur),
+                    " In the baseline but gone now: %s." % _esc(", ".join(g for g in gone if g.startswith(tid + "/")))
+                    if any(g.startswith(tid + "/") for g in gone) else ""))
+        pages.append(("compare-%s" % tid, _page("Compare: %s" % tid, lede, '<div class="pairs">%s</div>' %
+                                                "".join(cards)), (COMPARE_WIDTH, 2)))
+    return sheets, pages
+
+
+def _resolve_dir(value, base):
+    if os.path.isabs(value) or os.path.isdir(value):
+        return os.path.abspath(value)
+    return os.path.normpath(os.path.join(base, value))
+
+
+def design_main(args):
+    """The --inspiration, --directions and --compare sheets."""
+    base = os.path.dirname(os.path.abspath(args.config))
+    raw = {}
+    if os.path.isfile(args.config):
+        try:
+            raw = jsonio.load(args.config)
+        except jsonio.JsonError as e:
+            raise check.UsageError(str(e))
+    design = _resolve_dir(args.design, base) if args.design else styles.design_dir(args.config, raw)
+    if args.inspiration:
+        folder, pages = inspiration_page(design)
+        prefixes = ["inspiration"]
+    elif args.directions:
+        dirs = [_resolve_dir(d.strip(), base) for d in args.directions.split(",") if d.strip()]
+        folder, pages = directions_page(design, dirs)
+        prefixes = ["directions"]
+    else:
+        inputs = check.Inputs(args.config, args.listing, report_path=args.report)
+        folder, pages = compare_pages(inputs, _resolve_dir(args.compare, base))
+        prefixes = ["compare-"]
+    return folder, _write_pages(folder, pages, prefixes)
+
+
 def parser():
     """The argument parser."""
     p = argparse.ArgumentParser(prog="sheet.py", description="Mock the stores' pages at real size from the rendered "
@@ -386,6 +642,12 @@ def parser():
     p.add_argument("--report", help="the render report (default: <out>/render-report.json)")
     p.add_argument("--listing", help="store-listing.json, for the app's name and icon (default: beside the config)")
     p.add_argument("--png", action="store_true", help="render the pages to PNG through headless Chrome")
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--inspiration", action="store_true", help="the inspiration board (<design>/inspiration)")
+    mode.add_argument("--directions", metavar="DIRS", help="explored render folders, comma-separated, side by side")
+    mode.add_argument("--compare", metavar="DIR", help="pair the current render with a baseline or previous render "
+                      "folder, with the drift under each pair")
+    p.add_argument("--design", help="the design folder (default: the config's 'design', else design/)")
     return p
 
 
@@ -396,16 +658,22 @@ def main(argv=None):
     except SystemExit as e:
         return EXIT_OK if e.code in (0, None) else EXIT_USAGE
     try:
-        inputs = check.Inputs(args.config, args.listing, report_path=args.report)
+        if args.inspiration or args.directions or args.compare:
+            folder, pages = design_main(args)
+            render_with = lambda: render_pages(folder, pages)  # noqa: E731
+        else:
+            inputs = check.Inputs(args.config, args.listing, report_path=args.report)
+            sheets = Sheets(inputs)
+            pages = sheets.write()
+            folder = sheets.folder
+            render_with = lambda: sheets.render(pages)  # noqa: E731
     except (check.UsageError, jsonio.JsonError, rules.RulesError) as e:
         sys.stderr.write("sheet.py: %s\n" % e)
         return EXIT_USAGE
-    sheets = Sheets(inputs)
-    pages = sheets.write()
-    sys.stdout.write("Wrote %d page%s in %s.\n" % (len(pages), "" if len(pages) == 1 else "s", sheets.folder))
+    sys.stdout.write("Wrote %d page%s in %s.\n" % (len(pages), "" if len(pages) == 1 else "s", folder))
     if not args.png:
         for page, _, _ in pages:
-            sys.stdout.write("  %s\n" % os.path.join(sheets.folder, page))
+            sys.stdout.write("  %s\n" % os.path.join(folder, page))
         return EXIT_OK
     try:
         chrome.find_chrome()
@@ -413,14 +681,17 @@ def main(argv=None):
         sys.stderr.write("sheet.py: the HTML is written, but no PNGs: %s\n" % e)
         return EXIT_USAGE
     try:
-        done = sheets.render(pages)
+        done = render_with()
     except chrome.ChromeError as e:
         sys.stderr.write("sheet.py: Chrome couldn't render the sheets: %s\n" % e)
         return EXIT_USAGE
     for path in done:
         sys.stdout.write("  %s\n" % path)
-    sys.stdout.write("Open every picture above at full size. They're approximations of the stores' pages, sized from "
-                     "derived numbers, not the stores' own rendering.\n")
+    if args.inspiration or args.directions or args.compare:
+        sys.stdout.write("Open every picture above at full size, and show the user.\n")
+    else:
+        sys.stdout.write("Open every picture above at full size. They're approximations of the stores' pages, sized "
+                         "from derived numbers, not the stores' own rendering.\n")
     return EXIT_OK
 
 

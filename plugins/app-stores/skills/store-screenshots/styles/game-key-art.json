@@ -1,0 +1,79 @@
+{
+  "$schema": "../schema/screenshot-style.schema.json",
+  "$comment": "Suits games whose play reads at a glance, and Steam always (gameplay only, no words). The key art or logo first (the user's own), then full-bleed gameplay with no words and the HUD kept where it explains the game. The pattern of Clash Royale, Alto's Odyssey and Stardew Valley (described, never copied). The key-art shot carries at most one short line, on a scrim.",
+  "version": 1,
+  "name": "Game key art + full-bleed gameplay",
+  "locked": false,
+  "traits": {
+    "captionPosition": "none",
+    "captionAlign": "center",
+    "captionSize": "loud",
+    "captionWeight": "heavy",
+    "captionCase": "upper",
+    "emphasis": "none",
+    "lines": "one",
+    "support": "none",
+    "device": "none",
+    "devicePlacement": "whole",
+    "deviceSize": "big",
+    "background": "dark",
+    "colour": "photographic",
+    "density": "standard",
+    "decoration": "none",
+    "mood": "bold",
+    "story": "feature-a-shot"
+  },
+  "theme": {
+    "palette": {
+      "background": "#0D0F1A",
+      "ink": "#FFFFFF",
+      "accent": "#FFCF3F",
+      "plate": "#0D0F1A"
+    },
+    "background": {
+      "kind": "color"
+    },
+    "caption": {
+      "placement": "top",
+      "align": "center",
+      "maxLines": 1,
+      "weight": 900,
+      "sizePct": 11.0,
+      "floorPct": 8.0,
+      "plate": "scrim",
+      "case": "upper"
+    },
+    "frame": "none"
+  },
+  "roles": {
+    "key-art": {
+      "layout": "fullbleed",
+      "at": "bottom",
+      "maxPerSet": 1
+    },
+    "gameplay": {
+      "layout": "gameplay"
+    }
+  },
+  "stores": {
+    "google": {
+      "frame": "none"
+    },
+    "apple": {
+      "frame": "none"
+    }
+  },
+  "copy": {
+    "maxWords": 4,
+    "maxLines": 1,
+    "case": "upper",
+    "emphasis": "none"
+  },
+  "drift": {
+    "captionSize": 0.05,
+    "captionPosition": 0.005,
+    "deviceBox": 0.01,
+    "textShare": 0.03,
+    "colour": 2
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "$schema": "../schema/screenshot-style.schema.json",
+  "$comment": "Suits most utilities, productivity and consumer apps with a strong brand colour: the safest default. A heavy caption at the top, one accent word, a drawn phone bleeding off the bottom (about 12% cut off) on the brand's flat colour. The pattern of Things, Crouton, Bears Gratitude, Monzo and CARROT Weather (described, never copied). Put the brand's colours and font in theme; keep the sizes.",
+  "version": 1,
+  "name": "Brand-colour bold",
+  "locked": false,
+  "traits": {
+    "captionPosition": "top",
+    "captionAlign": "center",
+    "captionSize": "standard",
+    "captionWeight": "heavy",
+    "captionCase": "sentence",
+    "emphasis": "accent-word",
+    "lines": "two",
+    "support": "none",
+    "device": "realistic",
+    "devicePlacement": "bleed-bottom",
+    "deviceSize": "standard",
+    "background": "brand-colour",
+    "colour": "monochrome-brand",
+    "density": "standard",
+    "decoration": "none",
+    "mood": "bold",
+    "story": "parallel"
+  },
+  "theme": {
+    "palette": {
+      "background": "#1E4FD6",
+      "ink": "#FFFFFF",
+      "accent": "#FFD24D"
+    },
+    "background": {
+      "kind": "color"
+    },
+    "caption": {
+      "placement": "top",
+      "align": "center",
+      "maxLines": 2,
+      "weight": 800,
+      "sizePct": 9.5,
+      "floorPct": 7.0
+    },
+    "frame": "phone"
+  },
+  "roles": {
+    "hero": {
+      "layout": "hero"
+    },
+    "feature": {
+      "layout": "framed-bleed"
+    },
+    "whole": {
+      "layout": "framed"
+    },
+    "detail": {
+      "layout": "callout"
+    },
+    "accent": {
+      "layout": "tilt",
+      "maxPerSet": 1
+    },
+    "pair": {
+      "layout": "pair",
+      "maxPerSet": 1
+    }
+  },
+  "stores": {
+    "google": {
+      "frame": "none"
+    }
+  },
+  "copy": {
+    "maxWords": 5,
+    "maxLines": 2,
+    "case": "sentence",
+    "emphasis": "one accent word at most"
+  },
+  "drift": {
+    "captionSize": 0.05,
+    "captionPosition": 0.005,
+    "deviceBox": 0.01,
+    "textShare": 0.03,
+    "colour": 2
+  }
+}

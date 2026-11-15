@@ -171,6 +171,162 @@
         "The agent mentions iOS 27's product page header or search asset as the place for brand art without UI",
         "The agent leaves the choice to the user rather than silently rendering the logo-only shot or silently changing the wording"
       ]
+    },
+    {
+      "id": 11,
+      "prompt": "Make App Store and Play screenshots for Sample Recipes from the captures in evals/files/recipes/captures. It's for busy home cooks who want to plan a week of meals in minutes. Make them look great.",
+      "expected_output": "Before choosing a look, the agent asks the user for examples: 3 to 6 screenshot sets they like and 1 or 2 they don't (any apps or games, pictures they saved), explaining that the look comes from their taste; it offers the skill's starting styles as examples if they have none. It still gathers the brief and works toward a storyboard, and renders nothing before the user answers.",
+      "files": [],
+      "expectations": [
+        "The agent asks for screenshot sets the user likes (about 3 to 6) and one or two they don't, before proposing a visual style",
+        "The agent says the user can bring any app's or game's screenshots they saved, and that it won't fetch anything itself",
+        "The agent offers the starting styles in styles/ (named directions such as brand-colour bold or minimal editorial) as examples if the user has none",
+        "The agent does not pick a palette, font or layout style on its own and render it as the design",
+        "The agent gathers or confirms the brief (audience, core value, stores) and/or proposes a storyboard to agree",
+        "The agent does not run render.py before the user has answered"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Here are the screenshot sets I saved: evals/files/inspiration-board/. I love the bold blue one (one big line, the yellow word), the cream one feels calm and premium, the dark one looks pro. I hate the busy pink one: too many colours and badges. Our app is Sample Recipes, captures in evals/files/recipes/captures (config at evals/files/recipes/store-screenshots.json). What could ours look like?",
+      "expected_output": "The agent writes design/inspiration/inspiration.json describing each example in the traits vocabulary with the user's likes and dislikes and a summary, shows the inspiration sheet and asks the user to confirm the summary; then proposes 2 or 3 directions as style files (from styles/ such as brand-bold, minimal-editorial, dark-pro, adapted to the brand), renders only the first three shots of each on one target with render.py --style ... --out design/explore/<name>, makes the directions sheet, reports each caption's size in search, and asks the user to pick.",
+      "files": [
+        "evals/files/inspiration-board/liked-bold-blue.png",
+        "evals/files/inspiration-board/liked-calm-cream.png",
+        "evals/files/inspiration-board/liked-dark-glow.png",
+        "evals/files/inspiration-board/disliked-busy.png",
+        "evals/files/recipes/store-screenshots.json"
+      ],
+      "expectations": [
+        "The agent writes inspiration.json with one entry per example, the user's likes and dislikes in their words, the busy one marked as a dislike, and traits from the vocabulary (e.g. captionWeight heavy, emphasis accent-word, background brand-colour, density packed)",
+        "The agent runs sheet.py --inspiration (with --png) and asks the user to confirm the summary",
+        "The agent proposes 2 to 4 directions (not one take), each as a design/directions/<name>/screenshot-style.json, from the starting styles or written fresh",
+        "Each direction is rendered with render.py --style <its file> --out design/explore/<name> limited to the first three shots (--shots) and one target (--targets)",
+        "The agent does not render every target, locale or shot for the directions",
+        "The agent runs sheet.py --directions with the explored folders (with --png), looks at it, and reports each direction's caption size in points in the search row",
+        "The agent asks the user to pick (or mix) a direction rather than choosing for them",
+        "The agent copies none of the examples' marks, logos, illustrations or wording into the styles"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Go with the bold one. But make the captions a little smaller, they crowd the phone. (Project: evals/files/styled-recipes; pretend its style isn't locked yet: we're still iterating.)",
+      "expected_output": "The agent makes the one change asked (the caption size in the style, staying at or above the size that reads in search, or saying when it would drop under it), renders, shows the before and after with sheet.py --compare, and appends a dated entry to design/decisions.md that records the choice of the bold direction and the smaller captions in the user's words ('they crowd the phone').",
+      "files": [
+        "evals/files/styled-recipes/store-screenshots.json",
+        "evals/files/styled-recipes/screenshot-style.json",
+        "evals/files/styled-recipes/design/baseline/baseline.json",
+        "evals/files/styled-recipes/design/decisions.md"
+      ],
+      "expectations": [
+        "The agent records the decision in design/decisions.md with a date, what changed and why, quoting or closely paraphrasing the user ('they crowd the phone')",
+        "The agent changes only the caption size (one change a round), in the style rather than in the config's theme",
+        "The agent says what the new size does in search (points in the search row, or the 9.5u warning) rather than shrinking silently below it",
+        "The agent renders and shows sheet.py --compare against the previous render (before and after)",
+        "If the agent notices the fixture's style is locked, it raises that (a change of look is a new approval) rather than editing silently"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "These look right. Approve them as our baseline. (Project: evals/files/recipes, with the look in a screenshot-style.json the config names and a fresh render.)",
+      "expected_output": "The agent runs baseline.py approve with a --note in the user's words after making sure the render report is current (rendering again if not) and check.py has no errors, then reports what it did: the files copied to design/baseline/, baseline.json, the style now locked, the approval logged in design/decisions.md, and that later updates will be checked against it.",
+      "files": [
+        "evals/files/recipes/store-screenshots.json"
+      ],
+      "expectations": [
+        "The agent runs baseline.py approve with --note carrying the user's words",
+        "If the report isn't current or there's no style yet, the agent renders (or moves the theme into a style the config names) first instead of forcing approval",
+        "The agent reports that design/baseline/ now holds the renders, the report, the style and baseline.json",
+        "The agent says the style is now locked and that changing the look later is a new approval",
+        "The agent says the approval is logged in design/decisions.md",
+        "The agent does not commit"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "We redesigned the recipe screen. The new capture is evals/files/recipes/captures/en-US/iphone-6.9/plan.png (pretend it's the new recipe screen). Update the screenshots in evals/files/styled-recipes.",
+      "expected_output": "The agent puts the new capture in place of the recipe capture, renders with render.py (in the locked style, without editing the style or the config's theme), runs check.py (which compares with design/baseline by itself and says so), makes the compare sheets with sheet.py --compare design/baseline --png, looks at them, and reports any drift for the user to decide.",
+      "files": [
+        "evals/files/styled-recipes/store-screenshots.json",
+        "evals/files/styled-recipes/screenshot-style.json",
+        "evals/files/styled-recipes/design/baseline/baseline.json",
+        "evals/files/styled-recipes/design/decisions.md"
+      ],
+      "expectations": [
+        "The agent replaces the recipe capture (in the captures folder the config names) rather than editing PNGs by hand",
+        "The agent renders with render.py and does not edit screenshot-style.json or add theme keys to the config",
+        "The agent runs check.py and mentions the comparison with the approved baseline (drift warnings or none)",
+        "The agent runs sheet.py --compare design/baseline (with --png) and looks at the compare sheets",
+        "The agent explains that a changed capture alone shouldn't drift (only the screen's pixels change) and reports any drift found",
+        "The agent may run baseline.py status and reports the new render as ready for the user to see, not approved by itself"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "The captions look a bit small on the iPad. Bump them up a little in evals/files/styled-recipes.",
+      "expected_output": "The agent sees the style is locked (an approved baseline) and doesn't edit its caption size or override it in the config; it explains that changing the look is a new approval: the user's reason, baseline.py unlock --reason, explore or iterate, render, compare and approve again. It asks whether they want that, and may offer what's possible within the locked style (shorter words that fit bigger).",
+      "files": [
+        "evals/files/styled-recipes/store-screenshots.json",
+        "evals/files/styled-recipes/screenshot-style.json",
+        "evals/files/styled-recipes/design/baseline/baseline.json",
+        "evals/files/styled-recipes/design/decisions.md"
+      ],
+      "expectations": [
+        "The agent notices the style is locked (screenshot-style.json's locked, or design/baseline exists)",
+        "The agent does not edit the locked style's caption sizePct or add a caption override to the config's theme or a target",
+        "The agent explains that changing the look of an approved set is a new approval, and what that involves (unlock with the user's reason, render, compare with the baseline, approve again)",
+        "The agent asks the user whether they want to change the approved look, and for their reason",
+        "The agent does not run baseline.py unlock without the user's say"
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "check.py says something about drift on the recipe shot in evals/files/drift-three-lines. Is it OK to ship?",
+      "expected_output": "The agent reads the check (or its JSON) and the report and explains that the recipe caption now runs to three lines where the baseline's ran to two, so its top moved, its words cover more of the picture and on Play the device moved; it shows sheet.py --compare design/baseline, says drift is the user's call, recommends shortening the caption back to two lines (and notes the shot's maxLines 3 override), and doesn't loosen the drift tolerances.",
+      "files": [
+        "evals/files/drift-three-lines/store-screenshots.json",
+        "evals/files/drift-three-lines/screenshots/render-report.json",
+        "evals/files/drift-three-lines/design/baseline/render-report.json",
+        "evals/files/drift-three-lines/design/baseline/baseline.json"
+      ],
+      "expectations": [
+        "The agent reports that the recipe caption runs to 3 lines where the baseline's had 2",
+        "The agent names the related drift (the caption's top, the text share, the device on Play) from the check's findings",
+        "The agent runs or proposes sheet.py --compare design/baseline to show the pair",
+        "The agent says drift is a warning for the user to decide on, not an error",
+        "The agent recommends a shorter caption (two lines, about five words) and/or removing the shot's maxLines 3 override",
+        "The agent does not change the style's drift tolerances or unlock the style to make the warnings go away"
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "Unlock the screenshot style in evals/files/styled-recipes.",
+      "expected_output": "The agent asks for the user's reason before unlocking (baseline.py unlock requires it and it goes in decisions.md in their words), explains that changing the look after unlocking is a new approval, and only runs baseline.py unlock --reason with the reason the user gives.",
+      "files": [
+        "evals/files/styled-recipes/store-screenshots.json",
+        "evals/files/styled-recipes/screenshot-style.json",
+        "evals/files/styled-recipes/design/baseline/baseline.json",
+        "evals/files/styled-recipes/design/decisions.md"
+      ],
+      "expectations": [
+        "The agent asks the user why they want to unlock, before running anything",
+        "The agent does not invent a reason or run baseline.py unlock with a placeholder reason",
+        "Once given a reason, the agent runs baseline.py unlock --reason with the user's words",
+        "The agent says the reason is logged in design/decisions.md and that a new look needs a new approval (baseline.py approve)"
+      ]
+    },
+    {
+      "id": 19,
+      "prompt": "I love Headspace's screenshots. Make ours exactly like theirs: the orange blobs, their little characters, their font, the same words even. Sample Recipes, captures in evals/files/recipes/captures.",
+      "expected_output": "The agent describes what it can take from the example (the traits: playful saturated colour, loud heavy rounded words, a colour word, frameless screens) and proposes a direction from the playful-saturated starting style in the app's own colours and words, while declining to copy the other app's characters, illustrations, font, wording or trade dress, which are its owner's.",
+      "files": [],
+      "expectations": [
+        "The agent declines to copy the other app's characters, illustrations, shapes, font or captions",
+        "The agent explains that examples inform the style (traits such as loud heavy words, an accent word, saturated colour, frameless screens) but their marks and trade dress belong to their owner",
+        "The agent proposes a direction in the user's own brand (for example from styles/playful-saturated.json) and offers to render it and one or two others",
+        "The agent asks for the brand's own colours, font or art, or offers to use the app's",
+        "The agent leaves the choice of direction to the user"
+      ]
     }
   ]
 }

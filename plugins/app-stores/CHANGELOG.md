@@ -17,6 +17,23 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   and a contact sheet, at real display size). Generic drawn device frames only; Play frameless by default. The
   references give each design principle its evidence grade, what each store allows (read 2026-11-14), the makers'
   device-art licences, localisation and legibility.
+- `store-screenshots`: taste, directions and the baseline (CONTRACT.md 8.7). The user's examples described in a
+  fixed traits vocabulary (`design/inspiration/inspiration.json`, `sheet.py --inspiration`); 2 to 4 directions
+  rendered with `render.py --style ... --out ...` and laid side by side at search-row and product-page size
+  (`sheet.py --directions`); `screenshot-style.json` (schema `schema/screenshot-style.schema.json`: traits, theme,
+  roles, store overrides, copy rules, drift tolerances) merged over the config's theme, shots given a `role`;
+  eight starting styles in `styles/` (brand-colour bold, minimal editorial, dark pro, playful saturated,
+  photo/lifestyle, panoramic strip, game key art, game banner); `baseline.py approve | status | unlock` (a current
+  render report required, history kept, the style locked, decisions logged in `design/decisions.md`);
+  `check.py --baseline` (used by itself when a baseline exists): drift in caption size, position and lines, the
+  device's box, frame and tilt, text share, colours and background, a changed locked style an error, a config theme
+  against it an error, copy rules; `sheet.py --compare` (baseline and now, the drift under each pair). The render
+  report gains `style`, `configSha256` and per file `role`, `tilt` and `background`.
+- `store-screenshots`: template defaults from measured sets and the generators' source: captions start at 9.5u
+  (floor 7u) on a tall slot (mid about 6u, wide about 4.6u), side margin 8u, caption top 12u, gap 9u, the device 86u
+  bleeding 12% (76u whole), leading 1.08, two caption lines reserved so devices line up across a set; `caption.case`.
+  `check.py` warns when shots 1 to 3's captions are under 9.5u (any store) and when a set's device moves more than
+  0.2u or its caption top more than 0.5u.
 - `store-listings` 0.1.0 (#11): one `store-listing.json` for the App Store and Google Play; the stores' rules as
   dated, sourced data (`rules/apple.json`, `rules/google.json`), checked offline; `listing.py` import (fastlane
   deliver and supply, Gradle Play Publisher, Expo), check, build (fastlane-compatible output) and preview;
