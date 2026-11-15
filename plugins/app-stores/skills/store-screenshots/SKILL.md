@@ -66,7 +66,7 @@ output is the folder `store-listings` reads.
 
 | Input | Where | Notes |
 |---|---|---|
-| The current set (if the app has a listing) | `existing/<store>/screenshots/<locale>/<slot>/<NN>.<ext>` (`store-listings`' `push.py pull`) or any folder, e.g. `assets/screenshots/<device>/` | read first: [references/current-set.md](references/current-set.md) |
+| The current set (if the app has a listing) | `existing/<store>/screenshots/<locale>/<slot>/<NN>.<ext>` (`store-listings`' `push.py pull`) or any folder of them in the project, one subfolder per device | read first: [references/current-set.md](references/current-set.md) |
 | The brief | the conversation | who the app is for, its one core value, which stores and devices, the app's look (fonts, colours) |
 | Captures | `<captures>/<locale>/<capture device id>/<capture screen id>.png` | `store-capture`'s layout; any tool's PNGs renamed into it. At least the size they're shown at |
 | `store-screenshots.json` | beside `store-listing.json` usually (`--config`) | every field: [references/config.md](references/config.md) |
@@ -86,7 +86,7 @@ goes through all the steps; an update to an approved set is step 8. The design f
 
 0. **Start from the current set.** If the app has a listing, read its screenshots before designing anything: pull
    them (`store-listings`' `push.py pull` writes `existing/<store>/screenshots/<locale>/<slot>/`) or find the folder
-   they're in (`assets/screenshots/...`). `sheet.py --current <folder> --png` lays them out by store and device, in
+   they're in (a project folder, one subfolder per device). `sheet.py --current <folder> --png` lays them out by store and device, in
    order, and writes a skeleton `design/current.json`. Open each picture at full size and fill in what it shows
    (screen, the caption read off it word for word, the nearest layout, its traits), then what works and what
    doesn't; run `sheet.py --current --png` again and show `design/sheets/current.png`. **The user says** which shots
