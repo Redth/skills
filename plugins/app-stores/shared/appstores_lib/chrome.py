@@ -190,9 +190,22 @@ class Chrome:
         return False
 
     def start(self):
-        """Start Chrome with a fresh temporary profile and check it answers; raise ``ChromeError`` if not."""
+        """Start Chrome with a fresh temporary profile and check it answers; raise ``ChromeError`` if not.
+
+        A first launch on a busy machine (a CI runner) now and then doesn't answer in time, so a failed start is
+        tried once more with a fresh profile before giving up."""
         if self._proc is not None:
             return
+        try:
+            self._start_once()
+        except ChromeError as first:
+            try:
+                self._start_once()
+            except ChromeError as second:
+                raise ChromeError("%s\n(tried twice; the first time: %s)" % (second, first)) from None
+
+    def _start_once(self):
+        """One attempt at ``start``: launch Chrome and wait for it to answer."""
         path = self.path or find_chrome()
         self._root = tempfile.mkdtemp(prefix="appstores-chrome-")
         profile = os.path.join(self._root, "profile")

@@ -207,13 +207,29 @@ class LifetimeTests(unittest.TestCase):
         c.close()  # a second close is harmless
 
     def test_an_exception_inside_the_block_still_cleans_up(self):
+        class Boom(Exception):
+            pass
+
         root = None
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(Boom):  # (not RuntimeError: a Chrome that fails to start must fail as itself)
             with chrome.Chrome(CHROME) as c:
                 root = c._root
-                raise RuntimeError("boom")
+                raise Boom("boom")
+        self.assertIsNotNone(root)
         self.assertFalse(os.path.exists(root))
 
+
+
+class StartRetryTests(unittest.TestCase):
+    def test_a_start_that_fails_twice_says_so(self):
+        with tempfile.TemporaryDirectory() as d:
+            fake = os.path.join(d, "not-chrome")
+            with open(fake, "w") as f:
+                f.write("#!/bin/sh\nexit 1\n")
+            os.chmod(fake, 0o755)
+            with self.assertRaises(chrome.ChromeError) as ctx:
+                chrome.Chrome(fake, start_timeout=2).start()
+            self.assertIn("tried twice", str(ctx.exception))
 
 if __name__ == "__main__":
     unittest.main()
