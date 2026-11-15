@@ -282,5 +282,9 @@ class MainTests(Case):
         self.assertIn("map.json", err)
 
 
+def tearDownModule():
+    kit.assert_no_residue()
+
+
 if __name__ == "__main__":
     unittest.main()

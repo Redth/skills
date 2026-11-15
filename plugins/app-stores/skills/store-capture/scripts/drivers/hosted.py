@@ -20,7 +20,7 @@ from . import base
 DEFAULT_HOSTS = {"ios": "simctl", "ipados": "simctl", "tvos": "simctl", "watchos": "simctl", "visionos": "simctl",
                  "android": "adb"}
 # Steps the host does for a hosted driver (when the host has them).
-HOST_STEPS = ("launch", "deepLink", "url")
+HOST_STEPS = ("launch", "deepLink", "url", "appFile")
 
 
 def type_target(value):
@@ -202,6 +202,10 @@ class HostedDriver(base.Driver):
     def step_url(self, ctx, value):
         """``url`` by the host."""
         self.host_step(ctx, "url", value)
+
+    def step_appFile(self, ctx, value):
+        """``appFile`` (a file copied into the app's own data) by the host."""
+        self.host_step(ctx, "appFile", value)
 
     def use_host_screenshot(self, device):
         """True when the host takes the screenshots (the default when there is one)."""

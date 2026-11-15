@@ -59,7 +59,8 @@ class FakeRunner(object):
     """A ``base.RUNNER`` that records every command and answers from rules.
 
     ``on(pattern, out="", err="", code=0, write_png=None, then=None)``: a command whose shell-quoted line matches
-    the regex ``pattern`` gets that answer (the latest matching rule wins). ``write_png=(w, h, kwargs)`` writes a
+    the regex ``pattern`` gets that answer (the latest matching rule wins; ``out`` may be a callable given the
+    command, for answers that change from call to call). ``write_png=(w, h, kwargs)`` writes a
     PNG to the command's last argument (``simctl io … screenshot <path>``, ``screencapture … <path>``); ``out`` may
     be bytes (``screencap -p``). ``then`` is called with the command. Anything unmatched answers 0 with no output.
     ``calls`` holds ``(line, env)``; ``lines`` just the lines.
@@ -87,6 +88,8 @@ class FakeRunner(object):
                     write_png(cmd[-1], w, h, **(kw or {}))
                 if then is not None:
                     then(cmd)
+                if callable(out):
+                    out = out(cmd)
                 out_b = out if isinstance(out, bytes) else out.encode("utf-8")
                 err_b = err if isinstance(err, bytes) else err.encode("utf-8")
                 return code, out_b, err_b
@@ -172,6 +175,23 @@ class Hooks(object):
     def restore(self):
         """Put the real hooks back."""
         base.RUNNER, base.SPAWNER, base.SLEEP, base.CLOCK, base.LOG, base.DRY_RUN = self.saved
+
+
+SCRIPTS = os.path.dirname(os.path.abspath(__file__))
+KEPT = ("appstores_lib", "drivers", "__pycache__")
+
+
+def stray_folders():
+    """Folders beside the scripts that the skill doesn't ship (a test that wrote outside its temp folder)."""
+    return sorted(n for n in os.listdir(SCRIPTS) if os.path.isdir(os.path.join(SCRIPTS, n)) and n not in KEPT)
+
+
+def assert_no_residue():
+    """Each test module's ``tearDownModule``: fail when a test left a folder beside the scripts."""
+    stray = stray_folders()
+    if stray:
+        raise AssertionError("tests left folders beside the scripts (write only into temp folders): %s"
+                             % ", ".join(stray))
 
 
 def sample_plan(devices, screens, **extra):

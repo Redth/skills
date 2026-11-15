@@ -26,7 +26,8 @@ happen to any app.
   every pixel is opaque. Apple rejects alpha; a strict checker sees colour type, not pixels. The drivers flatten it
   (`flatten`, black by default) and report `alpha-flattened`; fix the source if it keeps happening. Simulator
   screenshots carry an alpha channel even with `--mask=ignored` (iOS 27.2, seen 2026-11-14), and so do some
-  emulators' `screencap`s, so expect `alpha-flattened` on those every time: it's harmless when every pixel is opaque.
+  emulators' `screencap`s: when every pixel is opaque it's harmless, so it stays in `fixes` but isn't shown per
+  shot, and the report's `notes` count it once. See-through pixels are a warning on the shot.
 - **Colour profiles.** Simulators of P3 devices and Mac captures can be tagged with the display's profile; Android's
   `--preserve-display-colors` keeps the panel's. Keep captures sRGB (or untagged sRGB), 8 bits a channel, so the
   stores' pages show what was reviewed. Conversions are reported (`converted-to-srgb`, `16-bit-to-8-bit`).
@@ -40,6 +41,10 @@ happen to any app.
   report's `statusBar` says whether it was verified; look at every picture's top edge.
 - **Lost on reboot or erase.** A locale change that reboots the simulator drops the override: apply it after every
   boot (the drivers do).
+- **Read back isn't seen.** A status bar reported fine while the picture showed a Wi-Fi "!" and "3G" beside an empty
+  signal triangle (Android demo mode on an API 36 emulator, 2026-11-14): the broadcasts were all answered. The
+  driver now sends Wi-Fi `fully` and hides the mobile icon, and calls the bar `verified` only when its pixels moved
+  with demo mode's clock; anything it can't confirm is `unverified`. The icons are still a person's to check.
 - **The mini simulators' red banner.** 360×780@3x simulators have shown a red `rdar://…` banner in the status bar
   on recent Xcodes. No mini is a required size: don't use them.
 - **Demo mode ignored.** Some Android makers' system UIs ignore SystemUI demo mode on real devices; emulators honour
@@ -64,6 +69,14 @@ happen to any app.
   shot is about typing.
 - **Waits too short on a cold start.** The first launch after install is slow (and slower on CI); wait for an
   element, not a fixed time.
+- **The right screen in the wrong state.** Reached by its taps, but signed out, empty, or under a what's-new sheet:
+  the picture looks like a capture and isn't one. Give each screen a `verify` element only its intended state shows
+  (a seeded item's name), and agree the staging with the user on one screen first ([staging.md](staging.md)).
+- **An animation that never stops** (a gently moving illustration, a live clock) keeps `settle` from finishing;
+  the warning is right and the picture is usually fine. `settle: { "ignore": [[x, y, w, h]] }` leaves that region
+  out of the comparison.
+- **Writing steps blind.** An unnamed button (no id, no label) needs an xpath; `capture.py --inspect` saves each
+  screen's tree, so read it rather than opening a session by hand.
 
 ## Devices and machines
 
@@ -73,6 +86,19 @@ happen to any app.
 - **A device left changed.** A run killed half-way left an emulator at 1080×1920 in German with demo mode on.
   Reset by hand, and tell the user what was left: `wm size reset`, `wm density reset`, demo mode `exit`,
   `simctl status_bar … clear`, locale and appearance back.
+- **The user's own app driven instead of ours.** With the developer's own simulators running the same debug build,
+  an in-app agent's CLI picked whichever agent it found first. The drivers now pin the agent of the plan's app on
+  the dedicated device (its UDID or serial, the bundle id, the process) and refuse when they can't tell
+  ([devflow.md](devflow.md#which-agent-pinned-to-the-app-on-the-device-it-owns)). A build-time port
+  (`-p:MauiDevFlowPort`) isn't honoured while DevFlow's broker runs.
+- **Port forwards on the user's phone.** A CLI that sets up `adb forward`/`adb reverse` without a serial changes
+  whichever device adb picks. The agents get `--device <serial>` and `ANDROID_SERIAL`; a forward that another
+  device holds is never taken (`--no-rebind`).
+- **Real accounts in an existing pipeline.** A screenshot suite that signs in to a real test account and resets
+  it on the production server isn't safe for an agent to run: reuse its data and ids under a demo account or a
+  bypass ([staging.md](staging.md)).
+- **SDK tools in versioned folders.** An SDK Manager install may have `cmdline-tools/19.0/`, `23.0/` and no
+  `latest/`: the driver takes the newest; `target.avdmanager` names one.
 - **Permissions for the tools.** macOS needs Screen Recording for `screencapture` (without it, only the wallpaper is
   captured) and Accessibility for clicks; Android needs `sysui_demo_allowed` for demo mode.
 - **Commands that read stdin.** `ffmpeg` and `adb shell` read standard input, so a script that runs them inside
@@ -96,6 +122,15 @@ happen to any app.
 - **The first Appium session on iOS takes minutes** while it builds WebDriverAgent; don't mistake it for a hang.
 - **The CLI's default platform.** Both agents' CLIs default `--platform` to `maccatalyst`: name the platform (the
   drivers do, from the plan).
+- **DevFlow's taps aren't touches** (iOS): a gesture on an unnamed parent answers `success: false`, point taps need
+  `EnableSyntheticTouch`, native menus aren't in the tree. Switch that device to `appium`, or add `AutomationId`s.
+- **One client at a time.** DevFlow's lease turns away a second client's changes; the drivers change the app only
+  through the CLI, retry a command another client turned away, and say so when one holds the lease.
+- **A .NET Debug APK that won't start.** Fast Deployment leaves the assemblies out of the APK; `adb install` then
+  gives an app that crashes on start. Build with `-p:EmbedAssembliesIntoApk=true`.
+- **Simulator.app moved** (Xcode 27): Appium's XCUITest driver failed to open it; `appium:isHeadless` (the default
+  on simulators now) avoids it. A failed session also left the simulator shut down, and the next screens failed
+  with "device is not booted": the driver now boots it again and reports the session's own error.
 - **The port.** On Android the agent's port may need `adb forward`; on a device several apps' agents can take
   neighbouring ports. Use the agent's own discovery (its broker or `list` command) rather than guessing.
 
@@ -104,6 +139,8 @@ happen to any app.
 - Simulator recordings are HEVC and variable frame rate; Android's are silent and capped at 180 s on older
   versions; Apple wants a constant 30 fps or less and (reportedly) an audio track; Vision Pro's 4K doesn't fit H.264
   Level 4.0. `video.py encode` and `check` handle each ([video.md](video.md)).
-- **Android demo mode isn't perfectly clean on every image.** `datatype none` still showed a "3G" label on an API 35
-  emulator image (seen 2026-11-14). Look at the status bar in the picture; turn mobile data off in demo mode
-  (`-e mobile hide`) or use an image without it.
+- **Android demo mode isn't perfectly clean on every image.** `datatype none` still showed a "3G" label on API 35
+  and 36 emulator images (seen 2026-11-14), and Wi-Fi a "!" without `-e fully true`. The driver hides the mobile
+  icon by default (`target.statusBarMobile` shows it) and sends Wi-Fi fully connected; the first pass after a boot
+  drew two Wi-Fi icons, so it enters demo mode twice the first time. Look at the status bar in every picture and
+  video.

@@ -44,8 +44,8 @@ class FakeTransport(object):
         self.routes = []
         self.calls = []
 
-    def on(self, method, pattern, status=200, body="{}"):
-        self.routes.append((method, re.compile(pattern), status, body))
+    def on(self, method, pattern, status=200, body="{}", port=None):
+        self.routes.append((method, re.compile(pattern), status, body, port))
         return self
 
     def __call__(self, method, url, headers, body, timeout):
@@ -53,8 +53,10 @@ class FakeTransport(object):
         self.calls.append((method, url, parsed))
         path = urllib.parse.urlsplit(url).path + ("?" + urllib.parse.urlsplit(url).query
                                                    if urllib.parse.urlsplit(url).query else "")
-        for m, rx, status, out in reversed(self.routes):
-            if m == method and rx.search(path):
+        for m, rx, status, out, port in reversed(self.routes):
+            if m == method and rx.search(path) and (port is None or urllib.parse.urlsplit(url).port == port):
+                if isinstance(out, list):   # answers in turn, the last one kept
+                    status, out = out.pop(0) if len(out) > 1 else out[0]
                 data = out if isinstance(out, bytes) else out.encode("utf-8")
                 return web.Response(status, {"content-type": "application/json"}, data)
         return web.Response(404, {}, b'{"value": {"error": "unknown command", "message": "no route"}}')
@@ -163,6 +165,22 @@ class Case(unittest.TestCase):
         screen = screen or self.screen([])
         return base.StepContext(device, screen, "en-US", base.Shot(), index, step)
 
+    def agents(self, *agents, cli=r"agent list"):
+        """The CLI's agent list and each agent's status: ``(port, package, device id, process id, platform)``."""
+        listed = []
+        for port, package, dev, pid, plat in agents:
+            listed.append({"id": "agent-%d" % port, "appName": "Sample Recipes", "platform": plat, "port": port,
+                           "processId": pid})
+            status = {"device": {"id": dev, "platform": plat}, "app": {"name": "Sample Recipes",
+                                                                     "packageId": package, "processId": pid}}
+            self.transport.on("GET", r"^/api/v1/agent/status$", body=json.dumps(status), port=port)
+        self.runner.on(cli, out=json.dumps(listed))
+
+    def ui(self):
+        """The CLI commands that act on the app (not the agent list, not ps)."""
+        return [l for l in self.runner.lines if " agent list" not in l and not l.startswith("ps ")
+                and " --version" not in l]
+
 
 def write_after(flag):
     """A FakeRunner ``then`` that writes a PNG to the argument after ``flag``."""
@@ -175,6 +193,10 @@ def write_after(flag):
 
 class DevFlowTests(Case):
 
+    def setUp(self):
+        Case.setUp(self)
+        self.agents((10224, "com.example.samplerecipes", None, 41017, "MacCatalyst"))
+
     def driver(self):
         return drivers.get("devflow")(self.options())
 
@@ -183,7 +205,7 @@ class DevFlowTests(Case):
         self.assertEqual(caps["name"], "devflow")
         self.assertEqual(caps["finders"], ["id", "text", "css", "xpath"])
         self.assertIn("tap", caps["steps"])
-        self.assertEqual(caps["throughHost"], ["launch", "deepLink", "url"])
+        self.assertEqual(caps["throughHost"], ["launch", "deepLink", "url", "appFile"])
         self.assertEqual(caps["hosts"]["ios"], "simctl")
         self.assertEqual(caps["hosts"]["android"], "adb")
 
@@ -203,44 +225,46 @@ class DevFlowTests(Case):
         dev = self.device("devflow")
         d.step_tap(self.ctx(dev), {"id": "search"})
         d.step_tap(self.ctx(dev), {"text": "Plan a week"})
-        self.assertEqual(self.runner.lines, [
-            "maui devflow ui tap --automationId search --platform maccatalyst",
-            "maui devflow ui tap --text 'Plan a week' --platform maccatalyst"])
+        self.assertEqual(self.ui(), [
+            "maui devflow ui tap --automationId search --agent-port 10224 --platform maccatalyst",
+            "maui devflow ui tap --text 'Plan a week' --agent-port 10224 --platform maccatalyst"])
 
     def test_tap_by_css_finds_the_agents_id_first(self):
         self.runner.on(r"ui query --selector", out=answer("devflow-query.json"))
         d = self.driver()
         d.step_tap(self.ctx(self.device("devflow")), {"css": "SearchBar"})
         self.assertEqual(self.runner.lines[-2],
-                         "maui devflow ui query --selector SearchBar --platform maccatalyst --json")
-        self.assertEqual(self.runner.lines[-1], "maui devflow ui tap el-17 --platform maccatalyst")
+                         "maui devflow ui query --selector SearchBar --agent-port 10224 --platform maccatalyst --json")
+        self.assertEqual(self.runner.lines[-1], "maui devflow ui tap el-17 --agent-port 10224 --platform maccatalyst")
 
     def test_xpath_goes_through_the_http_api_on_the_listed_port(self):
         self.runner.on(r"agent list", out=answer("devflow-agents.json"))
         self.transport.on("GET", r"^/api/v1/ui/elements\?strategy=xpath", body=answer("devflow-query.json"))
         d = self.driver()
         d.step_tap(self.ctx(self.device("devflow")), {"xpath": "//SearchBar[@AutomationId='search']"})
-        (method, url, _), = self.transport.calls
+        (method, url, _), = self.transport.find("GET", r"/ui/elements")
         self.assertTrue(url.startswith("http://127.0.0.1:10224/api/v1/ui/elements?strategy=xpath&value=%2F%2F"), url)
         # Once the port is known, the CLI is pointed at the same agent.
         self.assertEqual(self.runner.lines[-1], "maui devflow ui tap el-17 --agent-port 10224 --platform maccatalyst")
 
     def test_agent_port_from_the_target_skips_discovery(self):
         self.transport.on("POST", r"^/api/v1/ui/actions/back$", body='{"success": true}')
+        self.runner.on(r"ui navigate", code=1, err="Not a Shell app")
         d = self.driver()
         dev = self.device("devflow", target={"agentPort": 9300})
         d.step_back(self.ctx(dev), True)
-        self.assertEqual(self.transport.calls, [("POST", "http://127.0.0.1:9300/api/v1/ui/actions/back", {})])
-        self.assertEqual(self.runner.lines, [])
+        self.assertEqual(self.transport.find("POST", r"."), [("POST", "http://127.0.0.1:9300/api/v1/ui/actions/back", {})])
+        self.assertEqual(self.runner.matching(r"agent list"), [])
+        self.assertEqual(self.ui(), ["maui devflow ui navigate .. --agent-port 9300 --platform maccatalyst"])
 
     def test_type_fills_the_named_field_or_the_one_showing_text(self):
         d = self.driver()
         dev = self.device("devflow")
         d.step_type(self.ctx(dev), {"text": "pasta", "id": "search"})
         d.step_type(self.ctx(dev), {"text": "pasta", "into": "Search recipes"})
-        self.assertEqual(self.runner.lines, [
-            "maui devflow ui fill --automationId search pasta --platform maccatalyst",
-            "maui devflow ui fill --text 'Search recipes' pasta --platform maccatalyst"])
+        self.assertEqual(self.ui(), [
+            "maui devflow ui fill --automationId search pasta --agent-port 10224 --platform maccatalyst",
+            "maui devflow ui fill --text 'Search recipes' pasta --agent-port 10224 --platform maccatalyst"])
 
     def test_type_with_no_target_and_no_host_fails_clearly(self):
         with self.assertRaises(base.StepFailed) as cm:
@@ -250,8 +274,9 @@ class DevFlowTests(Case):
     def test_wait_for_an_element_uses_wait_until(self):
         d = self.driver()
         d.step_wait(self.ctx(self.device("devflow")), {"id": "recipe-title", "timeout": 12})
-        self.assertEqual(self.runner.lines, [
-            "maui devflow ui query --automationId recipe-title --wait-until exists --timeout 12 --platform maccatalyst"])
+        self.assertEqual(self.ui(), [
+            "maui devflow ui query --automationId recipe-title --wait-until exists --timeout 12 --agent-port 10224 "
+            "--platform maccatalyst"])
 
     def test_wait_that_times_out_is_a_step_failure(self):
         self.runner.on(r"--wait-until", code=1, err="Timed out")
@@ -265,14 +290,24 @@ class DevFlowTests(Case):
         d.step_scroll(self.ctx(dev), {"direction": "down", "times": 2})
         d.step_scroll(self.ctx(dev), {"to": {"id": "search"}})
         self.assertEqual(self.runner.matching(r"ui scroll"), [
-            "maui devflow ui scroll --dy -400 --platform maccatalyst",
-            "maui devflow ui scroll --dy -400 --platform maccatalyst",
-            "maui devflow ui scroll --element el-17 --platform maccatalyst"])
+            "maui devflow ui scroll --dy -400 --agent-port 10224 --platform maccatalyst",
+            "maui devflow ui scroll --dy -400 --agent-port 10224 --platform maccatalyst",
+            "maui devflow ui scroll --element el-17 --agent-port 10224 --platform maccatalyst"])
+
+    def test_scroll_to_falls_back_to_scrolling_down_until_found(self):
+        self.runner.on(r"ui query --automationId insight", out=answer("devflow-query.json"))
+        self.runner.on(r"ui scroll --element", out='{"success": false, "error": "Element is not in a ScrollView"}')
+        d = self.driver()
+        d.step_scroll(self.ctx(self.device("devflow")), {"to": {"id": "insight"}})
+        self.assertEqual(self.runner.matching(r"ui scroll"), [
+            "maui devflow ui scroll --element el-17 --agent-port 10224 --platform maccatalyst",
+            "maui devflow ui scroll --dy -400 --agent-port 10224 --platform maccatalyst"])
 
     def test_swipe_is_a_gesture_by_direction(self):
         d = self.driver()
         d.step_swipe(self.ctx(self.device("devflow")), {"direction": "left"})
-        self.assertEqual(self.runner.lines, ["maui devflow ui gesture swipe --direction left --platform maccatalyst"])
+        self.assertEqual(self.ui(), ["maui devflow ui gesture swipe --direction left --agent-port 10224 "
+                                     "--platform maccatalyst"])
         with self.assertRaises(base.StepFailed):
             d.step_swipe(self.ctx(self.device("devflow")), {"from": [10, 10], "to": [200, 10]})
 
@@ -294,9 +329,11 @@ class DevFlowTests(Case):
         self.runner.on(r"ui screenshot", then=write_after("--output"))
         d.prepare(dev, {})
         d.run_screen(dev, self.screen([]), "en-US")
-        self.assertIn("maui devflow theme set dark --scope app --platform maccatalyst", self.runner.lines)
+        self.assertIn("maui devflow theme set dark --scope app --agent-port 10224 --platform maccatalyst",
+                      self.runner.lines)
         d.reset(dev)
-        self.assertEqual(self.runner.lines[-1], "maui devflow theme set system --scope app --platform maccatalyst")
+        self.assertEqual(self.runner.lines[-1],
+                         "maui devflow theme set system --scope app --agent-port 10224 --platform maccatalyst")
 
     def test_launch_without_a_host_is_skipped_not_run(self):
         d = self.driver()
@@ -319,9 +356,71 @@ class DevFlowTests(Case):
         d.prepare(dev, {})
         shot = d.run_screen(dev, self.screen([{"tap": {"id": "plan-tab"}}]), "en-US")
         self.assertEqual(shot.status, "missed")
-        self.assertIn("Element not found", shot.reason)
+        # Not there yet: it waited for the element (the agent's query, then its tree) before giving up.
+        self.assertIn("id 'plan-tab' to appear didn't happen", shot.reason)
+        self.assertTrue(self.runner.matching(r"ui tree --agent-port 10224"))
+
+    def test_a_tap_that_answers_success_false_fails_with_advice(self):
+        self.runner.on(r"ui tap", out='{"success": false, "error": "No gesture recognizer on Label"}')
+        d = self.driver()
+        dev = self.device("devflow")
+        d.prepare(dev, {})
+        shot = d.run_screen(dev, self.screen([{"tap": {"text": "Summary"}}]), "en-US")
+        self.assertEqual(shot.status, "missed")
+        self.assertIn("No gesture recognizer on Label", shot.reason)
+        self.assertIn("appium driver", shot.reason)
+        self.assertIn("EnableSyntheticTouch", shot.reason)
+
+    def test_a_tap_waits_for_its_element_and_finds_a_native_view_in_the_tree(self):
+        # The CLI's automationId lookup misses a native view the app registered; the tree has it.
+        self.runner.on(r"ui tap --automationId", code=1, err="No elements found")
+        self.runner.on(r"ui query --automationId", out="[]")
+        self.runner.on(r"ui tree", out=json.dumps([{"id": "page", "type": "ContentPage", "children": [
+            {"id": "native:registered:9f2c", "type": "UIButton", "automationId": "add-recipe",
+             "bounds": {"x": 300, "y": 60, "width": 44, "height": 44}}]}]))
+        d = self.driver()
+        d.step_tap(self.ctx(self.device("devflow")), {"id": "add-recipe"})
+        self.assertEqual(self.runner.lines[-1],
+                         "maui devflow ui tap native:registered:9f2c --agent-port 10224 --platform maccatalyst")
+
+    def test_an_xpath_the_http_query_refuses_is_found_in_the_tree(self):
+        self.transport.on("GET", r"^/api/v1/ui/elements", status=400,
+                          body='{"title": "At least one query parameter required: type, automationId, text, or selector"}')
+        self.runner.on(r"ui tree", out=json.dumps([{"id": "page", "type": "ContentPage", "children": [
+            {"id": "el-3", "type": "Button", "automationId": "menu", "text": ""},
+            {"id": "el-4", "type": "Button", "text": "Summary"}]}]))
+        d = self.driver()
+        d.step_tap(self.ctx(self.device("devflow")), {"xpath": "//Button[@text='Summary']"})
+        self.assertEqual(self.runner.lines[-1], "maui devflow ui tap el-4 --agent-port 10224 --platform maccatalyst")
+
+    def test_a_command_turned_away_by_the_lease_is_tried_again(self):
+        answers = iter([(1, "", "Another DevFlow session is driving this app (MAUI CLI)"), (0, "{}", "")])
+
+        def runner(cmd, input=None, timeout=None, env=None, cwd=None):
+            line = base.quote(cmd)
+            self.runner.calls.append((line, dict(env or {})))
+            if " ui tap " in " " + line + " ":
+                code, out, err = next(answers)
+                return code, out.encode(), err.encode()
+            if "agent list" in line:
+                return 0, json.dumps([{"port": 10224, "platform": "MacCatalyst"}]).encode(), b""
+            return 0, b"", b""
+        base.RUNNER = runner
+        d = self.driver()
+        d.step_tap(self.ctx(self.device("devflow")), {"id": "search"})
+        self.assertEqual(len(self.runner.matching(r"ui tap")), 2)
+        self.assertIn(1.0, self.hooks.time.slept)
+
+    def test_a_lease_that_never_frees_is_a_clear_error(self):
+        self.runner.on(r"ui tap", code=1, err='{"success":false,"reason":"lease","error":"Another DevFlow session is '
+                                              'driving this app. Take control before mutating it."}')
+        with self.assertRaises(base.DriverError) as cm:
+            self.driver().step_tap(self.ctx(self.device("devflow")), {"id": "search"})
+        self.assertIn("holds this app's lease", str(cm.exception))
+        self.assertEqual(len(self.runner.matching(r"ui tap")), 3)
 
     def test_with_a_host_the_device_and_screenshot_are_the_hosts(self):
+        self.agents((10224, "com.example.samplerecipes", "00000000-0000-0000-0000-0000000000A1", 41017, "iOS"))
         d = self.driver()
         dev = self.device("devflow", platform="ios", target={"host": "fakehost", "deviceType": "iPhone 17 Pro Max"})
         d.prepare(dev, {})
@@ -335,11 +434,11 @@ class DevFlowTests(Case):
                                      "deepLink samplerecipes://plan", "screenshot"])
         self.assertEqual(shot.status_bar, "verified")
         self.assertEqual(shot.source["via"], "devflow")
-        # After the host's launch, the driver waits for the agent before the wait step.
-        self.assertEqual(self.runner.lines[1:4], [
-            "maui devflow agent wait --timeout 90",
-            "maui devflow ui status --platform ios",
-            "maui devflow ui query --automationId plan-title --wait-until exists --timeout 10 --platform ios"])
+        # After the host's launch, the driver finds this app's agent on this simulator, then waits for it.
+        self.assertEqual(self.ui(), [
+            "maui devflow ui status --agent-port 10224 --platform ios",
+            "maui devflow ui query --automationId plan-title --wait-until exists --timeout 10 --agent-port 10224 "
+            "--platform ios"])
         self.assertEqual(d.reset(dev), ["fakehost reset note"])
         self.assertEqual(host.done[-1], "reset")
 
@@ -361,9 +460,135 @@ class DevFlowTests(Case):
         self.assertEqual(self.transport.calls, [])
 
 
+class DevFlowPinningTests(Case):
+    """Several apps' agents running (the developer's own simulators and phone): the driver drives only the agent
+    of the plan's app on the device it owns, and says so clearly when it can't tell."""
+
+    OURS = "00000000-0000-0000-0000-0000000000A1"
+    THEIRS = ("C5F80D2A-0000-4000-8000-0000000000B1", "C5F80D2A-0000-4000-8000-0000000000B2")
+
+    def driver(self):
+        return drivers.get("devflow")(self.options())
+
+    def ios(self, **target):
+        t = {"host": "fakehost"}
+        t.update(target)
+        d = self.device("devflow", platform="ios", target=t)
+        return d
+
+    def test_with_the_developers_own_agents_running_it_pins_the_one_on_its_simulator(self):
+        self.agents((10223, "com.example.samplerecipes", self.THEIRS[0], 25102, "iOS"),
+                    (10224, "com.example.samplerecipes", self.THEIRS[1], 58016, "iOS"),
+                    (10226, "com.example.samplerecipes", self.OURS, 70127, "iOS"))
+        d = self.driver()
+        dev = self.ios()
+        d.prepare(dev, {})
+        d.step_tap(self.ctx(dev), {"id": "search"})
+        self.assertEqual(self.ui(), ["maui devflow ui tap --automationId search --agent-port 10226 --platform ios"])
+
+    def test_an_agent_without_a_status_is_matched_through_its_process(self):
+        self.runner.on(r"agent list", out=json.dumps([
+            {"port": 10223, "platform": "iOS", "appName": "Sample Recipes", "processId": 25102},
+            {"port": 10226, "platform": "iOS", "appName": "Sample Recipes", "processId": 70127}]))
+        home = "/Users/someone/Library/Developer/CoreSimulator/Devices/%s/data/Containers/Bundle/Application/X/" \
+               "SampleRecipes.app/SampleRecipes"
+        self.runner.on(r"^ps -o command= -p 25102$", out=home % self.THEIRS[0])
+        self.runner.on(r"^ps -o command= -p 70127$", out=home % self.OURS)
+        d = self.driver()
+        dev = self.ios()
+        d.prepare(dev, {})
+        d.step_tap(self.ctx(dev), {"id": "search"})
+        self.assertIn("--agent-port 10226", self.ui()[-1])
+
+    def test_only_other_simulators_agents_is_a_clear_error_never_a_guess(self):
+        self.agents((10223, "com.example.samplerecipes", self.THEIRS[0], 25102, "iOS"),
+                    (10224, "com.example.otherapp", self.OURS, 58016, "iOS"))
+        d = self.driver()
+        dev = self.ios(agentTimeout=5)
+        d.prepare(dev, {})
+        shot = d.run_screen(dev, self.screen([{"tap": {"id": "search"}}]), "en-US")
+        self.assertEqual(shot.status, "missed")
+        self.assertIn("no devflow agent of com.example.samplerecipes on %s" % self.OURS, shot.reason)
+        self.assertIn("port 10223", shot.reason)
+        self.assertEqual(self.runner.matching(r"ui tap"), [])
+
+    def test_two_agents_of_this_app_on_this_simulator_are_ambiguous(self):
+        self.agents((10223, "com.example.samplerecipes", self.OURS, 25102, "iOS"),
+                    (10226, "com.example.samplerecipes", self.OURS, 70127, "iOS"))
+        d = self.driver()
+        dev = self.ios()
+        d.prepare(dev, {})
+        with self.assertRaises(base.DriverError) as cm:
+            d.step_tap(self.ctx(dev), {"id": "search"})
+        self.assertIn("more than one devflow agent", str(cm.exception))
+        self.assertEqual(self.runner.matching(r"ui tap"), [])
+
+    def test_a_named_port_that_is_another_simulators_agent_is_refused(self):
+        self.agents((10225, "com.example.samplerecipes", self.THEIRS[0], 25102, "iOS"))
+        d = self.driver()
+        dev = self.ios(agentPort=10225)
+        d.prepare(dev, {})
+        with self.assertRaises(base.DriverError) as cm:
+            d.step_tap(self.ctx(dev), {"id": "search"})
+        self.assertIn("target.agentPort 10225 is another app's or another device's agent", str(cm.exception))
+
+    def test_after_each_launch_the_agent_is_found_again(self):
+        d = self.driver()
+        dev = self.ios()
+        d.prepare(dev, {})
+        self.agents((10224, "com.example.samplerecipes", self.OURS, 41017, "iOS"))
+        d.run_screen(dev, self.screen([{"launch": {}}, {"tap": {"id": "a"}}]), "en-US")
+        self.agents((10231, "com.example.samplerecipes", self.OURS, 41020, "iOS"))
+        d.run_screen(dev, self.screen([{"launch": {}}, {"tap": {"id": "b"}}], sid="recipe"), "en-US")
+        taps = self.runner.matching(r"ui tap")
+        self.assertIn("--agent-port 10224", taps[0])
+        self.assertIn("--agent-port 10231", taps[1])
+
+    def test_android_names_the_device_to_the_cli_and_matches_the_process_on_it(self):
+        self.agents((10223, "com.example.samplerecipes", "phone", 3301, "Android"),
+                    (10230, "com.example.samplerecipes", "emulator", 4402, "Android"))
+        self.runner.on(r"^adb -s emulator-5580 shell pidof com.example.samplerecipes$", out="4402\n")
+        d = self.driver()
+        dev = self.device("devflow", platform="android", target={"host": "fakehost", "udid": "emulator-5580"})
+        d.prepare(dev, {})
+        d.step_tap(self.ctx(dev), {"id": "search"})
+        self.assertEqual(self.ui()[-1], "maui devflow ui tap --automationId search --agent-port 10230 "
+                                        "--platform android --device emulator-5580")
+        self.assertTrue(all(env.get("ANDROID_SERIAL") == "emulator-5580"
+                            for line, env in self.runner.calls if line.startswith("maui devflow")))
+        # Forwards are made on this device only, never taking a port another device's forward holds.
+        self.assertTrue(all("-s emulator-5580" in l for l in self.runner.matching(r"^adb .*forward")))
+        self.assertTrue(all("--no-rebind" in l for l in self.runner.matching(r"^adb .*forward tcp")))
+
+    def test_a_port_forwarded_to_another_phone_is_never_taken(self):
+        self.agents((10223, "com.example.samplerecipes", "phone", 3301, "Android"))
+        self.runner.on(r"forward --list", out="R58N12345 tcp:10223 tcp:10223\n")
+        self.runner.on(r"pidof", out="")
+        d = self.driver()
+        dev = self.device("devflow", platform="android", target={"host": "fakehost", "udid": "emulator-5580",
+                                                                  "agentTimeout": 3})
+        d.prepare(dev, {})
+        with self.assertRaises(base.DriverError):
+            d.step_tap(self.ctx(dev), {"id": "search"})
+        self.assertEqual(self.runner.matching(r"forward --no-rebind"), [])
+        self.assertEqual(self.transport.calls, [])
+
+    def test_android_without_a_serial_and_two_devices_attached_is_refused(self):
+        self.runner.on(r"^adb devices$", out="List of devices attached\nR58N12345\tdevice\nemulator-5580\tdevice\n")
+        d = self.driver()
+        dev = self.device("devflow", platform="android", target={"host": "none"})
+        with self.assertRaises(base.DriverError) as cm:
+            d.prepare(dev, {})
+        self.assertIn("2 Android devices are attached", str(cm.exception))
+
+
 # -- ailoha --------------------------------------------------------------------------------------------------
 
 class AilohaTests(Case):
+
+    def setUp(self):
+        Case.setUp(self)
+        self.agents((9233, "com.example.samplerecipes", None, 52011, ""))
 
     def driver(self):
         return drivers.get("ailoha")(self.options())
@@ -372,7 +597,7 @@ class AilohaTests(Case):
         d = self.driver()
         dev = self.device("ailoha", platform="android", target={"host": "none", "agentPlatform": "flutter"})
         d.step_tap(self.ctx(dev), {"id": "login-button"})
-        self.assertEqual(self.runner.lines, ["ailoha ui tap --automationId login-button --platform flutter"])
+        self.assertEqual(self.ui(), ["ailoha ui tap --automationId login-button --agent-port 9233 --platform flutter"])
 
     def test_back_and_settle(self):
         self.runner.on(r"ui screenshot", then=write_after("--output"))
@@ -380,30 +605,35 @@ class AilohaTests(Case):
         dev = self.device("ailoha", platform="windows")
         d.step_back(self.ctx(dev), True)
         d.step_settle(self.ctx(dev), {"timeout": 2})
-        self.assertEqual(self.runner.lines[0], "ailoha ui navigate --back --platform winui")
-        self.assertEqual(self.runner.lines[1], "ailoha ui wait-for-idle --timeout-ms 2000 --platform winui")
+        self.assertEqual(self.ui()[0], "ailoha ui navigate --back --agent-port 9233 --platform winui")
+        self.assertEqual(self.ui()[1], "ailoha ui wait-for-idle --timeout-ms 2000 --agent-port 9233 --platform winui")
         self.assertTrue(self.runner.matching(r"ui screenshot --output"))
 
     def test_swipe_by_direction_crosses_the_windows_middle(self):
         self.runner.on(r"ui tree", out=answer("ailoha-tree.json"))
         d = self.driver()
         d.step_swipe(self.ctx(self.device("ailoha")), {"direction": "up"})
-        self.assertEqual(self.runner.lines[-1], "ailoha ui swipe 201 656 201 218 --platform maccatalyst")
+        self.assertEqual(self.runner.lines[-1], "ailoha ui swipe 201 656 201 218 --agent-port 9233 --platform maccatalyst")
 
     def test_swipe_from_to(self):
         d = self.driver()
         d.step_swipe(self.ctx(self.device("ailoha")), {"from": [300, 400], "to": [40, 400], "ms": 250})
-        self.assertEqual(self.runner.lines, ["ailoha ui swipe 300 400 40 400 --duration 250 --platform maccatalyst"])
+        self.assertEqual(self.ui(), ["ailoha ui swipe 300 400 40 400 --duration 250 --agent-port 9233 "
+                                     "--platform maccatalyst"])
 
     def test_android_http_needs_a_forward_that_reset_removes(self):
-        self.runner.on(r"agent list", out="[]")
+        self.agents((9233, "com.example.samplerecipes", None, 52011, "Android"))
+        self.runner.on(r"shell pidof com.example.samplerecipes", out="52011\n")
         self.transport.on("GET", r"^/api/v1/ui/elements\?strategy=xpath", body=answer("devflow-query.json"))
         d = self.driver()
         dev = self.device("ailoha", platform="android", target={"host": "fakehost", "udid": "emulator-5554"})
         d.prepare(dev, {})
         d.step_tap(self.ctx(dev), {"xpath": "//*[@automationId='search']"})
-        self.assertIn("adb -s emulator-5554 forward tcp:9233 tcp:9233", self.runner.lines)
-        self.assertEqual(self.transport.calls[0][1].split("/api")[0], "http://127.0.0.1:9233")
+        self.assertIn("adb -s emulator-5554 forward --no-rebind tcp:9233 tcp:9233", self.runner.lines)
+        self.assertTrue(all(c[1].startswith("http://127.0.0.1:9233/") for c in self.transport.calls))
+        # The CLI's own adb calls go to this device only.
+        tap = [c for c in self.runner.calls if " ui tap " in c[0]][0]
+        self.assertEqual(tap[1].get("ANDROID_SERIAL"), "emulator-5554")
         d.reset(dev)
         self.assertIn("adb -s emulator-5554 forward --remove tcp:9233", self.runner.lines)
 
@@ -449,7 +679,91 @@ class AppiumTests(Case):
         caps = self.driver().capabilities()
         self.assertEqual(caps["finders"], ["id", "text", "label", "xpath"])
         self.assertNotIn("url", caps["steps"])
-        self.assertEqual(caps["throughHost"], [])
+        self.assertEqual(caps["throughHost"], ["appFile"])
+
+    def sim_host(self):
+        """The fake host registered as simctl (with ensure_booted), as a real simulator's would be."""
+        test = self
+
+        class SimHost(FakeHost):
+            booted = True
+
+            def ensure_booted(self):
+                if SimHost.booted:
+                    return False
+                SimHost.booted = True
+                self.done.append("booted again")
+                return True
+
+            def apply_locale(self, device, locale, shot):
+                if not SimHost.booted:
+                    raise base.DriverError("xcrun simctl spawn … exited 149: Process spawn via launchd failed "
+                                           "because device is not booted")
+                FakeHost.apply_locale(self, device, locale, shot)
+
+        module = types.ModuleType("drivers.simhost")
+        module.DRIVER = SimHost
+        sys.modules["drivers.simhost"] = module
+        saved = drivers.REGISTRY["simctl"]
+        drivers.REGISTRY["simctl"] = "simhost"
+        test.addCleanup(lambda: (drivers.REGISTRY.__setitem__("simctl", saved), sys.modules.pop("drivers.simhost")))
+        return SimHost
+
+    def test_a_simulator_session_is_headless_unless_the_plan_says(self):
+        self.sim_host()
+        self.start("ios", "en-US", host=None)
+        self.assertIs(self.session_caps()["appium:isHeadless"], True)
+        self.transport.calls = []
+        self.start("ios", "en-US", host=None, capabilities={"appium:isHeadless": False})
+        self.assertIs(self.session_caps()["appium:isHeadless"], False)
+
+    def test_a_failed_session_reports_its_own_cause_and_the_next_screen_recovers(self):
+        SimHost = self.sim_host()
+        failure = '{"value": {"error": "unknown error", "message": "An unknown server-side error occurred: The file ' \
+                  '/Applications/Xcode.app/Contents/Developer/Applications/Simulator.app does not exist"}}'
+        self.transport.on("POST", r"^/session$", body=[(500, failure), (200, answer("appium-session.json"))])
+        d = self.driver()
+        dev = self.device("appium", platform="ios", target={})
+        d.prepare(dev, {})
+
+        def fail_and_shut_down(*_):
+            SimHost.booted = False
+        # The failed session leaves the simulator shut down (as XCUITest's driver did).
+        shot1 = d.run_screen(dev, self.screen([{"wait": {"ms": 10}}]), "en-US")
+        self.assertEqual(shot1.status, "missed")
+        self.assertIn("Appium couldn't start a session", shot1.reason)
+        self.assertIn("appium:isHeadless", shot1.reason)
+        fail_and_shut_down()
+        shot2 = d.run_screen(dev, self.screen([{"wait": {"ms": 10}}], sid="recipe"), "en-US")
+        self.assertEqual(shot2.status, "taken", shot2.reason)
+        self.assertIn("booted again", FakeHost.instances[0].done)
+        self.assertIn("shut down after the earlier failed Appium session", " ".join(shot2.warnings))
+
+    def test_a_session_that_shut_the_simulator_down_is_tried_once_more(self):
+        SimHost = self.sim_host()
+        failure = '{"value": {"error": "session not created", "message": "Simulator shut down"}}'
+
+        def route(*_):
+            SimHost.booted = False
+        self.transport.on("POST", r"^/session$", body=[(500, failure), (200, answer("appium-session.json"))])
+        d = self.driver()
+        dev = self.device("appium", platform="ios", target={})
+        d.prepare(dev, {})
+        SimHost.booted = True
+        original = d.start_session
+        calls = []
+
+        def start(device, locale):
+            calls.append(locale)
+            try:
+                return original(device, locale)
+            except base.DriverError:
+                route()
+                raise
+        d.start_session = start
+        shot = d.run_screen(dev, self.screen([{"wait": {"ms": 10}}]), "en-US")
+        self.assertEqual(shot.status, "taken", shot.reason)
+        self.assertEqual(len(calls), 2)
 
     def test_ios_session_capabilities(self):
         self.start("ios", "de-DE")
@@ -802,6 +1116,10 @@ class SharedTests(Case):
 
     def test_appium_locale_parts(self):
         self.assertEqual((appium.language_of("zh-Hans-CN"), appium.region_of("zh-Hans-CN")), ("zh-Hans", "CN"))
+
+
+def tearDownModule():
+    kit.assert_no_residue()
 
 
 if __name__ == "__main__":

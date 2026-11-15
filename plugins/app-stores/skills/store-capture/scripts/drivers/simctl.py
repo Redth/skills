@@ -15,8 +15,11 @@ What it does, in order (CONTRACT.md 10.3, 10.5):
   appearance``), and a clean status bar (``simctl status_bar … override``, read back with ``status_bar … list``).
 - steps: ``launch`` (``simctl launch --terminate-running-process`` with ``-ScreenshotSeed``, the screen's
   ``args`` as ``-Key value``, ``-AppleLanguages (xx)`` / ``-AppleLocale``, and ``env`` as ``SIMCTL_CHILD_*``;
-  ``clean`` reinstalls), ``deepLink`` and ``url`` (``simctl openurl``), ``wait``, ``settle``, ``script``. It can't
-  tap or see elements: pair it with a UI driver for those.
+  ``clean`` reinstalls), ``deepLink`` and ``url`` (``simctl openurl``), ``appFile`` (a file copied into the app's
+  data container, from ``simctl get_app_container … data``, the app stopped first), ``wait``, ``settle``,
+  ``script``. It can't tap or see elements: pair it with a UI driver for those.
+- the plan's ``staging.permissions`` for the platform are granted after install (``simctl privacy … grant``) and
+  revoked in ``reset``.
 - screenshot: ``simctl io … screenshot --type=png --mask=ignored`` (``--display`` from ``target.display`` for a
   device with more than one screen).
 - ``reset``: clear the status bar, put the appearance back, stop the app, shut down a simulator it booted, and
@@ -64,12 +67,40 @@ def first_language(defaults_output):
     return m.group(1) if m else None
 
 
+def app_file_paths(driver, ctx, value, family):
+    """An ``appFile`` step's source (absolute, from the plan's folder) and destination inside the app's data
+    (``into``: a path, or one by platform family, ``{"ios": …, "android": …}``). Raises ``StepFailed``."""
+    value = value or {}
+    src = driver.path(value.get("file"))
+    into = value.get("into")
+    if isinstance(into, dict):
+        into = into.get(ctx.device.get("platform")) or into.get(family)
+    if not src or not into:
+        raise base.StepFailed("step %d: appFile needs file and into (for %s)" % (ctx.index, ctx.device.get("platform")))
+    if not base.DRY_RUN and not os.path.isfile(src):
+        raise base.StepFailed("step %d: appFile's file isn't there: %s" % (ctx.index, src))
+    rel = into.replace("\\", "/").lstrip("/")
+    if ".." in rel.split("/"):
+        raise base.StepFailed("step %d: appFile's into stays inside the app's data: %s" % (ctx.index, into))
+    return src, rel
+
+
+def copy_replacing(src, dest):
+    """Copy ``src`` to ``dest`` (making its folder), removing ``dest`` and a database's ``-wal``/``-shm`` first."""
+    import shutil
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    for extra in ("", "-wal", "-shm", "-journal"):
+        if os.path.exists(dest + extra):
+            os.unlink(dest + extra)
+    shutil.copyfile(src, dest)
+
+
 class SimctlDriver(base.Driver):
     """Apple simulators through ``xcrun simctl`` (see the module's docstring)."""
 
     NAME = "simctl"
     PLATFORMS = ("ios", "ipados", "tvos", "watchos", "visionos")
-    STEPS = ("launch", "deepLink", "url", "wait", "settle", "script")
+    STEPS = ("launch", "deepLink", "url", "appFile", "wait", "settle", "script")
     FINDERS = ()
     BOOT_TIMEOUT = 600
 
@@ -81,6 +112,7 @@ class SimctlDriver(base.Driver):
         self.created = False
         self.booted_by_us = False
         self.launched = False
+        self.granted = []
         self.info = {}
 
     # -- finding and creating -----------------------------------------------------------------------------
@@ -197,6 +229,37 @@ class SimctlDriver(base.Driver):
         app = (device.get("app") or {}).get("app")
         if app:
             self.install(app)
+        self.grant(device)
+
+    def grant(self, device):
+        """Grant the plan's ``staging.permissions`` for this platform (``simctl privacy <udid> grant <service>
+        <bundle>``) before the app launches, so no prompt shows; remembered for ``reset``."""
+        bundle = (device.get("app") or {}).get("bundleId")
+        for service in device.get("permissions") or []:
+            if not bundle:
+                raise base.DriverError("granting %s needs the plan's app.%s.bundleId" % (service, device["platform"]))
+            res = self.simctl("privacy", self.udid, "grant", service, bundle, check=False)
+            if not res.ok:
+                raise base.DriverError("simctl privacy grant %s failed: %s (services: all, calendar, contacts, "
+                                       "location, location-always, photos, photos-add, media-library, microphone, "
+                                       "motion, reminders, siri; notifications can't be granted this way)"
+                                       % (service, (res.err or res.out).strip()[:200]))
+            if service not in self.granted:
+                self.granted.append(service)
+
+    def ensure_booted(self):
+        """Boot the simulator again if something shut it down (a failed Appium session can); return True when it
+        had to. The status bar override doesn't survive, so it's applied again."""
+        if base.DRY_RUN or not self.udid:
+            return False
+        _, d = self.find_device(udid=self.udid)
+        if d is not None and d.get("state") == "Booted":
+            return False
+        base.note("  the simulator %s isn't booted (state %s): booting it again" % (
+            self.udid, (d or {}).get("state", "unknown")))
+        self.boot()
+        self.state.pop("statusBar", None)
+        return True
 
     def _type_name(self, identifier):
         if not identifier:
@@ -253,6 +316,9 @@ class SimctlDriver(base.Driver):
         if original in ("light", "dark"):
             attempt("restoring the appearance", lambda: self.simctl("ui", self.udid, "appearance", original))
         bundle = (device.get("app") or {}).get("bundleId")
+        for service in self.granted:
+            self.simctl("privacy", self.udid, "revoke", service, bundle, check=False)
+        self.granted = []
         if self.launched and bundle:
             self.simctl("terminate", self.udid, bundle, check=False)
         if self.booted_by_us or (self.options.cleanup and self.ours):
@@ -273,7 +339,13 @@ class SimctlDriver(base.Driver):
                               quiet=True).out
         if first_language(current) == locale:
             return
-        self.simctl("spawn", self.udid, "defaults", "write", "-g", "AppleLanguages", "-array", locale)
+        try:
+            self.simctl("spawn", self.udid, "defaults", "write", "-g", "AppleLanguages", "-array", locale)
+        except base.CommandError as e:
+            # Something shut the simulator down (a failed UI-test session can): boot it again, once.
+            if "not booted" not in str(e) or not self.ensure_booted():
+                raise
+            self.simctl("spawn", self.udid, "defaults", "write", "-g", "AppleLanguages", "-array", locale)
         self.simctl("spawn", self.udid, "defaults", "write", "-g", "AppleLocale", "-string", apple_locale(locale))
         self.shutdown()
         self.boot()
@@ -292,7 +364,8 @@ class SimctlDriver(base.Driver):
 
     def apply_status_bar(self, device, mode, clock, shot):
         """``status_bar override`` with the plan's clock, Wi-Fi and full bars, a charged battery and no carrier;
-        read back with ``status_bar list``: ``verified`` when the time shows there, else ``overridden``."""
+        read back with ``status_bar list``: ``verified`` when the time shows there, else ``unverified`` (applied
+        but not confirmed: look at the picture, and retake)."""
         if device["platform"] not in STATUS_BAR_PLATFORMS:
             return "none"
         if mode != "clean":
@@ -311,8 +384,9 @@ class SimctlDriver(base.Driver):
         listed = self.simctl("status_bar", self.udid, "list", check=False, dry_output=when).out
         if when in listed:
             return "verified"
-        shot.warnings.append("status_bar list doesn't show the override: check the picture's status bar")
-        return "overridden"
+        shot.warnings.append("status_bar list doesn't show the override's time %s: it may not have taken; look at "
+                             "the picture's status bar" % when)
+        return "unverified"
 
     def script_env(self, device):
         """A ``script`` step gets the simulator's UDID as ``APPSTORES_UDID``."""
@@ -351,6 +425,8 @@ class SimctlDriver(base.Driver):
                 self.simctl("terminate", self.udid, bundle, check=False)
                 self.simctl("uninstall", self.udid, bundle, check=False)
                 self.install(app)
+                self.granted = []
+                self.grant(ctx.device)
             else:
                 ctx.warn("launch clean needs app.%s.app to reinstall from: nothing was cleared"
                          % ctx.device["platform"])
@@ -358,6 +434,23 @@ class SimctlDriver(base.Driver):
         self.simctl("launch", "--terminate-running-process", self.udid, bundle, *self.launch_args(ctx, value.get("args")),
                     env=env or None, timeout=120)
         self.launched = True
+
+    def step_appFile(self, ctx, value):
+        """``appFile``: copy ``file`` (from the plan's folder) to ``into`` inside the app's data container
+        (``simctl get_app_container <udid> <bundle> data``: ``Library/Caches/…``, ``Documents/…``), the app stopped
+        first and the file it replaces (and any ``-wal``/``-shm`` beside it) removed. The app must be installed."""
+        src, rel = app_file_paths(self, ctx, value, "ios")
+        bundle = self._bundle(ctx)
+        self.simctl("terminate", self.udid, bundle, check=False)
+        res = self.simctl("get_app_container", self.udid, bundle, "data", dry_output="<data container>")
+        container = res.out.strip()
+        dest = os.path.join(container, rel)
+        base.note("  copy %s -> %s" % (src, dest))
+        if base.DRY_RUN:
+            return
+        if not container or not os.path.isdir(container):
+            raise base.StepFailed("step %d: simctl gave no data container for %s (is it installed?)" % (ctx.index, bundle))
+        copy_replacing(src, dest)
 
     def step_deepLink(self, ctx, value):
         """``simctl openurl``."""

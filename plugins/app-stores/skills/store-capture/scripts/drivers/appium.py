@@ -9,8 +9,11 @@ One session a locale (the language is a session capability): ``POST /session`` w
 ``appium:automationName``, the device (``appium:udid``: the host's simulator or emulator), the app
 (``appium:bundleId`` / ``appium:appPackage`` + ``appium:appActivity`` / ``appium:app``), ``appium:language`` and
 ``appium:locale`` (Mac2: ``appium:appLocale``), the seed as a launch argument (``appium:processArguments`` on iOS,
-``appium:optionalIntentArguments`` on Android, ``appium:arguments`` on a Mac), ``appium:noReset``; anything in
-``target.capabilities`` is added as is. ``DELETE /session/<id>`` in ``reset``.
+``appium:optionalIntentArguments`` on Android, ``appium:arguments`` on a Mac), ``appium:noReset``, and on a
+simulator ``appium:isHeadless`` (we capture through ``simctl io``, so no Simulator window is needed, and Xcode 27
+moved Simulator.app where XCUITest's driver can't open it); anything in ``target.capabilities`` is added as is.
+``DELETE /session/<id>`` in ``reset``. A session that fails is reported with its own cause; before the next
+screen the simulator is booted again if the failure shut it down, and the session is tried once more.
 
 Steps: ``launch`` (iOS/Mac ``mobile: launchApp`` with ``arguments``/``environment``; Android ``mobile:
 startActivity`` with ``extras``), ``deepLink`` (``mobile: deepLink``), ``tap`` (find, then
@@ -72,12 +75,23 @@ def region_of(locale):
     return None
 
 
+def session_hint(message):
+    """A failed session's message, with what to do for the causes seen before."""
+    if "Simulator.app" in message and "does not exist" in message:
+        return message + " (Xcode moved Simulator.app: set \"appium:isHeadless\": true in target.capabilities; it's " \
+                         "the default on simulators, so check target.capabilities doesn't turn it off)"
+    if "xcodebuild failed" in message or "WebDriverAgent" in message:
+        return message + " (WebDriverAgent didn't build or start: `appium driver doctor xcuitest`, and allow the " \
+                         "first session minutes: appium:wdaLaunchTimeout)"
+    return message
+
+
 class AppiumDriver(HostedDriver):
     """Any app Appium reaches (see the module's docstring)."""
 
     NAME = "appium"
     PLATFORMS = ("ios", "ipados", "tvos", "android", "macos", "windows")
-    STEPS = ("launch", "deepLink", "tap", "type", "wait", "scroll", "back", "swipe", "settle", "script")
+    STEPS = ("launch", "deepLink", "appFile", "tap", "type", "wait", "scroll", "back", "swipe", "settle", "script")
     FINDERS = ("id", "text", "label", "xpath")
     SESSION_TIMEOUT = 600   # the first XCUITest session builds WebDriverAgent
     SCROLLS = 8             # scroll to an element: at most this many swipes
@@ -87,6 +101,7 @@ class AppiumDriver(HostedDriver):
         HostedDriver.__init__(self, options)
         self.session = None
         self.session_locale = None
+        self.session_error = None
 
     def has_own_step(self, kind):
         return kind in ("launch", "deepLink")
@@ -189,6 +204,8 @@ class AppiumDriver(HostedDriver):
             caps["appium:locale"] = "%s_%s" % (lang, region) if region else lang
             caps["appium:processArguments"] = {"args": self.launch_arguments(device)}
             caps["appium:noReset"] = True
+            if self.host_name(device) == "simctl":
+                caps["appium:isHeadless"] = True
         elif fam == "android":
             if ref:
                 caps["appium:udid"] = ref
@@ -253,9 +270,35 @@ class AppiumDriver(HostedDriver):
                 self.server(device), e)) from None
 
     def apply_locale(self, device, locale, shot):
-        """The host's locale, then a session in it."""
-        HostedDriver.apply_locale(self, device, locale, shot)
-        self.start_session(device, locale)
+        """The host's locale, then a session in it. After a failed session the simulator is booted again if it
+        was shut down (the XCUITest driver can leave it so), and a session that fails is tried once more after
+        that; what's reported is the session's own error, not what it left behind."""
+        h = self.host(device)
+        rebootable = h is not None and hasattr(h, "ensure_booted")
+        if self.session_error and rebootable and h.ensure_booted():
+            shot.warnings.append("the simulator was shut down after the earlier failed Appium session: booted again")
+        try:
+            HostedDriver.apply_locale(self, device, locale, shot)
+        except base.DriverError as e:
+            if self.session_error:
+                raise base.DriverError("%s (after an earlier failed Appium session: %s)" % (e, self.session_error)) \
+                    from None
+            raise
+        try:
+            self.start_session(device, locale)
+        except base.DriverError as e:
+            error = e
+            if rebootable and h.ensure_booted():
+                self.state.pop("statusBar", None)
+                try:
+                    self.start_session(device, locale)
+                    self.session_error = None
+                    return
+                except base.DriverError as again:
+                    error = again
+            self.session_error = session_hint(str(error))
+            raise base.DriverError("Appium couldn't start a session: %s" % self.session_error) from None
+        self.session_error = None
 
     def reset_app(self, device):
         """End the session."""
@@ -466,6 +509,10 @@ class AppiumDriver(HostedDriver):
     def step_back(self, ctx, value):
         """``POST /back``."""
         self.wd(ctx.device, "POST", self.sid() + "/back")
+
+    def inspect_tree(self, ctx):
+        """The page source (``GET /session/<id>/source``: XCUITest's or UiAutomator2's XML), for writing steps."""
+        return self.wd(ctx.device, "GET", self.sid() + "/source", timeout=120, dry_value="") or ""
 
     def agent_screenshot(self, device, path):
         """``GET /session/<id>/screenshot``: a base64 PNG at the device's pixels."""

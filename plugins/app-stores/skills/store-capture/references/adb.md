@@ -27,6 +27,22 @@ own). Always `-s <serial>`: with two devices attached, a bare `adb` fails or pic
 - `deviceLocale: true`: set the device's language as well as the app's (the default is the app's only, Android 13
   and later).
 - `display`: a display id for `screencap -d` (foldables, desktop modes).
+- `navigation`: `gesture` or `threebutton` (or `twobutton`): the navigation mode, through SystemUI's navigation bar
+  overlays (`cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.gestural`), put back
+  after. Gesture navigation leaves a thin handle over the bottom of the content instead of a bar of buttons; the
+  handle itself can't be hidden from adb on stock images, so keep important content clear of the bottom 24 dp, or
+  let the design step crop nothing and frame it.
+- `statusBarMobile: true`: show a full mobile signal in demo mode (hidden by default: an emulator without a SIM
+  draws an empty triangle). `statusBarCheck: false`: skip the pixel check below (the report then says
+  `overridden`).
+- `adb`, `emulator`, `avdmanager`: the tools' paths, when they aren't where the driver looks: `$ANDROID_HOME` (or
+  `$ANDROID_SDK_ROOT`)'s `platform-tools/adb`, `emulator/emulator` and `cmdline-tools/latest/bin/avdmanager`, then
+  the newest versioned `cmdline-tools/<version>/bin/avdmanager` (an SDK Manager install often has no `latest`), then
+  `tools/bin`, then `PATH`.
+
+`script` steps get the device as `ANDROID_SERIAL` (which adb honours, so a script's bare `adb` reaches only this
+device) and `APPSTORES_SERIAL`, with `APPSTORES_DEVICE`, `APPSTORES_PLATFORM`, `APPSTORES_APP_ID`,
+`APPSTORES_LOCALE` and `APPSTORES_SCREEN`.
 
 ## Lifecycle
 
@@ -34,9 +50,10 @@ own). Always `-s <serial>`: with two devices attached, a bare `adb` fails or pic
 |---|---|
 | Create an AVD | `avdmanager create avd -n appstores-android-phone -k "system-images;android-36;google_apis;arm64-v8a" -d medium_phone` |
 | Start headless, wait | `emulator -avd appstores-android-phone -no-window -no-audio -no-boot-anim -no-snapshot`, then `adb -s <serial> wait-for-device shell 'while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 1; done'` |
-| Install | `adb -s <serial> install -r build/app.apk` |
+| Install | `adb -s <serial> install -r build/app.apk` (a .NET MAUI Debug APK needs `-p:EmbedAssembliesIntoApk=true` at build: a Fast Deployment APK has no assemblies in it and crashes on start; the driver warns) |
 | Clear data (`launch.clean`) | `adb -s <serial> shell pm clear com.example.samplerecipes` |
-| Grant permissions | `adb -s <serial> shell pm grant com.example.samplerecipes android.permission.POST_NOTIFICATIONS` (`appops set` for special ones) |
+| Grant permissions (`staging.permissions.android`) | `adb -s <serial> shell pm grant com.example.samplerecipes android.permission.POST_NOTIFICATIONS` after install, `pm revoke` in reset (`appops set` for special ones, by hand) |
+| A file into the app's data (`appFile`) | `adb -s <serial> push app.db /data/local/tmp/appstores-app.db`, then `adb -s <serial> shell run-as com.example.samplerecipes sh -c 'mkdir -p cache && rm -f cache/app.db* && cp /data/local/tmp/appstores-app.db cache/app.db'`: `run-as` works only for a debuggable build; paths are relative to `/data/data/<package>` (`files/`, `cache/`, `databases/`) |
 | Launch with extras | `adb -s <serial> shell am start -W -S -n com.example.samplerecipes/.MainActivity --es ScreenshotScreen plan --es ScreenshotSeed demo` (`-S` stops it first; the driver types each value: `--es` strings, `--ez` booleans, `--ei` integers, `--ef` floats) |
 | Deep link | `adb -s <serial> shell am start -W -a android.intent.action.VIEW -d 'samplerecipes://recipe/demo' com.example.samplerecipes` |
 | Tap, type, swipe, back | `input tap <x> <y>`, `input text 'pasta'` (spaces as `%s`), `input swipe x1 y1 x2 y2 300`, `input keyevent KEYCODE_BACK` |
@@ -76,17 +93,35 @@ adb -s <serial> shell settings put global sysui_demo_allowed 1
 adb -s <serial> shell am broadcast -a com.android.systemui.demo -e command enter
 adb -s <serial> shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941
 adb -s <serial> shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false
-adb -s <serial> shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4
-adb -s <serial> shell am broadcast -a com.android.systemui.demo -e command network -e mobile show -e datatype none -e level 4
+adb -s <serial> shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4 -e fully true
+adb -s <serial> shell am broadcast -a com.android.systemui.demo -e command network -e mobile hide
 adb -s <serial> shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false
-adb -s <serial> shell am broadcast -a com.android.systemui.demo -e command status -e bluetooth hide -e volume hide -e alarm hide
+adb -s <serial> shell am broadcast -a com.android.systemui.demo -e command status -e bluetooth hide -e volume hide -e alarm hide \
+  -e location hide -e sync hide -e mute hide -e speakerphone hide -e zen hide -e eri hide -e tty hide -e cast hide -e hotspot hide
 # afterwards
 adb -s <serial> shell am broadcast -a com.android.systemui.demo -e command exit
 ```
 
+- **`-e fully true` on Wi-Fi**, or some images (API 36 emulators, seen 2026-11-14) draw the Wi-Fi icon with a "!"
+  (connected, no internet).
+- **Two passes the first time.** The first demo-mode pass after a boot left the real Wi-Fi icon beside demo
+  mode's (two Wi-Fi icons on an API 36 image, seen 2026-11-14); after `command exit` and the same broadcasts again
+  there's one. The driver does that the first time on each device.
+- **The mobile icon hidden** by default: an emulator without a SIM draws an empty signal triangle and a "3G" label
+  that `-e datatype none`, `-e level 4` and `-e fully true` didn't fill on that image. `target.statusBarMobile:
+  true` shows it full instead (`-e mobile show -e datatype none -e level 4 -e fully true`), for a real device with a
+  SIM.
+
+**Checked in the pixels.** Demo mode can't be read back, and the broadcasts are answered whether SystemUI honours
+them or not. So after them the driver captures the status bar's strip (24 dp at the density), moves demo mode's
+clock to another time, captures it again, puts the clock back, and captures it a third time: the report says
+`verified` only when the strip changed with the clock and came back; `unverified` (with a warning) when it didn't
+change (demo mode ignored: some makers' skins) or kept changing (an animation behind it). That proves demo mode is
+drawing the bar and its clock; the icons are still for a person to look at in every picture.
+
 Play's own guidance: no carrier names or notifications; battery, Wi-Fi and signal full. Since Android 15 apps draw
 edge to edge, so the bars sit over the app's content and show more. Gesture navigation's handle looks cleaner than
-three buttons. TV, Wear OS and Automotive have no phone status bar.
+three buttons (`target.navigation: "gesture"`). TV, Wear OS and Automotive have no phone status bar.
 
 ## Locale, appearance, animations
 

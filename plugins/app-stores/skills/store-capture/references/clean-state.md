@@ -1,7 +1,8 @@
 # Clean state: demo data, the clock, the status bar, locale, appearance
 
 A store screenshot shows the app at its best, in a state anyone could be in, the same on every device. What the
-drivers set, what the app must provide, and what to look for.
+drivers set, what the app must provide, and what to look for. Which screens, who's signed in and what data each
+shows is agreed with the user first and recorded in the plan's `staging`: [staging.md](staging.md).
 
 ## One state, every device, one pass
 
@@ -16,8 +17,11 @@ on Monday with live data and the iPad set on Friday.
   generator or licensed stock, emails and sites on `example.com`/`.org`/`.net` (reserved for examples),
   phone numbers in the fictional 555-01xx range, addresses that don't exist.
 - **Never a real account**, the user's contacts or photos, a tester's name, a customer's data, or a staging account
-  with real people's content. A demo account on a staging backend, reset before each run, or (better) an offline
-  fixture mode.
+  with real people's content. A demo account on a staging backend, reset before each run, its sign-in only in
+  environment variables (`staging.account.env`), or (better) a guest mode, a debug bypass or an offline fixture
+  mode ([staging.md](staging.md)).
+- **Without a screenshot mode**, seed the app's own data file before launch (`staging.seed`: a `command`, or a
+  `file` copied into its data container): [staging.md](staging.md#net-maui-without-a-screenshot-mode).
 - **Translated with the locale.** A German shot full of English recipe names looks wrong; so does a US date format
   in Japan. Demo data per locale, or neutral content that reads in every one.
 - **No one else's marks:** no other apps' logos or names, real brands, other platforms' names or devices (Apple's
@@ -32,6 +36,9 @@ on Monday with live data and the iPad set on Friday.
 - The **app's "now"** must agree: "2 minutes ago", today's date, a calendar, a greeting ("Good morning"), a
   streak, an expiry. The simulator's clock follows the Mac's and can't be set; the app takes "now" from its
   screenshot mode (`ScreenshotNow`, [screenshot-mode.md](screenshot-mode.md)).
+- **No screenshot mode?** Then on-screen times show the real clock ("9:30 PM" under a "9:41" status bar). Say so to
+  the user, and either pick screens that show no time, shift the seed so relative times read well and accept the
+  absolute ones, or add `ScreenshotNow`. Record the choice in `staging.clock`.
 - Avoid dates that age the shot: seasons, holidays, a year in a footer.
 
 ## The status bar
@@ -43,9 +50,9 @@ on Monday with live data and the iPad set on Friday.
 | Apple TV, Vision Pro, Android TV, Wear, web, Mac windows, games | none to clean | `statusBar` is `none` |
 
 - **Verify it.** Overrides have failed silently on some iOS runtimes, vanish on reboot or erase, and some Android
-  makers' skins ignore demo mode. The report's `statusBar` says `verified` (read back), `overridden` (applied, not
-  read back) or `unverified` (failed); none of them looks at the pixels, so look at
-  the top of every picture regardless.
+  makers' skins ignore demo mode. The report's `statusBar` says `verified` (iOS: read back; Android: its pixels
+  followed demo mode's clock), `unverified` (failed, or couldn't be confirmed) or `overridden` (the check turned
+  off); look at the icons at the top of every picture regardless.
 - The same time on every device and locale.
 - Play: no carrier, no notifications; battery, Wi-Fi and signal full.
 
@@ -70,7 +77,7 @@ default (`content_size large`, `font_scale 1.0`) unless a shot is about accessib
 
 | What | How to keep it out |
 |---|---|
-| Permission prompts | grant before launch: `simctl privacy … grant`, `pm grant`, Maestro's `permissions`, Appium's `autoGrantPermissions` |
+| Permission prompts | grant before launch: `staging.permissions` (the drivers run `simctl privacy … grant`, `pm grant`), Maestro's `permissions`, Appium's `autoGrantPermissions` |
 | Onboarding, "rate this app", what's new, tooltips, cookie notices | the screenshot mode skips them; or the app's data marks them seen |
 | Toasts, snackbars, banners | wait for them to go (`wait`, `settle`), or don't trigger them |
 | Spinners, skeletons | offline fixtures; `wait` for the content's element, then `settle` |

@@ -317,5 +317,9 @@ class RealEncodeTests(unittest.TestCase):
         self.assertFalse(os.path.exists(out))
 
 
+def tearDownModule():
+    kit.assert_no_residue()
+
+
 if __name__ == "__main__":
     unittest.main()

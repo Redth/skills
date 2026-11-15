@@ -21,6 +21,24 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   how to add a screenshot mode on SwiftUI, UIKit, Compose, .NET MAUI, Flutter, React Native and the web, cover each
   driver, game engines, desktop, clean state and which simulator or emulator renders which store size natively
   (read 2026-11-14).
+- `store-capture`: staging with the user before any plan runs (`references/staging.md`): which screens tell the
+  story, starting from the current set (`capture.py --current`: the storyboard, `existing/<store>/screenshots/`, a
+  folder), and how the app is signed in (guest, a debug bypass, or a demo account named only by environment
+  variables, checked before a run and masked in every log and report; never a real person's account), seeded (a
+  command or a file copied into the app's data), skipped, granted, flagged, clocked and networked. The plan's
+  `staging` section (schema), each screen's `state` and `verify` (an element that must be on screen, else the shot
+  is `missed`, "wrong state"; the report's `stateCheck`), `staging.md` written by `capture.py --write-staging`,
+  `staging.confirmed` before a run of more than one screen, reuse on every later capture.
+- `store-capture`: the `appFile` step (a file into the app's own data: the simulator's data container, Android's
+  through `run-as`); `staging.permissions` granted before launch and revoked after (`simctl privacy`, `pm grant`);
+  `capture.py --inspect` (each screen's UI tree in `<out>/.inspect/`); `settle.ignore` rectangles; `target.navigation`
+  (gesture or button navigation), `statusBarMobile` and `statusBarCheck` on Android; `check_captures.py` notes a
+  required App Store display type no device fills; script steps also get `APPSTORES_PLATFORM`, `APPSTORES_APP_ID`
+  and `APPSTORES_SERIAL`.
+- `store-capture`: decision-table row for an existing pipeline that needs a real account or secrets (reuse its data
+  and ids, not its run); DevFlow's limits on iOS documented, with when to switch a device to Appium; a .NET MAUI
+  section on seeding local data without a screenshot mode and `-p:EmbedAssembliesIntoApk=true` for Debug APKs.
+
 - `store-screenshots` 0.1.0 (#12): designed store screenshots from an app's real captures, one design for every
   store, size and locale. A brief and a storyboard agreed with the user before rendering; `store-screenshots.json`
   (theme, targets at each store's exact sizes, shots with their layouts and captions, per-store overrides,
@@ -78,6 +96,29 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   developer line as the copyright's holder, not the package name.
 
 ### Fixed
+- `store-capture`: the `devflow` and `ailoha` drivers could drive another app's agent (the developer's own
+  simulators): they now pin the agent of the plan's app on the dedicated device (status device id, the process's
+  simulator folder, Android's `pidof`), pass `--agent-port` everywhere, find it again after each launch, and refuse
+  when none or several match or a named `agentPort` is another device's. On Android they pass `--device <serial>`
+  and `ANDROID_SERIAL`, never take a forward another device holds, and refuse without a serial when several devices
+  are attached.
+- `store-capture` (DevFlow): changes go only through the CLI, retried when another client's lease turns one away
+  (then a clear error); `success: false` replies fail the step with advice; an xpath the HTTP query refuses (the
+  preview.14 query takes only type, automationId, text, selector) and a native view's automationId the query misses
+  are found in `ui tree`; taps wait for their element; `scroll --element` falls back to scrolling; back is
+  `ui navigate ..`, the host's key, then HTTP.
+- `store-capture` (Android): demo mode sends Wi-Fi `fully` and hides the mobile icon (an API 36 image drew "!" and
+  "3G" while the report said `overridden`), and the first time on a device enters demo mode twice (the first pass
+  after a boot drew two Wi-Fi icons); the status bar is `verified` only when its pixels follow demo mode's clock
+  (each read steady), else `unverified`. A missing log folder is no longer reported as a missing emulator. iOS: a `status_bar list` without the override is `unverified`, not `overridden`.
+- `store-capture` (Appium): `appium:isHeadless` by default on simulators (Xcode 27 moved Simulator.app); a failed
+  session reports its own cause, and the simulator it shut down is booted again (and the session retried) instead
+  of later screens failing with "device is not booted".
+- `store-capture`: `avdmanager` found in a versioned `cmdline-tools/<version>/` when there's no `latest`; a .NET
+  Fast Deployment APK is warned about; the dry run shows the `wm size` a real run sets; no env warning on Android
+  for keys `args` also carries; an opaque alpha channel no longer lists `alpha-flattened` on every shot (counted
+  once in the report's `notes`); tests write only into temp folders, and every test module checks nothing was left
+  beside the scripts.
 - `listing.py import --from supply` (or Triple-T) after an App Store import whose primary language Play has no
   listing in no longer sets `stores.google.defaultLanguage` to that language: it's one of Play's own (the layout's
   default, the primary if Play has it, en-US, or the first).

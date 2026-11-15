@@ -12,7 +12,9 @@ With ``--rules``, each device's size is also checked against the stores' rules d
 ``apple``: an App Store display type of the device's platform takes that size (either orientation unless the
 display type says otherwise); ``google`` (Android devices): it's within a Play screenshot slot's size range and
 aspect (for the device's ``kind``: phone, tablet, tv, watch). Devices of other platforms aren't checked against a
-store.
+store. A required App Store display type (the 6.3" iPhone, the 13" iPad) of a kind the plan captures that no device
+fills is a note: fine for a designed set (store-screenshots renders it from the largest capture), not for captures
+sent as they are.
 
 Exit codes: 0 nothing wrong (warnings allowed); 1 an error; 3 usage (no plan, an invalid plan, unknown rules).
 """
@@ -145,6 +147,33 @@ def check_store_sizes(device, rulesets):
     return out
 
 
+def required_apple_gaps(devices, ruleset):
+    """Notes for each required App Store display type of a platform and kind the plan has devices for, that no
+    device's size fills."""
+    out = []
+    kinds = set()
+    filled = set()
+    for d in devices:
+        platform = APPLE_PLATFORMS.get(d["platform"])
+        if not platform:
+            continue
+        slots = apple_slots(ruleset, platform, (d["width"], d["height"]))
+        filled.update(slots)
+        for name in slots:
+            kinds.add((platform, ruleset.slots[name].get("kind")))
+        if d.get("kind"):
+            kinds.add((platform, d["kind"]))
+    for name, slot in ruleset.slots.items():
+        if not slot.get("required") or name in filled or (slot.get("platform"), slot.get("kind")) not in kinds:
+            continue
+        sizes = " or ".join("%dx%d" % tuple(sz) for sz in slot.get("sizes") or [])
+        out.append(finding("note", "App Store", "no device fills the required %s (%s): fine for a designed set "
+                                                "(store-screenshots renders it from the largest capture: give the "
+                                                "design a target at that size); to send captures as they are, add a "
+                                                "device that renders it" % (name, sizes), "apple.screenshots.required"))
+    return out
+
+
 def report_entries(out):
     """The capture report's shots by ``(locale, device, screen)``, or ``{}``."""
     path = os.path.join(out, capture.REPORT_NAME)
@@ -167,6 +196,9 @@ def check(plan_path, stores=None):
     entries = report_entries(out)
     findings = []
     checked = 0
+    if "apple" in rulesets:
+        findings.extend(required_apple_gaps([capture.resolve_device(plan, d) for d in plan["devices"]],
+                                            rulesets["apple"]))
     for raw in plan["devices"]:
         device = capture.resolve_device(plan, raw)
         findings.extend(check_store_sizes(device, rulesets))

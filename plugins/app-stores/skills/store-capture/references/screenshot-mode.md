@@ -167,7 +167,12 @@ protected override Window CreateWindow(IActivationState? activationState)
 ```
 
 Register the demo services in `MauiProgram.cs` when the mode is on, so pages resolve fixtures instead of the live
-API. Set `AutomationId` on the controls a driver may need: DevFlow, Ailoha, Appium and Maestro all find them.
+API. Set `AutomationId` on the controls a driver may need: DevFlow, Ailoha, Appium and Maestro all find them (on
+the element that has the tap gesture, not a label inside it: DevFlow's taps reach only that).
+
+Without a screenshot mode yet, a MAUI app's local data file can be written before launch instead (a console tool
+using the app's own store class, then `staging.seed` `file`): [staging.md](staging.md#net-maui-without-a-screenshot-mode).
+For Android, build the Debug APK with `-p:EmbedAssembliesIntoApk=true` so it runs after `adb install`.
 
 ### Flutter
 

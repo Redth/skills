@@ -51,11 +51,12 @@ _SCRIPTS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
+from appstores_lib import png  # noqa: E402
 from appstores_lib import web  # noqa: E402
 
 # Every step kind the plan may use (CONTRACT.md 10.2), and every element finder.
 STEP_KINDS = ("launch", "deepLink", "url", "tap", "type", "wait", "scroll", "back", "swipe", "flow", "script",
-              "settle")
+              "settle", "appFile")
 FINDER_KEYS = ("id", "text", "label", "xpath", "css")
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 
@@ -102,6 +103,9 @@ def subprocess_spawner(cmd, log_path=None, env=None, cwd=None):
     if env:
         full_env = dict(os.environ)
         full_env.update(env)
+    if log_path:
+        # A missing log folder must not look like a missing program (both are FileNotFoundError).
+        os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
     out = open(log_path, "ab") if log_path else subprocess.DEVNULL
     try:
         return subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT, env=full_env,
@@ -121,6 +125,21 @@ SLEEP = time.sleep              # callable(seconds)
 CLOCK = time.monotonic          # callable() -> seconds
 LOG = _stderr_log               # callable(line): where commands and notes are logged
 DRY_RUN = False                 # set by capture.py --dry-run: print commands, run nothing
+SECRETS = []                    # values never written to a log or a report (a demo account's password): mask()
+
+
+def mask(text):
+    """``text`` with every value in ``SECRETS`` replaced by ``***`` (for logs, reasons and reports)."""
+    if not isinstance(text, str) or not SECRETS:
+        return text
+    for value in sorted((v for v in SECRETS if v), key=len, reverse=True):
+        text = text.replace(value, "***")
+    return text
+
+
+def note(line):
+    """Log one line through ``LOG``, secrets masked: the way drivers log."""
+    LOG(mask(line))
 
 
 # -- errors -------------------------------------------------------------------------------------------------
@@ -144,7 +163,7 @@ class CommandError(DriverError):
         self.out = out
         self.err = err
         tail = (err or out or "").strip().splitlines()[-5:]
-        super().__init__("%s exited %s%s" % (quote(cmd), code, (": " + " / ".join(tail)) if tail else ""))
+        super().__init__(mask("%s exited %s%s" % (quote(cmd), code, (": " + " / ".join(tail)) if tail else "")))
 
 
 class CommandTimeout(DriverError):
@@ -153,6 +172,10 @@ class CommandTimeout(DriverError):
 
 class StepFailed(DriverError):
     """A step couldn't be done (an element not found in time, a launch that failed)."""
+
+
+class WrongState(StepFailed):
+    """The screen was reached but isn't in the state the plan's ``verify`` asks for: the shot is ``missed``."""
 
 
 class StepSkipped(Exception):
@@ -187,6 +210,7 @@ class Result(object):
 
 STATUSES = ("taken", "missed", "failed", "skipped")
 STATUS_BARS = ("verified", "overridden", "unverified", "none")
+STATE_CHECKS = ("passed", "failed", "unchecked", "none")
 
 
 class Shot(object):
@@ -200,10 +224,14 @@ class Shot(object):
     - ``status_bar``: ``verified`` (the override was read back), ``overridden`` (set, not read back),
       ``unverified`` (asked for, not confirmed) or ``none`` (no status bar, or left as it is).
     - ``fixes``: what the driver changed in the picture (never a resize); ``warnings``: anything worth reading.
+    - ``state_check``: the screen's ``verify``: ``passed`` (every element was there), ``failed`` (one wasn't: the
+      shot is ``missed``, "wrong state"), ``unchecked`` (this driver can't see elements, so a person must look) or
+      ``none`` (the screen has no ``verify``).
+    - ``tree``: with ``capture.py --inspect``, the file the screen's UI tree was saved to (or ``None``).
     """
 
     def __init__(self, status="taken", path=None, reason=None, source=None, status_bar="none", fixes=None,
-                 warnings=None):
+                 warnings=None, state_check="none"):
         """Hold one shot's outcome."""
         if status not in STATUSES:
             raise ValueError("a shot's status is one of %s, not %r" % (", ".join(STATUSES), status))
@@ -216,6 +244,10 @@ class Shot(object):
         self.status_bar = status_bar
         self.fixes = list(fixes or [])
         self.warnings = list(warnings or [])
+        if state_check not in STATE_CHECKS:
+            raise ValueError("state_check is one of %s, not %r" % (", ".join(STATE_CHECKS), state_check))
+        self.state_check = state_check
+        self.tree = None
 
     def __repr__(self):
         return "Shot(%s%s)" % (self.status, (": " + self.reason) if self.reason else "")
@@ -227,7 +259,7 @@ class Options(object):
     - ``plan_dir``: the plan's folder (paths in the plan are relative to it).
     - ``workdir``: a temporary folder the driver writes pictures (and anything else) into.
     - ``cleanup``: delete the simulators/emulators this skill created (``appstores-<id>``) in ``reset``.
-    - ``extra``: anything else, by name.
+    - ``extra``: anything else, by name (``inspect=True``: save each screen's UI tree, ``capture.py --inspect``).
     """
 
     def __init__(self, plan_dir=".", workdir=None, cleanup=False, **extra):
@@ -257,8 +289,8 @@ class StepContext(object):
 
     def warn(self, message):
         """Add a warning to the shot (and log it)."""
-        self.shot.warnings.append(message)
-        LOG("  warning: %s" % message)
+        self.shot.warnings.append(mask(message))
+        note("  warning: %s" % message)
 
 
 # -- commands -----------------------------------------------------------------------------------------------
@@ -284,7 +316,7 @@ def run(cmd, timeout=120, check=True, input=None, env=None, cwd=None, binary=Fal
     cmd = [str(c) for c in cmd]
     if not quiet or DRY_RUN:
         prefix = "".join("%s=%s " % (k, shlex.quote(str(v))) for k, v in sorted((env or {}).items()))
-        LOG("  $ %s%s" % (prefix, quote(cmd)))
+        note("  $ %s%s" % (prefix, quote(cmd)))
     if DRY_RUN:
         out = dry_output if not binary else (dry_output.encode("utf-8") if isinstance(dry_output, str)
                                              else dry_output)
@@ -298,7 +330,7 @@ def run(cmd, timeout=120, check=True, input=None, env=None, cwd=None, binary=Fal
         raise ToolMissing("%s isn't installed or isn't on PATH: %s" % (name, HINTS.get(name, "install it"))) \
             from None
     except subprocess.TimeoutExpired:
-        raise CommandTimeout("%s took longer than %s s and was stopped" % (quote(cmd), timeout)) from None
+        raise CommandTimeout(mask("%s took longer than %s s and was stopped" % (quote(cmd), timeout))) from None
     out = out or b""
     err = err or b""
     if not binary:
@@ -316,7 +348,7 @@ def spawn(cmd, log_path=None, env=None, cwd=None):
     ``None`` under ``--dry-run``). Logged like ``run()``; a missing program raises ``ToolMissing``. Stop it with
     ``stop()``."""
     cmd = [str(c) for c in cmd]
-    LOG("  $ %s &" % quote(cmd))
+    note("  $ %s &" % quote(cmd))
     if DRY_RUN:
         return None
     try:
@@ -352,7 +384,7 @@ def which(name):
 def sleep(seconds):
     """Wait (through ``SLEEP``); under ``--dry-run`` just say so."""
     if DRY_RUN:
-        LOG("  (wait %.1f s)" % seconds)
+        note("  (wait %.1f s)" % seconds)
         return
     SLEEP(seconds)
 
@@ -390,7 +422,7 @@ def http(method, url, body=None, headers=None, timeout=30, dry_body=b""):
     ``DriverError``.
     """
     check_local(url)
-    LOG("  > %s %s" % (method, url))
+    note("  > %s %s" % (method, url))
     if DRY_RUN:
         return web.Response(200, {}, dry_body if isinstance(dry_body, bytes) else dry_body.encode("utf-8"))
     try:
@@ -574,6 +606,20 @@ def find_xpath(root, expr, elements=None):
                    bounds=parse_bounds(a.get("bounds", "")), attrs=a)
 
 
+def masked_sha256(path, rects):
+    """A picture's SHA-256 over its pixels with ``rects`` (``[x, y, width, height]``) blanked out."""
+    width, height, rgb = png.decode_rgb(path)
+    buf = bytearray(rgb)
+    for rect in rects or []:
+        x, y, w, h = (int(v) for v in rect)
+        x0, x1 = max(0, x), min(width, x + w)
+        if x1 <= x0:
+            continue
+        for row in range(max(0, y), min(height, y + h)):
+            buf[(row * width + x0) * 3:(row * width + x1) * 3] = bytes((x1 - x0) * 3)
+    return hashlib.sha256(bytes(buf)).hexdigest()
+
+
 def file_sha256(path):
     """A file's SHA-256 (hex)."""
     h = hashlib.sha256()
@@ -639,26 +685,87 @@ class Driver(object):
             shot.status = "skipped"
             shot.reason = why
             return shot
+        ctx = StepContext(device, screen, locale, shot, 0, None)
         try:
             self.enter_screen(device, screen, locale, shot)
             for i, step in enumerate(screen.get("steps") or [], 1):
                 ctx = StepContext(device, screen, locale, shot, i, step)
                 self.do_step(ctx)
+            self.check_state(ctx, screen, shot)
+            self.save_tree(ctx, shot)
             path = self.shot_path(device, screen, locale)
             self.screenshot(device, path)
         except StepSkipped as e:
             shot.status = "skipped"
-            shot.reason = str(e)
+            shot.reason = mask(str(e))
             return shot
         except DriverError as e:
             if isinstance(e, ToolMissing):
                 raise
             shot.status = "missed"
-            shot.reason = str(e)
+            shot.reason = mask(str(e))
+            self.save_tree(ctx, shot)
             return shot
         shot.path = path
         shot.status_bar = self.status_bar
         return shot
+
+    def check_state(self, ctx, screen, shot):
+        """The screen's ``verify``: each element (``id``, ``text``, ``label``, ``xpath``, ``css``; ``timeout``
+        seconds, default 5) must be on screen before the shot, else ``WrongState`` (the shot is ``missed``, "wrong
+        state", and says what the screen should show: its ``state``). A driver that can't see elements can't
+        check: ``unchecked``, with a warning to look at the picture."""
+        checks = screen.get("verify")
+        if not checks:
+            shot.state_check = "none"
+            return
+        if isinstance(checks, dict):
+            checks = [checks]
+        unchecked = []
+        for check in checks:
+            query = element_query(check)
+            if query is None:
+                continue
+            if query[0] not in self.FINDERS:
+                unchecked.append("%s %r" % query)
+                continue
+            timeout = float(check.get("timeout") if check.get("timeout") is not None else 5)
+            note("  verify %s %r" % query)
+            try:
+                self.wait_for(ctx, query, timeout)
+            except StepFailed:
+                shot.state_check = "failed"
+                state = screen.get("state")
+                raise WrongState("wrong state: %s %r wasn't on screen within %g s%s" % (
+                    query[0], query[1], timeout, (" (the screen should show: %s)" % state) if state else ""))
+        if unchecked:
+            shot.state_check = "unchecked"
+            ctx.warn("verify not checked: the %s driver can't find %s; look at the picture for it"
+                     % (self.NAME, ", ".join(unchecked)))
+            return
+        shot.state_check = "passed"
+
+    def save_tree(self, ctx, shot):
+        """With ``capture.py --inspect``: write the screen's UI tree (``inspect_tree``) beside its picture in the
+        workdir and remember it in ``shot.tree``; a driver that can't read one says so in the file."""
+        if not self.options.extra.get("inspect") or shot.tree or DRY_RUN:
+            return
+        folder = os.path.join(self.options.workdir, "inspect", ctx.locale, ctx.device["id"])
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, ctx.screen["id"] + ".txt")
+        try:
+            text = self.inspect_tree(ctx)
+        except (DriverError, StepSkipped) as e:
+            text = "(no UI tree: %s)" % e
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(mask(text if isinstance(text, str) else json.dumps(text, indent=1, ensure_ascii=False)))
+            f.write("\n")
+        shot.tree = path
+
+    def inspect_tree(self, ctx):
+        """The screen's UI tree as text (the device's XML, the agent's JSON, Appium's page source), for writing
+        steps: ``capture.py --inspect``. Drivers that can see elements implement it."""
+        raise StepSkipped("the %s driver can't read a UI tree" % self.NAME)
 
     def reset(self, device):
         """Put back everything ``prepare`` and the screens changed (status bar, demo mode, display size, locale,
@@ -732,7 +839,7 @@ class Driver(object):
     def do_step(self, ctx):
         """Run one step by calling ``step_<kind>(ctx, value)``; log it first."""
         kind, value = step_of(ctx.step)
-        LOG("  step %d: %s" % (ctx.index, describe_step(ctx.step)))
+        note("  step %d: %s" % (ctx.index, describe_step(ctx.step)))
         method = getattr(self, "step_" + kind, None)
         if method is None:
             raise StepSkipped("step %d (%s): the %s driver can't do %s steps" % (
@@ -786,9 +893,12 @@ class Driver(object):
 
     def step_settle(self, ctx, value):
         """``settle``: wait until two screenshots in a row are identical (no animation), at most ``timeout``
-        seconds (default ``SETTLE_TIMEOUT``); a screen that never settles is a warning, not a failure."""
+        seconds (default ``SETTLE_TIMEOUT``); a screen that never settles is a warning, not a failure.
+        ``ignore``: rectangles ``[x, y, width, height]`` (the picture's pixels) left out of the comparison, for
+        an animation that never stops (a gently moving illustration, a live clock)."""
         timeout = float((value or {}).get("timeout") or self.SETTLE_TIMEOUT) if isinstance(value, dict) \
             else self.SETTLE_TIMEOUT
+        ignore = (value or {}).get("ignore") if isinstance(value, dict) else None
         probe = os.path.join(self.options.workdir, ".settle-%s.png" % ctx.device["id"])
         last = [None]
 
@@ -796,7 +906,7 @@ class Driver(object):
             self.screenshot(ctx.device, probe)
             if DRY_RUN:
                 return True
-            digest = file_sha256(probe)
+            digest = masked_sha256(probe, ignore) if ignore else file_sha256(probe)
             hit = digest == last[0]
             last[0] = digest
             return hit
@@ -811,8 +921,10 @@ class Driver(object):
 
     def step_script(self, ctx, value):
         """``script``: run a command the plan provides, as is, from the plan's folder: a list of arguments, a
-        string (split like a shell would, not run by one), or ``{"run": …, "timeout": s}``. The device's id,
-        the locale and the screen are in ``APPSTORES_DEVICE``, ``APPSTORES_LOCALE``, ``APPSTORES_SCREEN``."""
+        string (split like a shell would, not run by one), or ``{"run": …, "timeout": s}``. It gets
+        ``APPSTORES_DEVICE`` (the plan's device id), ``APPSTORES_LOCALE``, ``APPSTORES_SCREEN``,
+        ``APPSTORES_PLATFORM`` and ``APPSTORES_APP_ID`` (the bundle id or package), plus the host's handle for the
+        device: ``APPSTORES_UDID`` (simctl) or ``ANDROID_SERIAL`` and ``APPSTORES_SERIAL`` (adb)."""
         timeout = 300
         if isinstance(value, dict):
             timeout = value.get("timeout") or timeout
@@ -820,8 +932,10 @@ class Driver(object):
         cmd = shlex.split(value) if isinstance(value, str) else list(value or [])
         if not cmd:
             raise StepFailed("step %d: script has no command" % ctx.index)
+        app = ctx.device.get("app") or {}
         env = {"APPSTORES_DEVICE": ctx.device["id"], "APPSTORES_LOCALE": ctx.locale,
-               "APPSTORES_SCREEN": ctx.screen["id"]}
+               "APPSTORES_SCREEN": ctx.screen["id"], "APPSTORES_PLATFORM": ctx.device.get("platform") or "",
+               "APPSTORES_APP_ID": app.get("bundleId") or app.get("package") or ""}
         env.update(self.script_env(ctx.device))
         run(cmd, timeout=timeout, env=env, cwd=self.options.plan_dir)
 
@@ -832,8 +946,9 @@ class Driver(object):
 
 __all__ = [
     "Driver", "Shot", "Options", "StepContext", "Result", "Element",
-    "DriverError", "ToolMissing", "CommandError", "CommandTimeout", "StepFailed", "StepSkipped", "NotLocal",
-    "run", "spawn", "stop", "which", "sleep", "poll", "http", "http_json", "check_local", "quote",
+    "DriverError", "ToolMissing", "CommandError", "CommandTimeout", "StepFailed", "WrongState", "StepSkipped",
+    "NotLocal", "run", "spawn", "stop", "which", "sleep", "poll", "http", "http_json", "check_local", "quote",
+    "mask", "note", "SECRETS",
     "step_of", "describe_step", "element_query", "step_element", "find_element", "find_xpath", "parse_uiautomator",
     "parse_bounds", "file_sha256", "STEP_KINDS", "FINDER_KEYS", "RUNNER", "SPAWNER", "SLEEP", "CLOCK", "LOG",
     "DRY_RUN",

@@ -39,14 +39,17 @@ class FakeDriver(base.Driver):
 
     NAME = "fake"
     PLATFORMS = ()
-    STEPS = ("launch", "deepLink", "wait", "settle", "script", "tap")
+    STEPS = ("launch", "deepLink", "wait", "settle", "script", "tap", "appFile")
     FINDERS = ("id", "text")
     behaviour = {}
     events = []
     prepare_error = None
+    on_screen = None     # what find sees (None: everything)
+    devices = []
 
     def prepare(self, device, plan):
         FakeDriver.events.append(("prepare", device["id"]))
+        FakeDriver.devices.append(device)
         if FakeDriver.prepare_error:
             raise FakeDriver.prepare_error
 
@@ -64,6 +67,20 @@ class FakeDriver(base.Driver):
 
     def step_deepLink(self, ctx, value):
         FakeDriver.events.append(("deepLink", value))
+
+    def step_appFile(self, ctx, value):
+        FakeDriver.events.append(("appFile", json.dumps(value, sort_keys=True)))
+
+    def step_script(self, ctx, value):
+        FakeDriver.events.append(("script", json.dumps(value, sort_keys=True)))
+
+    def find(self, ctx, query):
+        if FakeDriver.on_screen is None or query[1] in FakeDriver.on_screen:
+            return base.Element(id=str(query[1]))
+        return None
+
+    def inspect_tree(self, ctx):
+        return "<hierarchy><node resource-id='plan-title'/></hierarchy>"
 
     def step_tap(self, ctx, value):
         raise base.StepFailed("step %d: id %r didn't appear" % (ctx.index, value.get("id")))
@@ -98,6 +115,8 @@ class CaptureCase(unittest.TestCase):
         FakeDriver.behaviour = {}
         FakeDriver.events = []
         FakeDriver.prepare_error = None
+        FakeDriver.on_screen = None
+        FakeDriver.devices = []
         self.tmp = tempfile.mkdtemp(prefix="capture-test-")
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.hooks = kit.Hooks()
@@ -247,9 +266,25 @@ class RunTests(CaptureCase):
         FakeDriver.behaviour[("en-US", "recipe")] = {"png": {"bit_depth": 16, "icc": "Display P3"}}
         self.assertEqual(self.main("--plan", path), 0)
         self.assertEqual(self.shot("en-US", "phone", "plan")["fixes"], ["alpha-flattened"])
+        # See-through pixels are worth a look; an opaque alpha channel isn't.
+        self.assertTrue(any("see-through" in w for w in self.shot("en-US", "phone", "plan")["warnings"]))
         self.assertEqual(self.shot("en-US", "phone", "recipe")["fixes"], ["16-bit-to-8-bit", "converted-to-srgb"])
         meta = png.info(self.capture_path("en-US", "phone", "plan.png"))
         self.assertEqual((meta.color_type, meta.has_alpha, meta.width, meta.height), (2, False, 120, 260))
+
+    def test_an_opaque_alpha_channel_is_quiet_and_noted_once(self):
+        path = self.plan()
+        for screen in ("plan", "recipe"):
+            FakeDriver.behaviour[("en-US", screen)] = {"png": {"color_type": 6, "alpha": 255}}
+        self.assertEqual(self.main("--plan", path), 0)
+        for screen in ("plan", "recipe"):
+            e = self.shot("en-US", "phone", screen)
+            self.assertEqual(e["fixes"], ["alpha-flattened"])
+            self.assertEqual(e["warnings"], [])
+        self.assertFalse(any("alpha-flattened" in line for line in self.logged if line.startswith("taken")))
+        (note,) = self.report()["notes"]
+        self.assertIn("2 pictures came with an alpha channel whose every pixel is opaque", note)
+        self.assertIn("note: 2 pictures", self.stdout)
 
     def test_flattening_without_chrome_fails_plainly(self):
         def no_chrome(*a):
@@ -398,6 +433,210 @@ class RealFlattenTests(CaptureCase):
             self.assertEqual(png.info(os.path.join(self.tmp, "out2.png")).color_type, 2)
         finally:
             capture.close_browser()
+
+
+class StagingTests(CaptureCase):
+    """The plan's staging: agreed with the user, confirmed on one screen, then put into every screen."""
+
+    def staged_plan(self, staging=None, screens=None, **extra):
+        staging = {"account": {"kind": "bypass", "how": "a debug build's sign-in bypass"},
+                   "seed": {"kind": "command", "run": "./seed-demo.sh"},
+                   "launch": {"args": {"UITestMode": "1"}, "env": {"UITestMode": "1"}},
+                   "skip": ["onboarding", {"what": "rating prompt", "how": "UITestMode"}],
+                   "permissions": {"ios": ["photos"], "android": ["android.permission.POST_NOTIFICATIONS"]},
+                   "confirmed": {"screen": "plan", "device": "phone", "on": "2026-11-14"}} if staging is None else staging
+        screens = screens or [
+            {"id": "plan", "state": "this week's plan with five invented recipes", "verify": {"id": "plan-title"},
+             "steps": [{"launch": {"args": {"ScreenshotScreen": "plan"}}}]},
+            {"id": "recipe", "state": "one recipe open", "steps": [{"launch": {}}, {"deepLink": "samplerecipes://r/1"}]}]
+        return self.plan(screens=screens, staging=staging, **extra)
+
+    def launches(self):
+        return [json.loads(e[4]) for e in FakeDriver.events if e[0] == "launch"]
+
+    def test_staging_goes_into_every_screen(self):
+        path = self.staged_plan()
+        capture.write_staging(path)
+        self.assertEqual(self.main("--plan", path), 0)
+        scripts = [e for e in FakeDriver.events if e[0] == "script"]
+        self.assertEqual(len(scripts), 2)
+        self.assertIn("./seed-demo.sh", scripts[0][1])
+        # The seed runs before the screen's own steps.
+        self.assertLess(FakeDriver.events.index(scripts[0]), [i for i, e in enumerate(FakeDriver.events)
+                                                              if e[0] == "launch"][0])
+        plan_launch, recipe_launch = self.launches()
+        self.assertEqual(plan_launch["args"], {"UITestMode": "1", "ScreenshotScreen": "plan"})
+        self.assertEqual(recipe_launch, {"args": {"UITestMode": "1"}, "env": {"UITestMode": "1"}})
+        self.assertEqual(FakeDriver.devices[0]["permissions"], ["photos"])
+        e = self.shot("en-US", "phone", "plan")
+        self.assertEqual((e["state"], e["stateCheck"]), ("this week's plan with five invented recipes", "passed"))
+        self.assertNotIn("stateCheck", self.shot("en-US", "phone", "recipe"))
+
+    def test_a_file_seed_is_an_app_file_step_and_once_means_the_first_screen(self):
+        path = self.staged_plan(staging={"seed": {"kind": "file", "file": "seed/app.db", "when": "once",
+                                                  "into": {"ios": "Library/Caches/app.db", "android": "files/app.db"}},
+                                         "confirmed": {"screen": "plan"}})
+        self.assertEqual(self.main("--plan", path), 0)
+        files = [e for e in FakeDriver.events if e[0] == "appFile"]
+        self.assertEqual(len(files), 1)
+        self.assertIn("Library/Caches/app.db", files[0][1])
+
+    def test_a_screen_can_leave_the_staging_out(self):
+        screens = [{"id": "onboarding", "staging": False, "steps": [{"launch": {"clean": True}}]},
+                   {"id": "plan", "steps": [{"launch": {}}]}]
+        path = self.staged_plan(screens=screens, staging={"seed": {"kind": "command", "run": "./seed.sh"},
+                                                          "launch": {"args": {"UITestMode": "1"}},
+                                                          "confirmed": {"screen": "plan"}})
+        self.assertEqual(self.main("--plan", path), 0)
+        self.assertEqual(self.launches(), [{"clean": True}, {"args": {"UITestMode": "1"}}])
+        self.assertEqual(len([e for e in FakeDriver.events if e[0] == "script"]), 1)
+
+    def test_until_confirmed_only_one_screen_is_captured(self):
+        staging = {"seed": {"kind": "command", "run": "./seed.sh"}}
+        path = self.staged_plan(staging=staging)
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            self.assertEqual(self.main("--plan", path), 3)
+        self.assertIn("staging isn't confirmed with the user yet", stderr.getvalue())
+        self.assertIn("--screens plan", stderr.getvalue())
+        self.assertEqual(FakeDriver.events, [])
+        # One screen, to show the user, is fine; so is a dry run.
+        self.assertEqual(self.main("--plan", path, "--screens", "plan"), 0)
+        self.assertEqual(self.main("--plan", path, "--dry-run"), 0)
+
+    def test_a_demo_account_is_named_by_variables_checked_before_the_run_and_never_logged(self):
+        staging = {"account": {"kind": "demo", "env": ["SR_DEMO_USER", "SR_DEMO_PASSWORD"]},
+                   "launch": {"env": {"DemoUser": "${SR_DEMO_USER}", "DemoPassword": "${SR_DEMO_PASSWORD}"}},
+                   "confirmed": {"screen": "plan"}}
+        path = self.staged_plan(staging=staging)
+        for k in ("SR_DEMO_USER", "SR_DEMO_PASSWORD"):
+            os.environ.pop(k, None)
+        self.addCleanup(lambda: [os.environ.pop(k, None) for k in ("SR_DEMO_USER", "SR_DEMO_PASSWORD")])
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            self.assertEqual(self.main("--plan", path), 3)
+        self.assertIn("SR_DEMO_USER, SR_DEMO_PASSWORD set in the environment", stderr.getvalue())
+        os.environ["SR_DEMO_USER"] = "demo@example.com"
+        os.environ["SR_DEMO_PASSWORD"] = "correct-horse-battery"
+        FakeDriver.behaviour[("en-US", "recipe")] = {"raise": base.StepFailed(
+            "launch failed with DemoPassword=correct-horse-battery")}
+        self.assertEqual(self.main("--plan", path, "--keep-going"), 1)
+        self.assertEqual(self.launches()[0]["env"]["DemoPassword"], "correct-horse-battery")
+        text = json.dumps(self.report()) + "\n".join(self.logged) + "\n".join(self.hooks.log)
+        self.assertNotIn("correct-horse-battery", text)
+        self.assertIn("***", self.shot("en-US", "phone", "recipe")["reason"])
+        self.assertEqual(base.SECRETS, [])
+
+    def test_a_demo_account_written_into_the_plan_is_refused_or_warned(self):
+        plan = kit.sample_plan([{"id": "phone", "platform": "ios", "driver": "fake", "width": 1, "height": 1}],
+                               [{"id": "plan", "steps": [{"launch": {"env": {"Password": "${NOT_NAMED}"}}}]}],
+                               staging={"account": {"kind": "demo"}})
+        problems = capture.check_plan(plan)
+        self.assertTrue(any("named by its environment variables" in p for p in problems))
+        self.assertTrue(any("${NOT_NAMED} isn't one of staging.account.env's" in p for p in problems))
+        plan["staging"] = {"account": {"kind": "bypass"}}
+        plan["screens"][0]["steps"][0]["launch"]["env"]["Password"] = "hunter2hunter2"
+        self.assertTrue(any("looks like a password" in w for w in capture.credential_warnings(plan)))
+
+    def test_verify_catches_a_wrong_state(self):
+        path = self.staged_plan()
+        FakeDriver.on_screen = ["something-else"]
+        self.assertEqual(self.main("--plan", path, "--keep-going"), 1)
+        e = self.shot("en-US", "phone", "plan")
+        self.assertEqual((e["status"], e["stateCheck"]), ("missed", "failed"))
+        self.assertIn("wrong state: id 'plan-title' wasn't on screen", e["reason"])
+        self.assertIn("this week's plan with five invented recipes", e["reason"])
+        self.assertEqual(self.shot("en-US", "phone", "recipe")["status"], "taken")
+
+    def test_verify_on_a_driver_that_cant_see_is_unchecked_not_passed(self):
+        path = self.staged_plan()
+        saved = FakeDriver.FINDERS
+        FakeDriver.FINDERS = ()
+        self.addCleanup(setattr, FakeDriver, "FINDERS", saved)
+        self.assertEqual(self.main("--plan", path), 0)
+        e = self.shot("en-US", "phone", "plan")
+        self.assertEqual(e["stateCheck"], "unchecked")
+        self.assertTrue(any("verify not checked" in w for w in e["warnings"]))
+
+    def test_staging_md_is_written_from_the_plan_and_a_stale_one_is_warned_about(self):
+        path = self.staged_plan()
+        self.assertEqual(self.main("--plan", path, "--write-staging"), 0)
+        with open(os.path.join(self.tmp, "staging.md"), encoding="utf-8") as f:
+            text = f.read()
+        for words in ("**Confirmed** on `plan` (phone), 2026-11-14", "A debug sign-in bypass", "`./seed-demo.sh`",
+                      "before every screen", "rating prompt: UITestMode", "ios: photos",
+                      "| `plan` | this week's plan with five invented recipes | launch {args: ",
+                      "id `plan-title`", "(nothing: look at it)"):
+            self.assertIn(words, text)
+        self.assertEqual(self.main("--plan", path), 0)
+        self.assertFalse(any("out of date" in l for l in self.logged))
+        with open(path, encoding="utf-8") as f:
+            plan = json.load(f)
+        plan["screens"][1]["state"] = "the recipe, scrolled to its steps"
+        kit.write_plan(self.tmp, plan)
+        self.assertEqual(self.main("--plan", path), 0)
+        self.assertTrue(any("staging.md is out of date: capture.py --write-staging" in l for l in self.logged))
+
+    def test_a_plan_without_staging_is_warned_about(self):
+        path = self.plan()
+        self.assertEqual(self.main("--plan", path), 0)
+        self.assertTrue(any("no staging section" in l for l in self.logged))
+
+    def test_the_current_set_is_listed_to_start_the_screen_list_from(self):
+        path = self.plan()
+        kit.write_png(os.path.join(self.tmp, "existing", "apple", "screenshots", "en-US", "APP_IPHONE_67", "1.png"),
+                      1320, 2868)
+        kit.write_png(os.path.join(self.tmp, "existing", "google", "screenshots", "en-US", "phone", "1.png"), 1080, 1920)
+        jsonio.dump({"shots": [{"id": "plan", "capture": "plan"}, {"id": "shop", "capture": "shopping"}]},
+                    os.path.join(self.tmp, "store-screenshots.json"))
+        self.assertEqual(self.main("--plan", path, "--current"), 0)
+        for words in ("existing/apple/screenshots", "en-US/APP_IPHONE_67/1.png  1320x2868",
+                      "existing/google/screenshots", "store-screenshots.json", "2. shop  capture: shopping"):
+            self.assertIn(words, self.stdout)
+        folder = os.path.join(self.tmp, "marketing", "now")
+        kit.write_png(os.path.join(folder, "home.png"), 1206, 2622)
+        self.assertEqual(self.main("--plan", path, "--current", folder), 0)
+        self.assertIn("home.png  1206x2622", self.stdout)
+        self.assertNotIn("existing/apple", self.stdout)
+
+    def test_inspect_saves_each_screens_tree(self):
+        path = self.plan()
+        self.assertEqual(self.main("--plan", path, "--inspect"), 0)
+        tree = os.path.join(self.tmp, "captures", ".inspect", "en-US", "phone", "plan.txt")
+        with open(tree, encoding="utf-8") as f:
+            self.assertIn("plan-title", f.read())
+        self.assertTrue(any(l.startswith("tree    .inspect") for l in self.logged))
+
+
+class SettleTests(unittest.TestCase):
+    def test_settle_can_leave_an_animated_region_out(self):
+        tmp = tempfile.mkdtemp(prefix="appstores-settle-test-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        a = kit.write_png(os.path.join(tmp, "a.png"), 40, 40)
+        b = os.path.join(tmp, "b.png")
+        # b: the same picture with a moving corner (rows 0-9, columns 30-39 differ).
+        import struct
+        import zlib
+        rows = b"".join(b"\0" + bytes([40, 120, 200]) * 30 + (bytes([9, 9, 9]) if r < 10 else bytes([40, 120, 200])) * 10
+                        for r in range(40))
+        ihdr = struct.pack(">IIBBBBB", 40, 40, 8, 2, 0, 0, 0)
+        with open(b, "wb") as f:
+            f.write(kit.PNG_SIGNATURE + kit._chunk(b"IHDR", ihdr) + kit._chunk(b"IDAT", zlib.compress(rows))
+                    + kit._chunk(b"IEND", b""))
+        self.assertNotEqual(base.file_sha256(a), base.file_sha256(b))
+        self.assertNotEqual(base.masked_sha256(a, [[0, 0, 10, 10]]), base.masked_sha256(b, [[0, 0, 10, 10]]))
+        self.assertEqual(base.masked_sha256(a, [[30, 0, 10, 10]]), base.masked_sha256(b, [[30, 0, 10, 10]]))
+
+
+class HygieneTests(unittest.TestCase):
+    """The tests write only into temporary folders: nothing appears beside the scripts."""
+
+    def test_nothing_is_left_beside_the_scripts(self):
+        self.assertEqual(kit.stray_folders(), [], "folders written beside the scripts (tests must use temp folders)")
+
+
+def tearDownModule():
+    kit.assert_no_residue()
 
 
 if __name__ == "__main__":

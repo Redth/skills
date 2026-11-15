@@ -14,17 +14,26 @@ What it does (CONTRACT.md 10.3, 10.5):
 
 - ``prepare``: boot (poll until ``sys.boot_completed`` is 1), lay out at the device's size (``wm size
   <width>x<height>``, or ``target.wmSize``; ``null`` leaves it; ``target.density`` for ``wm density``), turn
-  animations off, install ``app.apk`` (``install -r``).
+  animations off, switch the navigation mode (``target.navigation``: ``gesture``, ``threebutton``), install
+  ``app.apk`` (``install -r``; a .NET debug APK built for Fast Deployment, with no assemblies inside, is warned
+  about), and grant the plan's ``staging.permissions`` (``pm grant``; revoked in ``reset``).
+- tools: ``target.adb``, ``target.emulator`` and ``target.avdmanager`` name them; else ``$ANDROID_HOME`` (or
+  ``$ANDROID_SDK_ROOT``)'s ``platform-tools``, ``emulator`` and ``cmdline-tools/latest/bin`` (or the newest
+  ``cmdline-tools/<version>/bin``, then ``tools/bin``), else ``PATH``.
 - per screen, when it changes: the app's language (``cmd locale set-app-locales <package> --locales <locale>``,
   Android 13 and later; ``target.deviceLocale: true`` sets the device's too: ``cmd locale set-device-locale``,
   or ``setprop persist.sys.locale`` and a SystemUI restart on older emulators), dark mode (``cmd uimode night
-  yes|no``), and SystemUI demo mode for a clean status bar (the plan's clock, full battery and signal, no
-  notifications).
+  yes|no``), and SystemUI demo mode for a clean status bar (the plan's clock, a full battery, Wi-Fi shown fully
+  connected, the mobile icon hidden unless ``target.statusBarMobile``, no notifications or other icons). The
+  status bar is then checked in the pixels: its strip is captured, demo mode's clock moved and put back, and only
+  when the strip changed with it and came back is it ``verified``; otherwise ``unverified`` (or ``overridden``
+  with ``target.statusBarCheck: false``).
 - steps: ``launch`` (``am start -W -S -n <package>/<activity>`` with ``--es ScreenshotSeed …`` and the screen's
   ``args`` as extras: ``--es``/``--ez``/``--ei``/``--ef``; ``clean`` runs ``pm clear`` first), ``deepLink``
   (``am start -a android.intent.action.VIEW -d <url> <package>``), ``url``, ``tap``/``type``/``swipe``/``back``
   (``input``), ``wait``/``scroll`` with elements found in ``uiautomator dump`` by ``id`` (resource id), ``text``,
-  ``label`` (content description) or ``xpath``.
+  ``label`` (content description) or ``xpath``; ``appFile`` (a file pushed into the app's own data folder through
+  ``run-as``: debug builds only).
 - screenshot: ``adb exec-out screencap -p`` (``-d <display>`` from ``target.display``).
 - ``reset``: leave demo mode, put back the display size, density, dark mode, language and animation scales, stop
   the app, stop an emulator it started, and with ``--cleanup`` delete its own AVD.
@@ -35,13 +44,68 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import zipfile
 
 from . import base
+from .simctl import app_file_paths
+
+try:
+    from appstores_lib import png
+except ImportError:  # pragma: no cover - the skill always ships it
+    png = None
 
 DEMO = "com.android.systemui.demo"
 ANIMATIONS = ("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
 PREFIX = "appstores-"
 UI_DUMP = "/sdcard/appstores-ui.xml"
+NAV_OVERLAYS = {"gesture": "com.android.internal.systemui.navbar.gestural",
+                "threebutton": "com.android.internal.systemui.navbar.threebutton",
+                "twobutton": "com.android.internal.systemui.navbar.twobutton"}
+STATUS_ICONS = ("bluetooth", "volume", "alarm", "location", "sync", "mute", "speakerphone", "zen", "eri", "tty",
+                "cast", "hotspot")
+
+
+def demo_commands(clock, mobile=False):
+    """SystemUI demo mode's broadcasts (the ``-e`` extras after ``-a com.android.systemui.demo``) for a clean bar:
+    the clock, a full battery not charging, Wi-Fi at full strength and *fully* connected (without ``fully`` some
+    images draw a "!" on it), the mobile icon hidden (an emulator without a SIM otherwise shows an empty triangle and
+    "3G"), or with ``mobile`` full and fully connected with no data type, no notifications, no other icons."""
+    out = [["command", "enter"],
+           ["command", "clock", "-e", "hhmm", demo_clock(clock)],
+           ["command", "battery", "-e", "level", "100", "-e", "plugged", "false"],
+           ["command", "network", "-e", "wifi", "show", "-e", "level", "4", "-e", "fully", "true"]]
+    if mobile:
+        out.append(["command", "network", "-e", "mobile", "show", "-e", "datatype", "none", "-e", "level", "4",
+                    "-e", "fully", "true"])
+    else:
+        out.append(["command", "network", "-e", "mobile", "hide"])
+    out.append(["command", "notifications", "-e", "visible", "false"])
+    status = ["command", "status"]
+    for icon in STATUS_ICONS:
+        status += ["-e", icon, "hide"]
+    out.append(status)
+    return out
+
+
+def other_clock(clock):
+    """A demo clock that draws differently from ``clock`` (to see the status bar respond)."""
+    return "1208" if demo_clock(clock) != "1208" else "0317"
+
+
+def fast_deployment_apk(path):
+    """True when ``path`` is a .NET for Android APK with no assemblies in it: a Debug build made for Fast
+    Deployment, which only runs when the IDE pushes the assemblies beside it (it crashes after ``adb install``).
+    Build it with ``-p:EmbedAssembliesIntoApk=true``. False for anything else, or a file that isn't a zip."""
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = z.namelist()
+    except (zipfile.BadZipFile, OSError, ValueError):
+        return False
+    dotnet = any(n.rsplit("/", 1)[-1] in ("libmonodroid.so", "libxamarin-app.so", "libmonosgen-2.0.so")
+                 for n in names)
+    if not dotnet:
+        return False
+    return not any("assembl" in n.lower() or n.endswith(".dll") or n.endswith(".dll.so") for n in names)
 
 
 def demo_clock(clock):
@@ -85,7 +149,8 @@ class AdbDriver(base.Driver):
 
     NAME = "adb"
     PLATFORMS = ("android",)
-    STEPS = ("launch", "deepLink", "url", "tap", "type", "wait", "scroll", "back", "swipe", "settle", "script")
+    STEPS = ("launch", "deepLink", "url", "appFile", "tap", "type", "wait", "scroll", "back", "swipe", "settle",
+             "script")
     FINDERS = ("id", "text", "label", "xpath")
     MANAGES_DEVICE = True     # the uiautomator driver leaves size, locale, appearance and status bar alone
     BOOT_TIMEOUT = 600
@@ -103,6 +168,7 @@ class AdbDriver(base.Driver):
         self.info = {}
         self.screen_size = None
         self.log_path = None
+        self.granted = []
 
     # -- commands -------------------------------------------------------------------------------------------
 
@@ -132,6 +198,29 @@ class AdbDriver(base.Driver):
             if os.path.isfile(path):
                 return path
         return name
+
+    def avdmanager(self, t):
+        """``target.avdmanager``, else the SDK's ``cmdline-tools/latest/bin/avdmanager``, else the newest versioned
+        ``cmdline-tools/<version>/bin/avdmanager`` (an SDK Manager install has no ``latest``), else
+        ``tools/bin/avdmanager``, else ``avdmanager`` on ``PATH``."""
+        if t.get("avdmanager"):
+            return t["avdmanager"]
+        home = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+        if home:
+            tools = os.path.join(home, "cmdline-tools")
+            names = ["latest"]
+            if os.path.isdir(tools):
+                versions = [n for n in os.listdir(tools) if n != "latest" and re.match(r"^\d+(\.\d+)*", n)]
+                versions.sort(key=lambda n: tuple(int(p) for p in re.findall(r"\d+", n)), reverse=True)
+                names += versions
+            for n in names:
+                path = os.path.join(tools, n, "bin", "avdmanager")
+                if os.path.isfile(path):
+                    return path
+            path = os.path.join(home, "tools", "bin", "avdmanager")
+            if os.path.isfile(path):
+                return path
+        return "avdmanager"
 
     # -- the four calls ---------------------------------------------------------------------------------------
 
@@ -168,12 +257,46 @@ class AdbDriver(base.Driver):
                     old = self.shell("settings", "get", "global", key, quiet=True, dry_output="1").out.strip()
                     self.changed.setdefault("animations", {})[key] = old
                     self.shell("settings", "put", "global", key, "0")
+            if t.get("navigation"):
+                self.set_navigation(t["navigation"])
             apk = (device.get("app") or {}).get("apk")
             if apk:
                 path = self.path(apk)
                 if not base.DRY_RUN and not os.path.isfile(path):
                     raise base.DriverError("the APK to install isn't there: %s (build it first)" % path)
+                if not base.DRY_RUN and fast_deployment_apk(path):
+                    self.warnings.append("%s looks like a .NET Debug APK made for Fast Deployment (no assemblies "
+                                         "inside): it won't start after adb install. Build it with "
+                                         "-p:EmbedAssembliesIntoApk=true" % os.path.basename(path))
+                    base.note("  warning: %s" % self.warnings[-1])
                 self.adb_run("install", "-r", path, timeout=600)
+            self.grant(device)
+
+    def set_navigation(self, mode):
+        """Gesture or button navigation through SystemUI's navigation bar overlays (``cmd overlay
+        enable-exclusive --category``), remembering the one enabled before for ``reset``."""
+        overlay = NAV_OVERLAYS.get(mode)
+        if overlay is None:
+            raise base.DriverError("target.navigation is one of %s, not %r" % (", ".join(sorted(NAV_OVERLAYS)), mode))
+        listed = self.shell("cmd", "overlay", "list", check=False, quiet=True, dry_output="").out
+        m = re.search(r"\[x\]\s+(com\.android\.internal\.systemui\.navbar\.\S+)", listed or "")
+        before = m.group(1) if m else None
+        if before == overlay:
+            return
+        self.shell("cmd", "overlay", "enable-exclusive", "--category", overlay)
+        self.changed["navigation"] = before
+
+    def grant(self, device):
+        """``pm grant <package> <permission>`` for the plan's ``staging.permissions`` (Android's names, as
+        ``android.permission.POST_NOTIFICATIONS``), remembered so ``reset`` revokes them."""
+        package = (device.get("app") or {}).get("package")
+        for perm in device.get("permissions") or []:
+            if not package:
+                raise base.DriverError("granting %s needs the plan's app.android.package" % perm)
+            name = perm if "." in perm else "android.permission." + perm
+            self.shell("pm", "grant", package, name)
+            if name not in self.granted:
+                self.granted.append(name)
 
     def create_avd(self, name, t):
         """``avdmanager create avd -n appstores-<id> -k <systemImage> [-d <profile>]`` unless it exists."""
@@ -181,7 +304,7 @@ class AdbDriver(base.Driver):
         have = base.run([emulator, "-list-avds"], quiet=True, dry_output="").out.split()
         if name in have:
             return
-        avdmanager = t.get("avdmanager") or self._sdk_tool("avdmanager", "cmdline-tools", "latest", "bin")
+        avdmanager = self.avdmanager(t)
         cmd = [avdmanager, "create", "avd", "-n", name, "-k", t["systemImage"]]
         if t.get("profile"):
             cmd += ["-d", t["profile"]]
@@ -239,7 +362,8 @@ class AdbDriver(base.Driver):
     def lay_out(self, device, t):
         """``wm size`` the device's size (and ``wm density``), remembering what to put back."""
         wanted = t["wmSize"] if "wmSize" in t else "%dx%d" % (device["width"], device["height"])
-        out = self.shell("wm", "size", quiet=True, dry_output="Physical size: %s" % (wanted or "")).out
+        # Under --dry-run the device's own size isn't known: show the wm size a real run would set.
+        out = self.shell("wm", "size", quiet=True, dry_output="Physical size: (the device's)").out
         physical, override = parse_size(out, "Physical"), parse_size(out, "Override")
         self.screen_size = wanted or override or physical
         if wanted and (override or physical) != wanted:
@@ -273,6 +397,13 @@ class AdbDriver(base.Driver):
         if self.changed.get("night"):
             attempt("restoring dark mode", "cmd", "uimode", "night", self.changed["night"])
         package = (device.get("app") or {}).get("package")
+        for perm in self.granted:
+            if package:
+                attempt("revoking %s" % perm, "pm", "revoke", package, perm)
+        self.granted = []
+        if self.changed.get("navigation"):
+            attempt("restoring the navigation mode", "cmd", "overlay", "enable-exclusive", "--category",
+                    self.changed["navigation"])
         if self.changed.get("appLocale") and package:
             attempt("restoring the app's language", "cmd", "locale", "set-app-locales", package)
         if "deviceLocale" in self.changed:
@@ -300,7 +431,7 @@ class AdbDriver(base.Driver):
             self.avd_created = self.info["avd"]
         if self.options.cleanup and self.avd_created:
             t = device.get("target") or {}
-            avdmanager = t.get("avdmanager") or self._sdk_tool("avdmanager", "cmdline-tools", "latest", "bin")
+            avdmanager = self.avdmanager(t)
             try:
                 base.run([avdmanager, "delete", "avd", "-n", self.avd_created], timeout=120)
             except base.DriverError as e:
@@ -331,7 +462,7 @@ class AdbDriver(base.Driver):
         if package and (self.sdk >= 33 or base.DRY_RUN):
             self.shell("cmd", "locale", "set-app-locales", package, "--locales", locale)
             self.changed["appLocale"] = True
-        elif not t.get("deviceLocale"):
+        elif package and not t.get("deviceLocale"):
             shot.warnings.append("Android %s has no per-app language: set target.deviceLocale (a rooted emulator) "
                                  "or have the app read the locale itself" % (self.sdk or "?"))
 
@@ -346,8 +477,11 @@ class AdbDriver(base.Driver):
         self.shell("cmd", "uimode", "night", "yes" if appearance == "dark" else "no")
 
     def apply_status_bar(self, device, mode, clock, shot):
-        """SystemUI demo mode: the clock, a full battery not charging, full Wi-Fi and signal, no notifications or
-        icons. There's no reading it back, so it's ``overridden``."""
+        """SystemUI demo mode (``demo_commands``): the clock, a full battery not charging, Wi-Fi full and fully
+        connected, the mobile icon hidden (``target.statusBarMobile: true`` shows it full), no notifications or
+        other icons. Then the pixels are checked (``check_status_bar``): ``verified`` when the status bar's strip
+        moved with demo mode's clock and came back, else ``unverified``; ``overridden`` only when
+        ``target.statusBarCheck`` is false (applied, not looked at)."""
         if not self.MANAGES_DEVICE or device.get("kind") in ("tv", "watch"):
             return "none"
         if mode != "clean":
@@ -355,25 +489,101 @@ class AdbDriver(base.Driver):
                 self.shell("am", "broadcast", "-a", DEMO, "-e", "command", "exit")
                 self.changed["demo"] = False
             return "none"
+        t = device.get("target") or {}
         if "demoAllowed" not in self.changed:
             self.changed["demoAllowed"] = self.shell("settings", "get", "global", "sysui_demo_allowed", quiet=True,
                                                      dry_output="null").out.strip()
         self.shell("settings", "put", "global", "sysui_demo_allowed", "1")
+        # The first pass after a boot can leave the real Wi-Fi icon beside demo mode's (two Wi-Fi icons on an
+        # API 36 image, seen 2026-11-14): the first time, enter, leave and enter again.
+        passes = 1 if self.changed.get("demo") else 2
         self.changed["demo"] = True
-        for extra in (["command", "enter"],
-                      ["command", "clock", "-e", "hhmm", demo_clock(clock)],
-                      ["command", "battery", "-e", "level", "100", "-e", "plugged", "false"],
-                      ["command", "network", "-e", "wifi", "show", "-e", "level", "4"],
-                      ["command", "network", "-e", "mobile", "show", "-e", "datatype", "none", "-e", "level", "4"],
-                      ["command", "notifications", "-e", "visible", "false"],
-                      ["command", "status", "-e", "bluetooth", "hide", "-e", "volume", "hide", "-e", "alarm", "hide",
-                       "-e", "location", "hide", "-e", "sync", "hide", "-e", "mute", "hide"]):
-            self.shell("am", "broadcast", "-a", DEMO, "-e", *extra)
-        return "overridden"
+        for n in range(passes):
+            if n:
+                self.shell("am", "broadcast", "-a", DEMO, "-e", "command", "exit")
+            for extra in demo_commands(clock, mobile=bool(t.get("statusBarMobile"))):
+                self.shell("am", "broadcast", "-a", DEMO, "-e", *extra)
+        if t.get("statusBarCheck") is False:
+            return "overridden"
+        return self.check_status_bar(device, clock, shot)
+
+    def status_rows(self, device):
+        """How many rows from the top the status bar takes: 24 dp at the density (``target.density``, else ``wm
+        density``), at most a tenth of the screen."""
+        dpi = (device.get("target") or {}).get("density")
+        if not dpi:
+            out = self.shell("wm", "density", check=False, quiet=True, dry_output="Physical density: 420").out
+            found = parse_size(out, "Override") or parse_size(out, "Physical")
+            dpi = int(found) if found and found.isdigit() else 420
+        height = self.size(device)[1]
+        return max(8, min(height // 10, int(round(24 * float(dpi) / 160.0))))
+
+    def steady_strip(self, device, rows, tries=6):
+        """The top ``rows`` rows once two reads in a row agree (the bar redraws a moment after a broadcast), at
+        most ``tries`` reads; the last read if they never agree, ``None`` when it can't be read."""
+        last = None
+        for n in range(tries):
+            strip = self.top_strip(device, rows)
+            if strip is None or strip == last:
+                return strip
+            last = strip
+            base.sleep(0.4)
+        return last
+
+    def top_strip(self, device, rows):
+        """The top ``rows`` rows of a screenshot now, as RGB bytes (``None`` when it can't be read)."""
+        path = os.path.join(self.options.workdir, ".statusbar-%s.png" % device["id"])
+        try:
+            os.makedirs(self.options.workdir, exist_ok=True)
+            self.screenshot(device, path)
+            if png is None:
+                return None
+            width, height, rgb = png.decode_rgb(path)
+            return rgb[:width * 3 * min(rows, height)]
+        except (base.DriverError, OSError, ValueError):
+            return None
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def check_status_bar(self, device, clock, shot):
+        """Look at the pixels: the status bar's strip now, with demo mode's clock moved to another time, and with
+        it put back. ``verified`` when the strip changed with the clock and came back (demo mode draws the bar);
+        ``unverified`` when it didn't change (demo mode ignored: some makers' skins, a SystemUI that crashed) or
+        kept changing (an animation behind it), with a warning. The icons themselves are still for a person to
+        look at."""
+        if base.DRY_RUN:
+            base.note("  (dry run: the status bar would be checked: demo mode's clock moved to %s and back, the "
+                      "strip compared)" % other_clock(clock))
+            return "verified"
+        rows = self.status_rows(device)
+        before = self.steady_strip(device, rows)
+        self.shell("am", "broadcast", "-a", DEMO, "-e", "command", "clock", "-e", "hhmm", other_clock(clock))
+        moved = self.steady_strip(device, rows)
+        self.shell("am", "broadcast", "-a", DEMO, "-e", "command", "clock", "-e", "hhmm", demo_clock(clock))
+        after = self.steady_strip(device, rows)
+        if before is None or moved is None or after is None:
+            shot.warnings.append("couldn't read the status bar's pixels to check demo mode: look at it")
+            return "unverified"
+        if moved == before:
+            shot.warnings.append("the status bar didn't change when demo mode's clock did: demo mode may be "
+                                 "ignored on this device; look at the picture's status bar")
+            return "unverified"
+        if after != before:
+            shot.warnings.append("the status bar's strip kept changing (something animating behind it): demo mode "
+                                 "couldn't be confirmed; look at the picture's status bar")
+            return "unverified"
+        return "verified"
 
     def script_env(self, device):
-        """A ``script`` step gets the device's serial as ``ANDROID_SERIAL`` (adb honours it)."""
-        return {"ANDROID_SERIAL": self.serial or ""}
+        """A ``script`` step gets the device's serial as ``ANDROID_SERIAL`` (adb honours it) and
+        ``APPSTORES_SERIAL``."""
+        return {"ANDROID_SERIAL": self.serial or "", "APPSTORES_SERIAL": self.serial or ""}
+
+    def inspect_tree(self, ctx):
+        """The ``uiautomator dump`` XML (``capture.py --inspect``)."""
+        self.shell("uiautomator", "dump", UI_DUMP, check=False, quiet=True, timeout=60)
+        return self.adb_run("exec-out", "cat", UI_DUMP, quiet=True, timeout=60).out
 
     # -- elements -------------------------------------------------------------------------------------------
 
@@ -414,9 +624,10 @@ class AdbDriver(base.Driver):
                                   % ctx.index)
         if value.get("clean"):
             self.shell("pm", "clear", package)
-        if value.get("env"):
+        missing = sorted(set(value.get("env") or {}) - set(value.get("args") or {}))
+        if missing:
             ctx.warn("Android apps get no environment variables: pass %s as args (extras) instead"
-                     % ", ".join(sorted(value["env"])))
+                     % ", ".join(missing))
         args = {}
         seed = ctx.screen.get("seed") if ctx.screen.get("seed") is not None else ctx.device.get("seed")
         if seed is not None:
@@ -427,6 +638,28 @@ class AdbDriver(base.Driver):
         if "Error" in res.out or "Exception" in res.out:
             raise base.StepFailed("step %d: am start %s: %s" % (ctx.index, component, res.out.strip()[-300:]))
         self.launched = True
+
+    def step_appFile(self, ctx, value):
+        """``appFile``: push ``file`` and copy it to ``into`` inside the app's own data folder (``files/…``,
+        ``cache/…``, ``databases/…``, relative to ``/data/data/<package>``) through ``run-as``, so only a debuggable
+        build; the app stopped first and the file it replaces (and a database's ``-wal``/``-shm``) removed."""
+        src, rel = app_file_paths(self, ctx, value, "android")
+        package = (ctx.device.get("app") or {}).get("package")
+        if not package:
+            raise base.StepFailed("step %d: appFile needs the plan's app.android.package" % ctx.index)
+        staged = "/data/local/tmp/appstores-%s" % os.path.basename(rel)
+        self.shell("am", "force-stop", package, check=False)
+        self.adb_run("push", src, staged, timeout=300)
+        folder = rel.rsplit("/", 1)[0] if "/" in rel else "."
+        script = "mkdir -p %s && rm -f %s %s-wal %s-shm %s-journal && cp %s %s" % (
+            shlex.quote(folder), shlex.quote(rel), shlex.quote(rel), shlex.quote(rel), shlex.quote(rel),
+            shlex.quote(staged), shlex.quote(rel))
+        res = self.shell("run-as", package, "sh", "-c", script, check=False, timeout=120)
+        self.shell("rm", "-f", staged, check=False, quiet=True)
+        text = (res.out or "") + (res.err or "")
+        if not res.ok or "not debuggable" in text or "unknown package" in text.lower():
+            raise base.StepFailed("step %d: appFile: run-as %s couldn't copy into the app's data (%s): it works only "
+                                  "on a debuggable (debug) build" % (ctx.index, package, text.strip()[:200]))
 
     def step_deepLink(self, ctx, value):
         """``am start -W -a android.intent.action.VIEW -d <url> [<package>]``."""

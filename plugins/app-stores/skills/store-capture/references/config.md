@@ -52,6 +52,7 @@ everywhere.
 | `statusBar` | `clean` \| `as-is` | `clean` | `clean`: the clock, full battery and signal, no notifications or carrier; `as-is`: left alone |
 | `seed` | string or integer | | passed to the app as `ScreenshotSeed` (a launch argument, an intent extra, a query parameter) |
 | `flatten` | `#RRGGBB` | `#000000` | the colour a picture with alpha is flattened onto (black, as a device's masked corners are) |
+| `staging` | object | | how the app is signed in, seeded and set up for the screens, agreed with the user ([staging.md](staging.md)); below |
 | `devices` | array, at least 1 | required | below |
 | `screens` | array, at least 1 | required | below |
 
@@ -90,12 +91,12 @@ Extra fields are passed to the driver (an agent's app name, for example).
 | Driver | Fields |
 |---|---|
 | `simctl` | `deviceType` (name or identifier), `runtime` (`latest`, a name, a version or an id), `udid` (an existing device: only one the user names), `display` (a display id, two-screen devices), `localeScope` (`app`: no device language change) |
-| `adb` | `systemImage` and `profile` (an AVD of the skill's own, `appstores-<id>`), `avd` (an AVD by name; `readOnly`), `serial` (a connected device: only one the user names), `wmSize` (default the device's `width`x`height`; `null` leaves it), `density`, `deviceLocale`, `display` |
+| `adb` | `systemImage` and `profile` (an AVD of the skill's own, `appstores-<id>`), `avd` (an AVD by name; `readOnly`, `window`, `port`, `emulatorArgs`), `serial` (a connected device: only one the user names), `wmSize` (default the device's `width`x`height`; `null` leaves it), `density`, `deviceLocale`, `display`, `animations` (`off` by default), `navigation` (`gesture`, `threebutton`), `statusBarMobile`, `statusBarCheck`; the tools' paths `adb`, `emulator`, `avdmanager` ([adb.md](adb.md)) |
 | `uiautomator` | `serial`, or `avd` already running: it changes nothing on the device (no size, locale, demo mode, install or launch) |
 | `chrome` | `scale` (device scale factor, default 1; the page is `width/scale` × `height/scale` CSS px), or `viewport` (`[w, h]` CSS px, which sets the scale); `mobile`; `reducedMotion` |
 | `macos` | `scale` (the display's backing scale, default 2: the window is sized to `width/scale` × `height/scale` points), `position` (default `[0, 40]`) |
-| `devflow`, `ailoha` | the host's fields (as `simctl` or `adb`), plus `agentPort`, `agentPlatform`, `appName`, `agentTimeout`, `cli`, `host`, `screenshot`: [devflow.md](devflow.md), [ailoha.md](ailoha.md) |
-| `appium` | the host's fields, plus `server` (default `http://127.0.0.1:4723`, this machine only) and `capabilities`: [appium.md](appium.md) |
+| `devflow`, `ailoha` | the host's fields (as `simctl` or `adb`), plus `agentPort` (by hand, checked), `agentPlatform`, `appName`, `agentTimeout`, `cli`, `host`, `screenshot`: [devflow.md](devflow.md), [ailoha.md](ailoha.md) |
+| `appium` | the host's fields, plus `server` (default `http://127.0.0.1:4723`, this machine only), `capabilities` (on a simulator `appium:isHeadless` is already `true`) and `pointScale`: [appium.md](appium.md) |
 | `xcuitest` | `scheme` (required), `project` or `workspace`, `testPlan`, `configuration`, `xctestrun`, `destination`, `testTimeout`, plus the host's: [ui-automation.md](ui-automation.md) |
 | `maestro` | `maestro` (the command), `env`, `flowTimeout`, plus the host's: [ui-automation.md](ui-automation.md) |
 
@@ -106,12 +107,34 @@ Each driver's reference is the authority for its `target`; unknown fields are re
 | Field | Type | Meaning |
 |---|---|---|
 | `id` | `[a-z0-9][a-z0-9_.-]*` | the file name; what `store-screenshots` calls the capture screen |
+| `state` | string | what the screen must show, in plain words; in `staging.md`, the report and a wrong state's reason |
 | `steps` | array | how to reach it, run in order; then the screenshot |
+| `verify` | an element, or a list | must be on screen before the shot (`timeout`, default 5 s), else the shot is `missed` ("wrong state"); the report's `stateCheck` |
+| `staging` | `false` | leave the staging's seed and launch values out of this screen |
 | `devices` | array of device ids | only these devices (default: all) |
 | `platforms` | array of platforms | only devices of these platforms |
 | `locales` | array | only these of the device's locales |
 | `appearance`, `clock`, `statusBar`, `seed`, `flatten` | | this screen's settings |
-| `overrides` | object | keyed by a device id or a platform: `steps` or settings that differ there. A device id's entry wins over its platform's |
+| `overrides` | object | keyed by a device id or a platform: `steps`, `state`, `verify` or settings that differ there. A device id's entry wins over its platform's |
+
+## `staging`
+
+Agreed with the user before the plan runs; [staging.md](staging.md) has the questions and the reasons.
+`capture.py --write-staging` writes it readable as `staging.md` beside the plan, and a run warns when that file no
+longer matches.
+
+| Field | Meaning |
+|---|---|
+| `account` | `kind`: `none`, `guest`, `bypass` (a debug sign-in bypass), `demo` (a demo account: never a real person's); `env`: the **names** of the environment variables holding a demo account's sign-in (checked before a run, usable in launch values as `${NAME}`, masked in every log and report); `how` |
+| `seed` | `kind`: `command` (`run`, a `script` before each screen's steps; `timeout`), `file` (`file` copied into the app's data at `into`, a path or one per platform, as an `appFile` step), `launch` (the app seeds itself: put the switch in `launch.args`), `backend`, `none`; `when`: `each-screen` (default) or `once` (before each device's first screen); `how` |
+| `launch` | `args` and `env` added to every `launch` step (the step's own win) |
+| `skip` | what's skipped and how: strings or `{ "what", "how" }` |
+| `permissions` | by platform: granted after install, before launch, revoked in reset (simctl privacy services; Android permission names) |
+| `flags` | feature flags: strings or `{ "name", "value", "how" }` |
+| `clock` | the app's own "now": `now`, `how` (the status bar's is the plan's `clock`) |
+| `network` | `kind`: `offline`, `mock`, `staging`, `live`; `how` |
+| `confirmed` | `{ "screen", "device", "on" }`: the user saw this screen captured with this staging and agreed. Until it's set, a run captures one screen only |
+| `doc` | the readable copy's file name (default `staging.md`) |
 
 ## Steps
 
@@ -129,8 +152,20 @@ One kind a step: `{ "<kind>": <value> }`.
 | `back` | `true` | the system back (Android), the agent's or Appium's back |
 | `swipe` | `{ "from": [x, y], "to": [x, y], "ms": … }` or `{ "direction": … }` | |
 | `flow` | a string (a Maestro flow's path, a UI test's name) or the flow driver's own object | run by the driver that understands it |
-| `script` | a string (split like a shell would, not run by one), an argument list, or `{ "run": …, "timeout": s }` | a command the user provides, run as is from the plan's folder, with `APPSTORES_DEVICE`, `APPSTORES_LOCALE` and `APPSTORES_SCREEN` set |
-| `settle` | `true` or `{ "timeout": s }` | waits until two screenshots in a row are identical; a screen that never settles is a warning |
+| `script` | a string (split like a shell would, not run by one), an argument list, or `{ "run": …, "timeout": s }` | a command the user provides, run as is from the plan's folder, with the variables below |
+| `appFile` | `{ "file": "seed/app.db", "into": "Library/Caches/app.db" }` (`into` may be `{ "ios": …, "android": … }`) | copies a file into the app's own data, the app stopped first and the old file (and a database's `-wal`/`-shm`) removed: the simulator's data container, Android's `/data/data/<package>` through `run-as` (debug builds). Done by the `simctl` and `adb` drivers, and through them by the agents and Appium |
+| `settle` | `true` or `{ "timeout": s, "ignore": [[x, y, w, h], …] }` | waits until two screenshots in a row are identical (outside the `ignore` rectangles, in the picture's pixels: an illustration that never stops moving); a screen that never settles is a warning |
+
+A `script` step's environment:
+
+| Variable | Value |
+|---|---|
+| `APPSTORES_DEVICE` | the plan's device id |
+| `APPSTORES_LOCALE`, `APPSTORES_SCREEN` | the locale and screen being captured |
+| `APPSTORES_PLATFORM` | the device's platform (`ios`, `android`, …) |
+| `APPSTORES_APP_ID` | the app's bundle id or package |
+| `APPSTORES_UDID` | the simulator's UDID (`simctl`, and drivers it hosts) |
+| `ANDROID_SERIAL`, `APPSTORES_SERIAL` | the adb serial (`adb`, and drivers it hosts; adb honours `ANDROID_SERIAL`) |
 
 **Elements** are found by one of: `id` (accessibility identifier, `AutomationId`, resource id, test id: matches
 the whole id or its last part, so `search` finds `com.example.samplerecipes:id/search`), `text` (exact, then
@@ -158,15 +193,24 @@ Written to `<out>/capture-report.json` after every run.
 |---|---|
 | `status` | `taken`; `missed` (not reached: `kept` is `previous` when the last run's picture stays, else `none`); `failed` (reached but unusable: the wrong size, a capture error); `skipped` (a step or device the driver can't do) |
 | `reason` | why it isn't `taken` |
-| `statusBar` | `verified` (the override was read back from the device: `simctl status_bar list` shows it), `overridden` (applied but not read back: Android's demo mode always, or a `list` that didn't show it), `unverified` (the override failed, or an imported picture whose tool didn't say), `none` (no status bar, or `as-is`). None is a look at the pixels: look at the picture |
-| `fixes` | lossless repairs made: `alpha-flattened`, `converted-to-srgb`, `16-bit-to-8-bit`. Never a resize |
+| `statusBar` | `verified` (iOS: `simctl status_bar list` shows the override; Android: the status bar's pixels changed with demo mode's clock and came back), `overridden` (applied and not checked: `target.statusBarCheck: false`), `unverified` (the override failed or couldn't be confirmed, or an imported picture whose tool didn't say), `none` (no status bar, or `as-is`). The icons are still for a person to look at |
+| `state`, `stateCheck` | the screen's `state` words; its `verify`: `passed`, `failed` (the shot is `missed`, "wrong state"), `unchecked` (the driver can't see elements: look) |
+| `fixes` | lossless repairs made: `alpha-flattened`, `converted-to-srgb`, `16-bit-to-8-bit`. Never a resize. Simulators and emulators write an alpha channel that's all opaque: those are flattened quietly (still in `fixes`) and counted once in the report's `notes`; see-through pixels get a warning |
 | `warnings` | what a person should look at (a screen that didn't settle, a wait that couldn't see elements) |
 | `source` | what produced it (device type and runtime, AVD and API level, browser) |
 
 Each PNG is exactly its device's `width`×`height`, 8-bit RGB (no alpha, no `tRNS`), sRGB, not interlaced. Files are
 written to a temporary folder and moved into place at the end, so a failed run never leaves a mix.
 
+The report also has `devices` (each device's source and warnings) and `notes` (said once a run, like the count of
+quietly flattened pictures).
+
 ## Options outside the plan
 
 - `capture.py --cleanup`: delete the simulators and AVDs the skill created for itself (`appstores-<device id>`) after the
   run. It never deletes one the plan names by UDID, serial or AVD name.
+- `capture.py --inspect`: also save each screen's UI tree (after its steps, or where they stopped) to
+  `<out>/.inspect/<locale>/<device>/<screen>.txt`, for writing steps and `verify`.
+- `capture.py --write-staging`: write `staging.md` from the plan, and stop.
+- `capture.py --current [folder]`: list the current store screenshots (`existing/<store>/screenshots/`,
+  `store-screenshots.json`'s shots, `design/current.json`, or the folder), to start the screens from; and stop.

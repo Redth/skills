@@ -19,6 +19,11 @@ New devices arrive every year: add them as data, and check the first capture.
 on iPad, and the Mac, Apple TV and Vision Pro slots for apps on those platforms. Apple scales the largest set down
 for smaller classes when the UI is the same.
 
+**For a designed set** (`store-screenshots`), capture the largest iPhone (6.9", 1320×2868) and give the design a
+6.3" *target* (1206×2622): it renders the required slot from the same capture, so a 6.3" simulator isn't needed.
+**For captures sent as they are**, capture the required 6.3" (or 6.1") device too. `check_captures.py --rules
+apple` notes a required display type no device fills.
+
 | Simulator device type | Native pixels (portrait) | Slot (rules id) | Accepted? |
 |---|---|---|---|
 | iPhone 17 Pro Max, 16 Pro Max | 1320×2868 | `APP_IPHONE_67` (6.9") | yes |

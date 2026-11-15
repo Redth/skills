@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -400,20 +401,78 @@ class SimctlTests(DriverCase):
         self.assertTrue(self.run_.matching(r"launch .* -AppleLanguages '\(fr-FR\)' -AppleLocale fr_FR"))
         self.assertTrue(self.run_.matching(r"shutdown %s" % other))  # it was off: put back off
 
-    def test_status_bar_not_read_back_is_overridden_and_a_failure_unverified(self):
+    def test_status_bar_not_read_back_or_failed_is_unverified(self):
         self.answers()
         self.run_.on(r"status_bar \S+ list", out="")
         drv = simctl_driver.SimctlDriver(self.options)
         device = self.device()
         drv.prepare(device, {})
         shot = drv.run_screen(device, self.screen([]), "en-US")
-        self.assertEqual(shot.status_bar, "overridden")
+        self.assertEqual(shot.status_bar, "unverified")
+        self.assertTrue(any("may not have taken" in w for w in shot.warnings))
         drv2 = simctl_driver.SimctlDriver(self.options)
         self.run_.on(r"status_bar \S+ override", code=1, err="Not supported")
         drv2.prepare(device, {})
         shot = drv2.run_screen(device, self.screen([]), "en-US")
         self.assertEqual(shot.status_bar, "unverified")
         self.assertTrue(any("override failed" in w for w in shot.warnings))
+
+    def test_an_app_file_is_copied_into_the_data_container_replacing_the_old_one(self):
+        self.answers()
+        container = os.path.join(self.tmp, "container")
+        old = kit.write_png(os.path.join(container, "Library", "Caches", "app.db"), 1, 1)
+        with open(old + "-wal", "w") as f:
+            f.write("stale")
+        self.run_.on(r"get_app_container \S+ com.example.samplerecipes data", out=container + "\n")
+        seed = kit.write_png(os.path.join(self.tmp, "seed", "app.db"), 2, 2)
+        drv = simctl_driver.SimctlDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        shot = drv.run_screen(device, self.screen([{"appFile": {"file": "seed/app.db",
+                                                                "into": {"ios": "Library/Caches/app.db"}}}]), "en-US")
+        self.assertEqual(shot.status, "taken", shot.reason)
+        with open(old, "rb") as a, open(seed, "rb") as b:
+            self.assertEqual(a.read(), b.read())
+        self.assertFalse(os.path.exists(old + "-wal"))
+        self.assertTrue(self.run_.index(r"simctl terminate") < self.run_.index(r"get_app_container"))
+        shot = drv.run_screen(device, self.screen([{"appFile": {"file": "seed/app.db", "into": "../../escape.db"}}],
+                                                  sid="recipe"), "en-US")
+        self.assertEqual(shot.status, "missed")
+        self.assertIn("stays inside the app's data", shot.reason)
+
+    def test_permissions_are_granted_after_install_and_revoked_in_reset(self):
+        self.answers()
+        drv = simctl_driver.SimctlDriver(self.options)
+        device = self.device(permissions=["photos", "location"])
+        drv.prepare(device, {})
+        self.assertEqual(self.run_.matching(r"simctl privacy"), [
+            "xcrun simctl privacy %s grant photos com.example.samplerecipes" % UDID,
+            "xcrun simctl privacy %s grant location com.example.samplerecipes" % UDID])
+        drv.reset(device)
+        self.assertTrue(self.run_.matching(r"privacy %s revoke photos com.example.samplerecipes" % UDID))
+
+    def test_a_simulator_shut_down_under_it_is_booted_again_before_the_locale(self):
+        self.answers({"com.apple.CoreSimulator.SimRuntime.iOS-27-2": [
+            {"udid": UDID, "name": "appstores-iphone-6.9", "state": "Shutdown", "isAvailable": True,
+             "deviceTypeIdentifier": TYPE_ID}]})
+        drv = simctl_driver.SimctlDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        # Something (a failed UI-test session) shut it down after prepare booted it.
+        self.run_.on(r"defaults write -g AppleLanguages", code=149,
+                     err="Unable to lookup in current state: Shutdown\nProcess spawn via launchd failed because "
+                         "device is not booted")
+        writes = []
+
+        def booted(cmd):
+            # Once booted again, the next write works.
+            self.run_.on(r"defaults write -g AppleLanguages", then=lambda c: writes.append(c))
+        self.run_.on(r"simctl boot ", then=booted)
+        start = len(self.run_.lines)
+        shot = drv.run_screen(device, self.screen([]), "de-DE")
+        self.assertEqual(shot.status, "taken", shot.reason)
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(len([l for l in self.run_.lines[start:] if "simctl boot " in l]), 2)  # again, then the reboot
 
     def test_tv_has_no_status_bar_and_a_display_is_passed(self):
         self.answers({"com.apple.CoreSimulator.SimRuntime.tvOS-27-2": [
@@ -517,7 +576,9 @@ class AdbTests(AdbCase):
             {"swipe": {"from": [540, 1500], "to": [540, 500], "ms": 250}},
             {"deepLink": "samplerecipes://recipe/demo"}]), "de-DE")
         self.assertEqual(shot.status, "taken", shot.reason)
-        self.assertEqual(shot.status_bar, "overridden")
+        # The fake device's picture never changes, so demo mode's clock didn't show: not confirmed.
+        self.assertEqual(shot.status_bar, "unverified")
+        self.assertTrue(any("didn't change when demo mode's clock did" in w for w in shot.warnings))
         with open(shot.path, "rb") as f:
             self.assertTrue(f.read().startswith(b"\x89PNG"))
         lines = [l for l in self.run_.lines[start:] if "uiautomator dump" not in l and "exec-out cat" not in l]
@@ -531,11 +592,32 @@ class AdbTests(AdbCase):
             p + "'am broadcast -a com.android.systemui.demo -e command enter'",
             p + "'am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941'",
             p + "'am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false'",
-            p + "'am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4'",
-            p + "'am broadcast -a com.android.systemui.demo -e command network -e mobile show -e datatype none -e level 4'",
+            p + "'am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4 -e fully true'",
+            p + "'am broadcast -a com.android.systemui.demo -e command network -e mobile hide'",
             p + "'am broadcast -a com.android.systemui.demo -e command notifications -e visible false'",
             p + "'am broadcast -a com.android.systemui.demo -e command status -e bluetooth hide -e volume hide -e alarm "
-                "hide -e location hide -e sync hide -e mute hide'",
+                "hide -e location hide -e sync hide -e mute hide -e speakerphone hide -e zen hide -e eri hide -e tty "
+                "hide -e cast hide -e hotspot hide'",
+            # The first time after a boot: leave demo mode and enter it again (a second Wi-Fi icon otherwise).
+            p + "'am broadcast -a com.android.systemui.demo -e command exit'",
+            p + "'am broadcast -a com.android.systemui.demo -e command enter'",
+            p + "'am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941'",
+            p + "'am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false'",
+            p + "'am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4 -e fully true'",
+            p + "'am broadcast -a com.android.systemui.demo -e command network -e mobile hide'",
+            p + "'am broadcast -a com.android.systemui.demo -e command notifications -e visible false'",
+            p + "'am broadcast -a com.android.systemui.demo -e command status -e bluetooth hide -e volume hide -e alarm "
+                "hide -e location hide -e sync hide -e mute hide -e speakerphone hide -e zen hide -e eri hide -e tty "
+                "hide -e cast hide -e hotspot hide'",
+            # The pixels: the status bar's strip (read until two reads agree), with demo mode's clock moved and back.
+            "adb -s emulator-5580 exec-out screencap -p",
+            "adb -s emulator-5580 exec-out screencap -p",
+            p + "'am broadcast -a com.android.systemui.demo -e command clock -e hhmm 1208'",
+            "adb -s emulator-5580 exec-out screencap -p",
+            "adb -s emulator-5580 exec-out screencap -p",
+            p + "'am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941'",
+            "adb -s emulator-5580 exec-out screencap -p",
+            "adb -s emulator-5580 exec-out screencap -p",
             p + "'pm clear com.example.samplerecipes'",
             p + "'am start -W -S -n com.example.samplerecipes/.MainActivity --es ScreenshotSeed demo --es "
                 "ScreenshotScreen plan --ez Fast true --ei Count 3'",
@@ -548,6 +630,159 @@ class AdbTests(AdbCase):
             "adb -s emulator-5580 exec-out screencap -p",
         ])
         self.assertTrue(self.run_.matching(r"shell 'uiautomator dump /sdcard/appstores-ui.xml'"))
+
+    def status_bar_device(self, clocks):
+        """screencap answers whose top rows follow demo mode's clock (``clocks``: hhmm -> a colour)."""
+        current = {"hhmm": "0000"}
+
+        def broadcast(cmd):
+            m = re.search(r"-e hhmm (\d{4})", cmd[-1])
+            if m:
+                current["hhmm"] = m.group(1)
+        self.run_.on(ADB + r"shell 'am broadcast", then=broadcast)
+        self.run_.on(ADB + r"exec-out screencap -p",
+                     out=lambda cmd: kit.png_bytes(1080, 1920, colour=clocks.get(current["hhmm"], (9, 9, 9))))
+
+    def test_a_status_bar_that_follows_demo_modes_clock_is_verified(self):
+        self.answers()
+        self.status_bar_device({"0941": (10, 10, 10), "1208": (200, 200, 200)})
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        shot = drv.run_screen(device, self.screen([]), "en-US")
+        self.assertEqual(shot.status_bar, "verified")
+        self.assertEqual(shot.warnings, [])
+
+    def test_a_status_bar_that_keeps_changing_is_unverified(self):
+        self.answers()
+        frames = iter([(1, 1, 1), (1, 1, 1), (2, 2, 2), (2, 2, 2), (3, 3, 3), (3, 3, 3), (4, 4, 4)])
+        self.run_.on(ADB + r"exec-out screencap -p",
+                     out=lambda cmd: kit.png_bytes(1080, 1920, colour=next(frames, (5, 5, 5))))
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        shot = drv.run_screen(device, self.screen([]), "en-US")
+        self.assertEqual(shot.status_bar, "unverified")
+        self.assertTrue(any("kept changing" in w for w in shot.warnings))
+
+    def test_status_bar_mobile_and_check_off(self):
+        self.answers()
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device(target={"avd": "Medium_Phone", "statusBarMobile": True, "statusBarCheck": False})
+        drv.prepare(device, {})
+        shot = drv.run_screen(device, self.screen([]), "en-US")
+        self.assertEqual(shot.status_bar, "overridden")
+        self.assertTrue(self.run_.matching(r"-e mobile show -e datatype none -e level 4 -e fully true"))
+        self.assertEqual(self.run_.matching(r"hhmm 1208"), [])
+
+    def test_android_env_isnt_warned_about_when_args_carry_the_same_keys(self):
+        self.answers()
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        shot = drv.run_screen(device, self.screen([{"launch": {"env": {"DEMO": "1", "ONLY_ENV": "x"},
+                                                               "args": {"DEMO": "1"}}}]), "en-US")
+        env_warnings = [w for w in shot.warnings if "environment variables" in w]
+        self.assertEqual(len(env_warnings), 1)
+        self.assertIn("ONLY_ENV", env_warnings[0])
+        self.assertNotIn("DEMO", env_warnings[0])
+
+    def test_avdmanager_is_found_in_a_versioned_cmdline_tools_folder(self):
+        sdk = os.path.join(self.tmp, "sdk")
+        for v in ("19.0", "23.0", "9.0"):
+            kit.write_png(os.path.join(sdk, "cmdline-tools", v, "bin", "avdmanager"), 1, 1)
+        saved = dict((k, os.environ.get(k)) for k in ("ANDROID_HOME", "ANDROID_SDK_ROOT"))
+        os.environ["ANDROID_HOME"] = sdk
+        os.environ.pop("ANDROID_SDK_ROOT", None)
+        try:
+            drv = adb_driver.AdbDriver(self.options)
+            self.assertEqual(drv.avdmanager({}), os.path.join(sdk, "cmdline-tools", "23.0", "bin", "avdmanager"))
+            kit.write_png(os.path.join(sdk, "cmdline-tools", "latest", "bin", "avdmanager"), 1, 1)
+            self.assertEqual(drv.avdmanager({}), os.path.join(sdk, "cmdline-tools", "latest", "bin", "avdmanager"))
+            self.assertEqual(drv.avdmanager({"avdmanager": "/opt/avdmanager"}), "/opt/avdmanager")
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    def test_a_dotnet_fast_deployment_apk_is_warned_about(self):
+        import zipfile
+        fast = os.path.join(self.tmp, "fast.apk")
+        with zipfile.ZipFile(fast, "w") as z:
+            z.writestr("lib/arm64-v8a/libmonodroid.so", b"x")
+            z.writestr("classes.dex", b"x")
+        full = os.path.join(self.tmp, "full.apk")
+        with zipfile.ZipFile(full, "w") as z:
+            z.writestr("lib/arm64-v8a/libmonodroid.so", b"x")
+            z.writestr("lib/arm64-v8a/libassemblies.arm64-v8a.blob.so", b"x")
+        native = os.path.join(self.tmp, "native.apk")
+        with zipfile.ZipFile(native, "w") as z:
+            z.writestr("classes.dex", b"x")
+        self.assertTrue(adb_driver.fast_deployment_apk(fast))
+        self.assertFalse(adb_driver.fast_deployment_apk(full))
+        self.assertFalse(adb_driver.fast_deployment_apk(native))
+        self.answers()
+        drv = adb_driver.AdbDriver(self.options)
+        drv.prepare(self.device(app={"package": "com.example.samplerecipes", "activity": ".MainActivity",
+                                     "apk": "fast.apk"}), {})
+        self.assertTrue(any("EmbedAssembliesIntoApk=true" in w for w in drv.warnings))
+
+    def test_permissions_are_granted_before_launch_and_revoked_after(self):
+        self.answers()
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device(permissions=["POST_NOTIFICATIONS", "android.permission.CAMERA"])
+        drv.prepare(device, {})
+        self.assertTrue(self.run_.matching(r"'pm grant com.example.samplerecipes android.permission.POST_NOTIFICATIONS'"))
+        drv.reset(device)
+        self.assertTrue(self.run_.matching(r"'pm revoke com.example.samplerecipes android.permission.CAMERA'"))
+
+    def test_navigation_mode_is_switched_and_put_back(self):
+        self.answers()
+        self.run_.on(ADB + r"shell 'cmd overlay list'", out="com.android.internal.systemui.navbar\n"
+                     "[x] com.android.internal.systemui.navbar.threebutton\n"
+                     "[ ] com.android.internal.systemui.navbar.gestural\n")
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device(target={"avd": "Medium_Phone", "navigation": "gesture"})
+        drv.prepare(device, {})
+        self.assertTrue(self.run_.matching(r"enable-exclusive --category com.android.internal.systemui.navbar.gestural'"))
+        drv.reset(device)
+        self.assertTrue(self.run_.matching(r"enable-exclusive --category com.android.internal.systemui.navbar.threebutton'"))
+
+    def test_an_app_file_goes_into_the_apps_data_through_run_as(self):
+        self.answers()
+        seed = kit.write_png(os.path.join(self.tmp, "seed", "app.db"), 1, 1)
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        shot = drv.run_screen(device, self.screen([{"appFile": {"file": "seed/app.db",
+                                                                "into": {"ios": "Library/x.db", "android": "cache/data/app.db"}}}]),
+                              "en-US")
+        self.assertEqual(shot.status, "taken", shot.reason)
+        self.assertTrue(self.run_.matching(r"push .*/seed/app.db /data/local/tmp/appstores-app.db"))
+        (copy,) = self.run_.matching(r"run-as com.example.samplerecipes")
+        self.assertIn("cp /data/local/tmp/appstores-app.db cache/data/app.db", copy)
+        self.assertIn("rm -f cache/data/app.db cache/data/app.db-wal", copy)
+        self.run_.on(r"run-as", out="run-as: package not debuggable: com.example.samplerecipes", code=1)
+        shot = drv.run_screen(device, self.screen([{"appFile": {"file": "seed/app.db", "into": "files/app.db"}}],
+                                                  sid="recipe"), "en-US")
+        self.assertEqual(shot.status, "missed")
+        self.assertIn("debuggable", shot.reason)
+
+    def test_the_dry_run_shows_the_display_size_a_real_run_sets(self):
+        self.answers()
+        base.DRY_RUN = True
+        drv = adb_driver.AdbDriver(self.options)
+        drv.prepare(self.device(target={"serial": "emulator-5580"}), {})
+        self.assertTrue(any("wm size 1080x1920" in l for l in self.hooks.log))
+
+    def test_a_missing_log_folder_isnt_taken_for_a_missing_emulator(self):
+        log = os.path.join(self.tmp, "not-yet", "emulator.log")
+        proc = base.subprocess_spawner([sys.executable, "-c", "print('booted')"], log_path=log)
+        proc.wait(timeout=30)
+        with open(log) as f:
+            self.assertIn("booted", f.read())
 
     def test_an_element_that_never_appears_is_a_missed_shot(self):
         self.answers()
@@ -847,6 +1082,10 @@ class CaptureWithSimctlTests(DriverCase):
         self.assertIn("no such app", report["shots"][0]["reason"])
         self.assertIn("not attempted", report["shots"][1]["reason"])
         self.assertEqual(len(self.run_.matching(r"simctl launch")), 1)
+
+
+def tearDownModule():
+    kit.assert_no_residue()
 
 
 if __name__ == "__main__":

@@ -66,6 +66,15 @@ anything else), `--json`. Also there: `ui navigate --reset <route>`, `ui fill --
 - **Android:** the CLI's discovery forwards the port; if it doesn't find the agent, `adb -s <serial> forward
   tcp:9233 tcp:9233`. A forward the driver adds is removed after.
 
+## Which agent
+
+As with DevFlow ([devflow.md](devflow.md#which-agent-pinned-to-the-app-on-the-device-it-owns)), the driver pins the
+agent of the plan's app on the device it owns: it lists the agents (`ailoha agent list --json`), reads each one's
+status (`/api/v1/agent/status`: device, package, process) and passes `--agent-port` on every command; on Android
+the CLI runs with `ANDROID_SERIAL` set to the device's serial, so the forwards it makes go there. An agent that
+can't be told apart (an older agent with no status) needs `target.agentPort`, checked by hand with `ailoha agent
+list`. A tap the agent answers `success: false` fails the step.
+
 ## The plan
 
 ```json

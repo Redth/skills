@@ -163,5 +163,30 @@ class StoreSizeTests(CheckCase):
         self.assertFalse(any("web" in f["where"] for f in found if f["severity"] != "error" and "device" in f["where"]))
 
 
+class RequiredSlotTests(unittest.TestCase):
+    def test_a_required_iphone_slot_nobody_fills_is_a_note(self):
+        tmp = tempfile.mkdtemp(prefix="appstores-check-test-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        plan = kit.sample_plan([{"id": "iphone-6.9", "platform": "ios", "kind": "phone", "driver": "simctl",
+                                 "width": 1320, "height": 2868}], [{"id": "plan", "steps": []}])
+        path = kit.write_plan(tmp, plan)
+        kit.write_png(os.path.join(tmp, "captures", "en-US", "iphone-6.9", "plan.png"), 1320, 2868)
+        findings, _ = check_captures.check(path, ["apple"])
+        notes = [f for f in findings if f["rule"] == "apple.screenshots.required"]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("APP_IPHONE_61", notes[0]["message"])
+        self.assertEqual(notes[0]["severity"], "note")
+        self.assertNotIn("IPAD", notes[0]["message"])
+        plan["devices"].append({"id": "iphone-6.3", "platform": "ios", "kind": "phone", "driver": "simctl",
+                                "width": 1206, "height": 2622})
+        path = kit.write_plan(tmp, plan)
+        findings, _ = check_captures.check(path, ["apple"])
+        self.assertEqual([f for f in findings if f["rule"] == "apple.screenshots.required"], [])
+
+
+def tearDownModule():
+    kit.assert_no_residue()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -10,6 +10,8 @@
   {"query": "Our Maestro flows already take screenshots. Bring them in for the store set.", "should_trigger": true},
   {"query": "Play rejected our screenshots because they're taller than 2:1. Recapture them properly.", "should_trigger": true},
   {"query": "Capture the app's screens in German, Japanese and Arabic, light and dark.", "should_trigger": true},
+  {"query": "Retake our App Store screenshots for the new release, set up the same way as last time.", "should_trigger": true},
+  {"query": "Before capturing, help me decide what each store screenshot should show and how the app gets into that state.", "should_trigger": true},
   {"query": "Record an App Store preview video from the iPhone simulator.", "should_trigger": true},
   {"query": "Our preview video was rejected for its frame rate. Re-encode it to Apple's spec.", "should_trigger": true},
   {"query": "Take Mac App Store screenshots of our app's window at 2880x1800.", "should_trigger": true},

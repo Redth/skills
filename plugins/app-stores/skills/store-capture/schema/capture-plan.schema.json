@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "capture-plan.json: which devices capture which screens in which locales, and how each screen is reached (CONTRACT.md 10.2). Paths are relative to the plan's own folder. Settings (locales, appearance, clock, statusBar, seed, flatten) resolve plan, then the device, then the screen, then the screen's overrides for that device's id or platform (each later one wins). Uses only the subset appstores_lib/schema.py validates.",
+  "$comment": "capture-plan.json: which devices capture which screens in which locales, and how each screen is reached (CONTRACT.md 10.2). Paths are relative to the plan's own folder. Settings (locales, appearance, clock, statusBar, seed, flatten) resolve plan, then the device, then the screen, then the screen's overrides for that device's id or platform (each later one wins). staging (agreed with the user first) and each screen's state and verify say how the app is set up and what each screen must show. Uses only the subset appstores_lib/schema.py validates.",
   "type": "object",
   "required": ["version", "devices", "screens"],
   "additionalProperties": false,
@@ -16,6 +16,7 @@
     "statusBar": { "$ref": "#/$defs/statusBar" },
     "seed": { "$ref": "#/$defs/seed" },
     "flatten": { "$ref": "#/$defs/flatten" },
+    "staging": { "$ref": "#/$defs/staging" },
     "devices": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/device" } },
     "screens": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/screen" } }
   },
@@ -87,7 +88,7 @@
         "driver": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
         "width": { "$comment": "The exact pixel size this device promises (from the store's rules). Any other size is failed, never resized.", "type": "integer", "minimum": 1 },
         "height": { "type": "integer", "minimum": 1 },
-        "target": { "$comment": "The driver's own settings (simctl: deviceType, runtime, udid, display; adb: avd, serial, wmSize, density; chrome: scale, viewport, mobile; macos: scale).", "type": "object" },
+        "target": { "$comment": "The driver's own settings (simctl: deviceType, runtime, udid, display, localeScope; adb: systemImage, profile, avd, serial, wmSize, density, deviceLocale, navigation, statusBarMobile, statusBarCheck, adb, emulator, avdmanager; agents: agentPort, agentPlatform, appName, agentTimeout, host, screenshot; appium: server, capabilities; chrome: scale, viewport, mobile; macos: scale). references/config.md lists them all.", "type": "object" },
         "app": { "$comment": "Merged over the plan's app entry for this device's platform.", "type": "object" },
         "locales": { "$ref": "#/$defs/locales" },
         "appearance": { "$ref": "#/$defs/appearance" },
@@ -104,6 +105,9 @@
       "properties": {
         "$comment": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
+        "state": { "$comment": "What the screen must show, in plain words (whose data, which state): agreed with the user; in staging.md and the report.", "type": "string", "minLength": 1 },
+        "verify": { "$ref": "#/$defs/verify" },
+        "staging": { "$comment": "false: this screen gets neither the staging's seed nor its launch values (an onboarding screen, say).", "type": "boolean" },
         "devices": { "$comment": "Only these devices (ids). Default: every device.", "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
         "platforms": { "$comment": "Only devices of these platforms.", "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/platform" } },
         "locales": { "$comment": "Only these of the device's locales.", "$ref": "#/$defs/locales" },
@@ -129,6 +133,8 @@
       "properties": {
         "$comment": { "type": "string" },
         "steps": { "$ref": "#/$defs/steps" },
+        "state": { "type": "string", "minLength": 1 },
+        "verify": { "$ref": "#/$defs/verify" },
         "locales": { "$ref": "#/$defs/locales" },
         "appearance": { "$ref": "#/$defs/appearance" },
         "clock": { "$ref": "#/$defs/clock" },
@@ -153,6 +159,44 @@
       "additionalProperties": false
     },
     "argValue": { "type": ["string", "number", "boolean"] },
+    "envName": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+    "stringOrList": { "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "array", "minItems": 1, "items": { "type": "string" } } ] },
+    "appPath": { "$comment": "A path inside the app's own data: iOS relative to its data container (Library/Caches/app.db), Android to /data/data/<package> (files/app.db, cache/app.db); one, or one per platform.", "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } } ] },
+    "verify": { "$comment": "An element (or a list) that must be on screen before the shot; otherwise the shot is missed, 'wrong state'. A driver that can't see elements reports it unchecked.", "anyOf": [ { "$ref": "#/$defs/element" }, { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/element" } } ] },
+    "staging": {
+      "$comment": "How the app is staged for the captures, agreed with the user before the plan is run (references/staging.md). capture.py puts launch and seed into every screen, grants the permissions, checks the account's variables are set, and captures more than one screen only once confirmed is set; capture.py --write-staging writes it readable as staging.md.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "doc": { "$comment": "The readable copy beside the plan (default staging.md).", "type": "string", "minLength": 1 },
+        "confirmed": { "$comment": "Set when the user has seen one screen captured with this staging and agreed it. Until then a run captures one screen only.", "type": "object", "required": ["screen"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" }, "screen": { "$ref": "#/$defs/id" }, "device": { "$ref": "#/$defs/id" }, "on": { "type": "string" }, "by": { "type": "string" } } },
+        "account": { "$comment": "How the app is signed in: none, guest (guest mode), bypass (a debug sign-in bypass) or demo (a demo account, its sign-in only by the names of environment variables; never a real person's account).", "type": "object", "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" }, "kind": { "enum": ["none", "guest", "bypass", "demo"] },
+          "env": { "$comment": "Variables holding the demo account's sign-in (DEMO_USER, DEMO_PASSWORD): checked before a run, usable in launch values as ${NAME}, masked in logs and reports.", "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/envName" } },
+          "how": { "type": "string" } } },
+        "seed": { "$comment": "Where the demo data comes from: command (run before each screen, like a script step), file (copied into the app's own data before each screen, an appFile step), launch (the app seeds itself from a launch argument: put it in launch.args), backend (a staging server with invented data) or none.", "type": "object", "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" }, "kind": { "enum": ["none", "command", "file", "launch", "backend"] },
+          "run": { "$ref": "#/$defs/stringOrList" }, "timeout": { "type": "number", "minimum": 1 },
+          "file": { "type": "string", "minLength": 1 }, "into": { "$ref": "#/$defs/appPath" },
+          "when": { "$comment": "each-screen (default) or once (before each device's first screen).", "enum": ["each-screen", "once"] },
+          "how": { "type": "string" } } },
+        "launch": { "$comment": "Added to every launch step (a step's own args and env win): the screenshot mode's switch, a sign-in bypass, a fake server's address. ${NAME} takes one of account.env's variables.", "type": "object", "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "args": { "type": "object", "additionalProperties": { "$ref": "#/$defs/argValue" } },
+          "env": { "type": "object", "additionalProperties": { "type": "string" } } } },
+        "skip": { "$comment": "What's skipped and how: onboarding, paywalls, rating prompts, what's-new sheets, tooltips.", "type": "array", "items": { "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "object", "required": ["what"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" }, "what": { "type": "string", "minLength": 1 }, "how": { "type": "string" } } } ] } },
+        "permissions": { "$comment": "Granted before launch, revoked after, by platform: simctl privacy services on Apple (photos, location, contacts, ...), Android permission names (android.permission.POST_NOTIFICATIONS).", "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string", "minLength": 1 } } },
+        "flags": { "$comment": "Feature flags the screens need, and how they're set (usually a launch arg).", "type": "array", "items": { "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "object", "required": ["name"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" }, "name": { "type": "string", "minLength": 1 }, "value": { "$ref": "#/$defs/argValue" }, "how": { "type": "string" } } } ] } },
+        "clock": { "$comment": "The app's own 'now' (the status bar's is the plan's clock) and how it's fixed. On-screen times usually need a screenshot mode; without one, pick screens that show none, or say so.", "type": "object", "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" }, "now": { "type": "string" }, "how": { "type": "string" } } },
+        "network": { "$comment": "offline (fixtures), mock (a local fake server), staging (a staging server with invented data) or live (discouraged).", "type": "object", "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" }, "kind": { "enum": ["offline", "mock", "staging", "live"] }, "how": { "type": "string" } } }
+      }
+    },
     "step": {
       "$comment": "One kind a step: {\"launch\": {...}}, {\"tap\": {\"id\": \"search\"}}, ...",
       "oneOf": [
@@ -225,10 +269,15 @@
               "run": { "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "array", "minItems": 1, "items": { "type": "string" } } ] },
               "timeout": { "type": "number", "minimum": 1 } } }
           ] } } },
+        { "type": "object", "required": ["appFile"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "appFile": { "$comment": "Copy a file into the app's own data, the app stopped first (simctl's data container; Android's data folder through run-as, debug builds). Drivers with a host do it through the host.", "type": "object", "required": ["file", "into"], "additionalProperties": false, "properties": {
+            "$comment": { "type": "string" }, "file": { "type": "string", "minLength": 1 }, "into": { "$ref": "#/$defs/appPath" } } } } },
         { "type": "object", "required": ["settle"], "additionalProperties": false, "properties": {
           "$comment": { "type": "string" },
           "settle": { "anyOf": [ { "type": "boolean" }, { "type": "null" }, { "type": "object", "additionalProperties": false, "properties": {
-            "timeout": { "type": "number", "minimum": 0 } } } ] } } }
+            "timeout": { "type": "number", "minimum": 0 },
+            "ignore": { "$comment": "Rectangles [x, y, width, height] in the picture's pixels left out of the comparison (an animation that never stops).", "type": "array", "items": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number" } } } } } ] } } }
       ]
     }
   }
