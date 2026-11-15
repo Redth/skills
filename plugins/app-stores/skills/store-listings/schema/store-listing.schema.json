@@ -175,6 +175,10 @@
       "$comment": "The config's locales this store gets; null or absent: every one. The store's primary must be one of them.",
       "anyOf": [ { "type": "null" }, { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/locale" } } ]
     },
+    "keep": {
+      "$comment": "Slots whose pictures stay as the store has them: checked and previewed, never sent by push.py (Apple: display types such as APP_IPHONE_67; Play: phone, tablet7, tablet10, tv, wear, icon, featureGraphic, tvBanner). listing.py import --from live sets it for slots holding the store's re-encoded copies, or pictures per locale the config's fallback can't reproduce.",
+      "anyOf": [ { "type": "null" }, { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } } ]
+    },
 
     "screenshots": {
       "type": "object",
@@ -249,6 +253,7 @@
             "secondarySubcategories": { "$ref": "#/$defs/categoryIds" }
           }
         },
+        "keep": { "$ref": "#/$defs/keep" },
         "platforms": {
           "$comment": "App Store Connect's platforms; null = not shipped there.",
           "type": "object",
@@ -326,6 +331,7 @@
           "properties": {
             "$comment": { "type": "string" },
             "screens": { "$comment": "The screens whose pictures this platform uses.", "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/name" } },
+            "locales": { "$comment": "The App Store locales this platform gets (each one of the store's); null or absent: every one. App Store Connect keeps a version's listing per platform, so one can have fewer languages.", "$ref": "#/$defs/storeLocales" },
             "previews": {
               "$comment": "App previews per screen, up to 3 each.",
               "type": "object",
@@ -373,6 +379,7 @@
             "wear": { "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/name" } ] }
           }
         },
+        "keep": { "$ref": "#/$defs/keep" },
         "graphics": {
           "$comment": "The 512x512 icon, the 1024x500 feature graphic (required), the 1280x720 TV banner (with Android TV). Shared by every language unless a language folder has its own.",
           "type": "object",

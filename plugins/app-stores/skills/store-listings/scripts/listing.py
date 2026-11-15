@@ -3,17 +3,19 @@
 
 Subcommands (run from the user's project; every one is offline):
 
-    listing.py import --from fastlane|supply|triple-t|expo <path> [--out store-listing.json] [--platform P]
+    listing.py import --from fastlane|supply|triple-t|expo|live <path> [--out store-listing.json] [--platform P]
     listing.py check  [--config store-listing.json] [--stores apple,google] [--json]
     listing.py build  [--config store-listing.json] [--out out]
     listing.py preview [--config store-listing.json] [--out out] [--png]
+    listing.py diff   [--config store-listing.json] [--existing existing] [--stores apple,google] [--json]
 
 ``check`` validates the config against ``schema/store-listing.schema.json``, then runs every rule in
 ``rules/<store>.json`` for each enabled store on the words (after locale fallback) and the picture files.
 ``build`` runs the check (errors stop it) and writes ``out/``: fastlane ``deliver`` and ``supply`` layouts,
 ``out/listing.json`` (what ``push.py`` reads) and ``out/checklist.md``. ``preview`` draws each store's page
 from ``out/`` as HTML (and, with ``--png``, pictures through headless Chrome). ``import`` starts or extends a
-config from fastlane, Triple-T or Expo metadata.
+config from fastlane, Triple-T or Expo metadata, or from what ``push.py pull`` read off the stores (``live``);
+``diff`` compares the config's words with that (offline: it reads ``existing/``).
 
 Exit codes: 0 done; 1 a check error; 3 usage or environment (no config, no Chrome).
 """
@@ -266,6 +268,17 @@ class Listing:
             codes.remove(first)
             codes.insert(0, first)
         return codes
+
+    def platform_locale_codes(self, platform):
+        """The App Store locales an Apple platform gets: ``stores.apple.platforms.<P>.locales`` (else every one of
+        the store's), the store's primary first."""
+        listed = ((self.store("apple").get("platforms") or {}).get(platform) or {}).get("locales")
+        codes = self.store_locale_codes("apple")
+        return [c for c in codes if c in listed] if isinstance(listed, list) else codes
+
+    def keep(self, store):
+        """The slots whose pictures stay as the store has them (``stores.<store>.keep``)."""
+        return set(k for k in (self.store(store).get("keep") or []) if isinstance(k, str))
 
     def fallback_order(self, loc, store=None):
         """The locales a field is looked for in: the locale, the store's primary, then the config's primary."""
@@ -682,6 +695,30 @@ def validate_config(listing, report):
                 "one of its locales (set stores.%s.%s)" % (listing.store_primary(store), STORE_NAMES[store], store,
                                                             ", ".join(listed), store, key)))
     if listing.enabled("apple"):
+        store_locs = listing.store_locale_codes("apple")
+        for p in listing.apple_platforms():
+            listed = (listing.store("apple")["platforms"][p] or {}).get("locales")
+            for i, loc in enumerate(listed if isinstance(listed, list) else []):
+                if loc not in store_locs:
+                    report.add(CONFIG_STORE, config_finding(
+                        "config.locales", "stores.apple.platforms.%s.locales[%d]" % (p, i),
+                        "%s isn't one of the App Store's locales (%s)" % (loc, ", ".join(store_locs))))
+            if isinstance(listed, list) and listing.store_primary("apple") not in listed:
+                report.add(CONFIG_STORE, config_finding(
+                    "config.locales", "stores.apple.platforms.%s.locales" % p,
+                    "doesn't have %s, the App Store's primary locale: a platform's listing always has it"
+                    % listing.store_primary("apple")))
+    for store in STORES:
+        if not listing.enabled(store):
+            continue
+        known = set(rules.load(store, RULES_DIR).slots)
+        for i, slot in enumerate(listing.store(store).get("keep") or []):
+            if slot not in known:
+                report.add(CONFIG_STORE, config_finding(
+                    "config.keep", "stores.%s.keep[%d]" % (store, i),
+                    "%s isn't one of %s's slots (%s…)" % (slot, STORE_NAMES[store], ", ".join(sorted(known)[:4])),
+                    "warning"))
+    if listing.enabled("apple"):
         shipped = listing.apple_platforms()
         for loc in locs:
             for p in listing.platform_overrides(loc):
@@ -771,6 +808,11 @@ class StoreCheck:
 
     # -- pictures --------------------------------------------------------------------------------------
 
+    def platform_locales(self, platform):
+        """This check's locales an Apple platform gets (``stores.apple.platforms.<P>.locales``)."""
+        wanted = self.listing.platform_locale_codes(platform)
+        return [l for l in self.locales if l in wanted]
+
     def platform_slots(self, platform):
         """Apple's slots for a platform, in the rules file's order."""
         return [(k, v) for k, v in self.slots.items() if v.get("platform") == platform]
@@ -779,7 +821,7 @@ class StoreCheck:
         """Put each Apple picture in the first slot of its platform whose sizes fit it."""
         for platform in self.listing.apple_platforms():
             slots = self.platform_slots(platform)
-            for loc in self.locales:
+            for loc in self.platform_locales(platform):
                 by_slot = collections.OrderedDict()
                 unassigned = []
                 for screen in self.listing.platform_screens(platform):
@@ -981,6 +1023,7 @@ class StoreCheck:
         platforms)]``. One entry, ``platforms`` None, unless the field is an Apple version field whose value
         differs between the shipped platforms: then one entry per distinct value, labelled with its platforms."""
         plats = self.listing.apple_platforms() if self.store == "apple" and field in APPLE_PLATFORM_PATHS else []
+        plats = [p for p in plats if loc in self.listing.platform_locale_codes(p)]
         if not plats:
             value, src = self.listing.resolve(loc, field, self.store)
             return [(value, src, field, None)]
@@ -1154,7 +1197,7 @@ class StoreCheck:
         plats = self.listing.apple_platforms() if self.store == "apple" else [None]
         out = []
         for p in plats:
-            for loc in self.locales:
+            for loc in (self.platform_locales(p) if p else self.locales):
                 if self.own_pictures(p, loc):
                     out.append((p, loc))
         return out
@@ -1684,7 +1727,10 @@ def build_apple(listing, check, out):
         meta = os.path.join(base, "metadata")
         locs = collections.OrderedDict()
         shots = collections.OrderedDict()
-        for loc, code in by_code.items():
+        plat_codes = collections.OrderedDict((l, c) for l, c in by_code.items()
+                                             if l in listing.platform_locale_codes(platform))
+        kept = listing.keep("apple")
+        for loc, code in plat_codes.items():
             # The version's words are this platform's: its override, else the locale's (decision: per platform)
             words = collections.OrderedDict(
                 (f, listing.resolve(loc, "apple." + f, "apple", platform)[0]) for f in APPLE_PLATFORM_FIELDS)
@@ -1713,6 +1759,8 @@ def build_apple(listing, check, out):
                                                                                      _picture_ext(pic)))
                     _copy(pic.path, dst)
                     entries.append(_file_entry(out, dst))
+                    if slot in kept or display in kept:
+                        entries[-1]["keep"] = True  # stores.apple.keep: the store's stay; push.py never sends these
                 if entries:
                     per_slot[display] = entries
             shots[code] = per_slot
@@ -1744,7 +1792,7 @@ def build_apple(listing, check, out):
             entry = _file_entry(out, dst)
             entry["posterFrame"] = item.get("posterFrame")
             entry["mime"] = VIDEO_MIME.get(os.path.splitext(dst)[1].lower(), "application/octet-stream")
-            for code in by_code.values():
+            for code in plat_codes.values():
                 previews.setdefault(code, collections.OrderedDict()).setdefault(ptype, []).append(entry)
         platforms[platform] = collections.OrderedDict([
             ("localizations", locs), ("screenshots", shots), ("previews", previews)])
@@ -1807,6 +1855,8 @@ def build_google(listing, check, out):
                     dst = os.path.join(meta, code, "images", image_type, "%02d_%s%s" % (i, pic.shot, _picture_ext(pic)))
                 _copy(pic.path, dst)
                 entries.append(_file_entry(out, dst))
+                if slot in listing.keep("google"):
+                    entries[-1]["keep"] = True  # stores.google.keep: Play's stay; push.py never sends these
             if entries:
                 per_type[image_type] = entries
         images[code] = per_type
@@ -2000,6 +2050,12 @@ def cmd_preview(args):
     return listing_preview.main(args)
 
 
+def cmd_diff(args):
+    """``listing.py diff``."""
+    import listing_live
+    return listing_live.cmd_diff(args)
+
+
 def cmd_import(args):
     """``listing.py import``."""
     import listing_import
@@ -2012,8 +2068,9 @@ def parser():
                                 "(store-listing.json). Offline: nothing here reaches a network.")
     sub = p.add_subparsers(dest="command")
     imp = sub.add_parser("import", help="start or extend a config from fastlane, supply, Triple-T or Expo metadata")
-    imp.add_argument("--from", dest="source", required=True, choices=("fastlane", "supply", "triple-t", "expo"))
-    imp.add_argument("path", help="the metadata folder (or Expo's store.config.json)")
+    imp.add_argument("--from", dest="source", required=True, choices=("fastlane", "supply", "triple-t", "expo", "live"))
+    imp.add_argument("path", help="the metadata folder (Expo's store.config.json; for live, what push.py pull wrote: "
+                                  "existing/)")
     imp.add_argument("--out", default="store-listing.json", help="the config to write or merge into")
     imp.add_argument("--platform", choices=APPLE_PLATFORMS,
                      help="fastlane only: the Apple platform the folder is for (default: what its screenshots fit, "
@@ -2025,6 +2082,11 @@ def parser():
     bld = sub.add_parser("build", help="check, then write out/ (fastlane layouts, listing.json, checklist.md)")
     bld.add_argument("--config", default="store-listing.json")
     bld.add_argument("--out", default="out")
+    dif = sub.add_parser("diff", help="the config's words and picture counts against what push.py pull read")
+    dif.add_argument("--config", default="store-listing.json")
+    dif.add_argument("--existing", default="existing", help="what push.py pull wrote (default: existing)")
+    dif.add_argument("--stores", help="comma-separated: apple,google (default: every store pulled)")
+    dif.add_argument("--json", action="store_true", help="print the entries as JSON")
     prv = sub.add_parser("preview", help="draw each store's page from out/ as HTML (and PNG with --png)")
     prv.add_argument("--config", default="store-listing.json", help="(unused unless out/ has no build)")
     prv.add_argument("--out", default="out")
@@ -2042,7 +2104,8 @@ def main(argv=None):
     if not args.command:
         p.print_help()
         return EXIT_USAGE
-    handler = {"import": cmd_import, "check": cmd_check, "build": cmd_build, "preview": cmd_preview}[args.command]
+    handler = {"import": cmd_import, "check": cmd_check, "build": cmd_build, "preview": cmd_preview,
+               "diff": cmd_diff}[args.command]
     try:
         return handler(args)
     except UsageError as e:

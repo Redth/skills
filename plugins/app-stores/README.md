@@ -18,9 +18,9 @@ Stores and forms with no API get a checklist with the answers drafted. Any app, 
 
 | Skill | Status | What it does | Issue |
 |---|---|---|---|
-| [`store-listings`](./skills/store-listings/) | 0.1.0 | the config and its importers (fastlane, Triple-T, Expo); the words and their checks; building each store's output; page previews; plan and apply for Apple and Google; forms with no API as drafted answers; checklists for Steam and itch.io | [#11](https://github.com/Redth/skills/issues/11) |
-| [`store-screenshots`](./skills/store-screenshots/) | 0.1.0 | the user's examples, two to four rendered directions, one iterated into an approved baseline that later updates are checked against; the brief and a storyboard agreed before rendering; layouts (full-bleed, band, framed, cut off, tilt, pair, callout, hero, gameplay) and drawn device frames; eight starting styles; every size and locale from one design through headless Chrome; mocks of Apple's search row, the product page and Play's listing; screenshot checks per store | [#12](https://github.com/Redth/skills/issues/12) |
-| [`store-capture`](./skills/store-capture/) | 0.1.0 | the app's real screens at exactly each store's sizes, on any stack, by the technique that fits: a screenshot mode (launch argument or deep link, sketched per stack), the DevFlow (.NET MAUI) or Ailoha in-app agents, Appium, XCUITest, UI Automator, Maestro, macOS Accessibility, `simctl`, `adb`, headless Chrome; importers for fastlane snapshot and screengrab, xcresult, Maestro, Flutter, Detox and Playwright; dedicated simulators and emulators, a clean status bar, demo data, one locale at a time, everything put back; a report of what was taken, missed (the old picture kept, and said so) or failed (never resized); preview videos recorded, encoded to spec with ffmpeg and checked | [#13](https://github.com/Redth/skills/issues/13) |
+| [`store-listings`](./skills/store-listings/) | 0.1.0 | starting from the live listing (pulled read-only, or from Apple's public lookup without keys), the config and its importers (fastlane, Triple-T, Expo); the words and their checks; building each store's output; page previews; plan and apply for Apple and Google; forms with no API as drafted answers; checklists for Steam and itch.io | [#11](https://github.com/Redth/skills/issues/11) |
+| [`store-screenshots`](./skills/store-screenshots/) | 0.1.0 | the listing's current set read first (what to keep), the user's examples, two to four rendered directions, one iterated into an approved baseline that later updates are checked against; the brief and a storyboard agreed before rendering; layouts (full-bleed, band, framed, cut off, tilt, pair, callout, hero, gameplay) and drawn device frames; eight starting styles; every size and locale from one design through headless Chrome; mocks of Apple's search row, the product page and Play's listing; screenshot checks per store | [#12](https://github.com/Redth/skills/issues/12) |
+| [`store-capture`](./skills/store-capture/) | 0.1.0 | the app's real screens, staged with the user (sign-in, demo data, each screen's state, a check it's right) and at exactly each store's sizes, on any stack, by the technique that fits: a screenshot mode (launch argument or deep link, sketched per stack), the DevFlow (.NET MAUI) or Ailoha in-app agents, Appium, XCUITest, UI Automator, Maestro, macOS Accessibility, `simctl`, `adb`, headless Chrome; importers for fastlane snapshot and screengrab, xcresult, Maestro, Flutter, Detox and Playwright; dedicated simulators and emulators, a clean status bar, demo data, one locale at a time, everything put back; a report of what was taken, missed (the old picture kept, and said so) or failed (never resized); preview videos recorded, encoded to spec with ffmpeg and checked | [#13](https://github.com/Redth/skills/issues/13) |
 | `store-signing` | to follow | signing, notarising and uploading builds to TestFlight, Play, Amazon, Steam and itch.io | [#14](https://github.com/Redth/skills/issues/14) |
 | `game-achievements` | to follow, if it earns its place | Game Center and Play Games achievements from one list | [#15](https://github.com/Redth/skills/issues/15) |
 
@@ -63,7 +63,9 @@ checks and sends them. Each works alone: `store-listings` takes PNGs from any to
 The usual flow, which the skill walks an agent through:
 
 ```sh
-python3 <skill>/scripts/listing.py import --from fastlane fastlane   # or write store-listing.json from scratch
+python3 <skill>/scripts/push.py pull apple [--public]                 # on the stores already? read what's live first
+python3 <skill>/scripts/listing.py import --from live existing        # ...as the draft (or --from fastlane, or by hand)
+python3 <skill>/scripts/listing.py diff                               # what the new listing would change
 python3 <skill>/scripts/listing.py check                             # offline; errors stop everything after
 python3 <skill>/scripts/listing.py build                             # out/: fastlane layouts, listing.json, checklist.md
 python3 <skill>/scripts/listing.py preview --png                     # each store's page, to look at
@@ -115,11 +117,12 @@ python3 <skill>/scripts/video.py encode raw.mov --slot APP_IPHONE_67 --out previ
 
 ### Network and privacy
 
-- **No network by default.** `import`, `check`, `build` and `preview` work offline, and so does all of
+- **No network by default.** `import`, `check`, `build`, `preview` and `diff` work offline, and so does all of
   `store-screenshots`: fonts and frames are files, nothing is fetched.
-- **Only `push.py` reaches a network,** only the stores' own API hosts (`api.appstoreconnect.apple.com` and the
-  upload hosts Apple names, `oauth2.googleapis.com`, `androidpublisher.googleapis.com`), and **only
-  `push.py apply` writes.** `plan` only reads (on Google it opens an edit to read, and deletes it).
+- **Only `push.py` reaches a network,** only the stores' own hosts (`api.appstoreconnect.apple.com` and the
+  upload hosts Apple names, `oauth2.googleapis.com`, `androidpublisher.googleapis.com`; for `pull`, Apple's public
+  `itunes.apple.com`, its `*.mzstatic.com` CDN and Play's image hosts), and **only `push.py apply` writes.**
+  `plan` and `pull` only read (on Google they open an edit to read, and delete it).
 - **Secrets never go in the config.** Keys and App Review's contact come from environment variables; the plan
   masks the contact's phone number. Nothing is sent anywhere else: no telemetry, no account.
 - The agent never sends without your go-ahead, never claims a console form was changed, and stops at a

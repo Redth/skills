@@ -283,9 +283,10 @@ def _flags(rule):
 
 def check_pattern(rule, value, where):
     """Evaluate a ``pattern`` rule: ``regex`` must match the value (searched anywhere), or with
-    ``"forbid": true`` must not. Optional ``flags`` letters: ``i``, ``m``, ``s``. ``None`` is skipped."""
+    ``"forbid": true`` must not. Optional ``flags`` letters: ``i``, ``m``, ``s``. ``None`` and ``""`` (a field
+    cleared on purpose, such as Play's video; a ``required`` rule says whether that's allowed) are skipped."""
     value = _as_text(value, ", ")
-    if value is None:
+    if value is None or value == "":
         return []
     regex = rule.get("regex")
     m = re.search(regex, value, _flags(rule))

@@ -1,0 +1,518 @@
+{
+  "$comment": "Synthetic App Store Connect answers for push.py pull's tests (the invented Sample Recipes app; every id, checksum and contact is made up). Keys are 'METHOD host/path?query'. Pictures at *.mzstatic.com are drawn by the test at the size their URL names (WxHbb.png); videos are a few bytes.",
+  "routes": {
+    "GET api.appstoreconnect.apple.com/v1/apps?filter[bundleId]=com.example.samplerecipes&limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "apps",
+            "id": "1234567890",
+            "attributes": {
+              "name": "Sample Recipes",
+              "bundleId": "com.example.samplerecipes",
+              "primaryLocale": "en-US"
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/apps/1234567890/appInfos?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appInfos",
+            "id": "info-next",
+            "attributes": {
+              "state": "PREPARE_FOR_SUBMISSION",
+              "createdDate": "2026-11-01T00:00:00Z"
+            }
+          },
+          {
+            "type": "appInfos",
+            "id": "info-live",
+            "attributes": {
+              "state": "READY_FOR_DISTRIBUTION",
+              "appStoreState": "READY_FOR_SALE",
+              "createdDate": "2026-06-01T00:00:00Z"
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appInfos/info-live?include=primaryCategory,primarySubcategoryOne,primarySubcategoryTwo,secondaryCategory,secondarySubcategoryOne,secondarySubcategoryTwo": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "appInfos",
+          "id": "info-live",
+          "relationships": {
+            "primaryCategory": {
+              "data": {
+                "type": "appCategories",
+                "id": "FOOD_AND_DRINK"
+              }
+            },
+            "primarySubcategoryOne": {
+              "data": null
+            },
+            "primarySubcategoryTwo": {
+              "data": null
+            },
+            "secondaryCategory": {
+              "data": {
+                "type": "appCategories",
+                "id": "LIFESTYLE"
+              }
+            },
+            "secondarySubcategoryOne": {
+              "data": null
+            },
+            "secondarySubcategoryTwo": {
+              "data": null
+            }
+          }
+        }
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appInfos/info-live/appInfoLocalizations?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appInfoLocalizations",
+            "id": "ail-en",
+            "attributes": {
+              "locale": "en-US",
+              "name": "Sample Recipes",
+              "subtitle": "Recipes and meal plans",
+              "privacyPolicyUrl": "https://example.com/privacy",
+              "privacyChoicesUrl": null,
+              "privacyPolicyText": "Sample Recipes keeps your meal plans on this device. Example Studio collects no personal data."
+            }
+          },
+          {
+            "type": "appInfoLocalizations",
+            "id": "ail-de",
+            "attributes": {
+              "locale": "de-DE",
+              "name": "Sample Recipes",
+              "subtitle": "Rezepte und Essenspläne",
+              "privacyPolicyUrl": "https://example.com/privacy",
+              "privacyChoicesUrl": null,
+              "privacyPolicyText": null
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appInfos/info-live/ageRatingDeclaration": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "ageRatingDeclarations",
+          "id": "age-1",
+          "attributes": {
+            "violenceCartoonOrFantasy": "NONE",
+            "alcoholTobaccoOrDrugUseOrReferences": "INFREQUENT_OR_MILD",
+            "userGeneratedContent": false,
+            "gamblingAndContests": false,
+            "kidsAgeBand": null
+          }
+        }
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/apps/1234567890/appStoreVersions?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appStoreVersions",
+            "id": "ver-ios-13",
+            "attributes": {
+              "platform": "IOS",
+              "versionString": "1.3",
+              "appVersionState": "READY_FOR_DISTRIBUTION",
+              "appStoreState": "READY_FOR_SALE",
+              "copyright": "© 2026 Example Studio",
+              "createdDate": "2026-06-01T00:00:00Z"
+            }
+          },
+          {
+            "type": "appStoreVersions",
+            "id": "ver-ios-14",
+            "attributes": {
+              "platform": "IOS",
+              "versionString": "1.4",
+              "appVersionState": "PREPARE_FOR_SUBMISSION",
+              "appStoreState": "PREPARE_FOR_SUBMISSION",
+              "copyright": "2026 Example Studio",
+              "createdDate": "2026-11-01T00:00:00Z"
+            }
+          },
+          {
+            "type": "appStoreVersions",
+            "id": "ver-tv-13",
+            "attributes": {
+              "platform": "TV_OS",
+              "versionString": "1.3",
+              "appVersionState": "READY_FOR_DISTRIBUTION",
+              "appStoreState": "READY_FOR_SALE",
+              "copyright": "© 2026 Example Studio",
+              "createdDate": "2026-06-01T00:00:00Z"
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appStoreVersions/ver-ios-13/appStoreVersionLocalizations?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appStoreVersionLocalizations",
+            "id": "asvl-ios-en",
+            "attributes": {
+              "locale": "en-US",
+              "description": "Plan a week of meals in minutes. Sample Recipes picks recipes you'll like and writes the grocery list for you.",
+              "keywords": "recipes, meal plan,grocery",
+              "promotionalText": "New: a pantry that knows what you have.",
+              "whatsNew": "Bug fixes and improvements.",
+              "marketingUrl": "https://example.com",
+              "supportUrl": "https://example.com/support"
+            }
+          },
+          {
+            "type": "appStoreVersionLocalizations",
+            "id": "asvl-ios-de",
+            "attributes": {
+              "locale": "de-DE",
+              "description": "Plane eine Woche voller Mahlzeiten in Minuten.",
+              "keywords": "rezepte,essensplan,einkauf",
+              "promotionalText": null,
+              "whatsNew": "Fehlerbehebungen.",
+              "marketingUrl": "https://example.com",
+              "supportUrl": "https://example.com/support"
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appStoreVersions/ver-tv-13/appStoreVersionLocalizations?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appStoreVersionLocalizations",
+            "id": "asvl-tv-en",
+            "attributes": {
+              "locale": "en-US",
+              "description": "Plan a week of meals in minutes. Sample Recipes picks recipes you'll like and writes the grocery list for you. On Apple TV, the Siri Remote does it all.",
+              "keywords": "recipes, meal plan,grocery",
+              "promotionalText": "New: a pantry that knows what you have.",
+              "whatsNew": "Bug fixes and improvements.",
+              "marketingUrl": "https://example.com",
+              "supportUrl": "https://example.com/support"
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appStoreVersionLocalizations/asvl-ios-en/appScreenshotSets?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appScreenshotSets",
+            "id": "set-en-61",
+            "attributes": {
+              "screenshotDisplayType": "APP_IPHONE_61"
+            }
+          },
+          {
+            "type": "appScreenshotSets",
+            "id": "set-en-129",
+            "attributes": {
+              "screenshotDisplayType": "APP_IPAD_PRO_3GEN_129"
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appStoreVersionLocalizations/asvl-ios-de/appScreenshotSets?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appScreenshotSets",
+            "id": "set-de-61",
+            "attributes": {
+              "screenshotDisplayType": "APP_IPHONE_61"
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appStoreVersionLocalizations/asvl-tv-en/appScreenshotSets?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appScreenshotSets",
+            "id": "set-tv-en",
+            "attributes": {
+              "screenshotDisplayType": "APP_APPLE_TV"
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appScreenshotSets/set-en-61/appScreenshots?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appScreenshots",
+            "id": "s61-1",
+            "attributes": {
+              "fileName": "01_APP_IPHONE_61_week.png",
+              "fileSize": 123456,
+              "sourceFileChecksum": "synthetic-upload-checksum-1",
+              "imageAsset": {
+                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/s61-1/{w}x{h}bb.{f}",
+                "width": 1206,
+                "height": 2622
+              },
+              "assetDeliveryState": {
+                "state": "COMPLETE"
+              }
+            }
+          },
+          {
+            "type": "appScreenshots",
+            "id": "s61-2",
+            "attributes": {
+              "fileName": "02_APP_IPHONE_61_recipe.png",
+              "fileSize": 123456,
+              "sourceFileChecksum": "synthetic-upload-checksum-2",
+              "imageAsset": {
+                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/s61-2/{w}x{h}bb.{f}",
+                "width": 1206,
+                "height": 2622
+              },
+              "assetDeliveryState": {
+                "state": "COMPLETE"
+              }
+            }
+          },
+          {
+            "type": "appScreenshots",
+            "id": "s61-3",
+            "attributes": {
+              "fileName": "03_APP_IPHONE_61_grocery-list.png",
+              "fileSize": 123456,
+              "sourceFileChecksum": "synthetic-upload-checksum-3",
+              "imageAsset": {
+                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/s61-3/{w}x{h}bb.{f}",
+                "width": 1206,
+                "height": 2622
+              },
+              "assetDeliveryState": {
+                "state": "COMPLETE"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appScreenshotSets/set-en-129/appScreenshots?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appScreenshots",
+            "id": "s129-1",
+            "attributes": {
+              "fileName": "ipad-week.png",
+              "fileSize": 123456,
+              "sourceFileChecksum": "synthetic-upload-checksum-4",
+              "imageAsset": {
+                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/s129-1/{w}x{h}bb.{f}",
+                "width": 2064,
+                "height": 2752
+              },
+              "assetDeliveryState": {
+                "state": "COMPLETE"
+              }
+            }
+          },
+          {
+            "type": "appScreenshots",
+            "id": "s129-2",
+            "attributes": {
+              "fileName": "ipad-recipe.png",
+              "fileSize": 123456,
+              "sourceFileChecksum": "synthetic-upload-checksum-5",
+              "imageAsset": {
+                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/s129-2/{w}x{h}bb.{f}",
+                "width": 2064,
+                "height": 2752
+              },
+              "assetDeliveryState": {
+                "state": "COMPLETE"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appScreenshotSets/set-de-61/appScreenshots?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appScreenshots",
+            "id": "sde-1",
+            "attributes": {
+              "fileName": "01_APP_IPHONE_61_woche.png",
+              "fileSize": 123456,
+              "sourceFileChecksum": "synthetic-upload-checksum-6",
+              "imageAsset": {
+                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/sde-1/{w}x{h}bb.{f}",
+                "width": 1206,
+                "height": 2622
+              },
+              "assetDeliveryState": {
+                "state": "COMPLETE"
+              }
+            }
+          },
+          {
+            "type": "appScreenshots",
+            "id": "sde-2",
+            "attributes": {
+              "fileName": "02_APP_IPHONE_61_rezept.png",
+              "fileSize": 123456,
+              "sourceFileChecksum": "synthetic-upload-checksum-7",
+              "imageAsset": {
+                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/sde-2/{w}x{h}bb.{f}",
+                "width": 1206,
+                "height": 2622
+              },
+              "assetDeliveryState": {
+                "state": "COMPLETE"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appScreenshotSets/set-tv-en/appScreenshots?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appScreenshots",
+            "id": "stv-1",
+            "attributes": {
+              "fileName": "tv-week.png",
+              "fileSize": 123456,
+              "sourceFileChecksum": "synthetic-upload-checksum-8",
+              "imageAsset": {
+                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/stv-1/{w}x{h}bb.{f}",
+                "width": 1920,
+                "height": 1080
+              },
+              "assetDeliveryState": {
+                "state": "COMPLETE"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appStoreVersionLocalizations/asvl-ios-en/appPreviewSets?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appPreviewSets",
+            "id": "pset-en-61",
+            "attributes": {
+              "previewType": "IPHONE_61"
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appStoreVersionLocalizations/asvl-ios-de/appPreviewSets?limit=200": {
+      "status": 200,
+      "body": {
+        "data": []
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appStoreVersionLocalizations/asvl-tv-en/appPreviewSets?limit=200": {
+      "status": 200,
+      "body": {
+        "data": []
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appPreviewSets/pset-en-61/appPreviews?limit=200": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "type": "appPreviews",
+            "id": "prev-1",
+            "attributes": {
+              "fileName": "iphone-preview.mp4",
+              "mimeType": "video/mp4",
+              "previewFrameTimeCode": "00:00:05:00",
+              "sourceFileChecksum": "synthetic-upload-checksum-9",
+              "videoUrl": "https://example-video.mzstatic.com/videos/prev-1/iphone-preview.mp4"
+            }
+          }
+        ]
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appStoreVersions/ver-ios-13/appStoreReviewDetail": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "appStoreReviewDetails",
+          "id": "rd-1",
+          "attributes": {
+            "contactFirstName": "Testfirst",
+            "contactLastName": "Testlast",
+            "contactPhone": "+1 555 555 0142",
+            "contactEmail": "reviewer-contact@example.com",
+            "demoAccountName": "demo-user@example.com",
+            "demoAccountPassword": "not-a-real-password",
+            "demoAccountRequired": true,
+            "notes": "Sign in with the demo account; the pantry fills itself after a day."
+          }
+        }
+      }
+    },
+    "GET api.appstoreconnect.apple.com/v1/appStoreVersions/ver-tv-13/appStoreReviewDetail": {
+      "status": 200,
+      "body": {
+        "data": {
+          "type": "appStoreReviewDetails",
+          "id": "rd-2",
+          "attributes": {
+            "contactFirstName": "Testfirst",
+            "contactLastName": "Testlast",
+            "contactPhone": "+1 555 555 0142",
+            "contactEmail": "reviewer-contact@example.com",
+            "demoAccountName": "demo-user@example.com",
+            "demoAccountPassword": "not-a-real-password",
+            "demoAccountRequired": true,
+            "notes": "Sign in with the demo account; the pantry fills itself after a day."
+          }
+        }
+      }
+    }
+  }
+}

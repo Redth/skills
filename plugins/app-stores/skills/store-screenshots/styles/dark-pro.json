@@ -46,7 +46,13 @@
   },
   "roles": {
     "hero": {
-      "layout": "hero"
+      "$comment": "Brand and claim large on Apple; on Google Play the same shot as framed, the app's own screen, because Play wants UI in the first three shots (its claim must fit two lines there).",
+      "layout": "hero",
+      "stores": {
+        "google": {
+          "layout": "framed"
+        }
+      }
     },
     "feature": {
       "layout": "framed"

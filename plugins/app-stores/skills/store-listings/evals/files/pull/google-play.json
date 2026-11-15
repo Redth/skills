@@ -1,0 +1,185 @@
+{
+  "$comment": "Synthetic Google Play Developer API answers for push.py pull google's tests (the invented Sample Recipes app; the edit, ids and URLs are made up). Pictures at play-lh.googleusercontent.com are drawn by the test at the size their URL names; the two tablet types serve the same picture. Each image's sha256 is the test's own drawing's, so the downloads are the originals.",
+  "routes": {
+    "POST oauth2.googleapis.com/token": {
+      "status": 200,
+      "body": {
+        "access_token": "synthetic-access-token",
+        "expires_in": 3599,
+        "token_type": "Bearer"
+      }
+    },
+    "POST androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits": {
+      "status": 200,
+      "body": {
+        "id": "edit-pull-1",
+        "expiryTimeSeconds": "1900000000"
+      }
+    },
+    "DELETE androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1": {
+      "status": 204,
+      "body": null
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/details": {
+      "status": 200,
+      "body": {
+        "defaultLanguage": "en-US",
+        "contactEmail": "support@example.com",
+        "contactWebsite": "https://example.com",
+        "contactPhone": ""
+      }
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings": {
+      "status": 200,
+      "body": {
+        "kind": "androidpublisher#listingsListResponse",
+        "listings": [
+          {
+            "language": "de-DE",
+            "title": "Sample Recipes: Essensplaner",
+            "shortDescription": "Plane Mahlzeiten in Minuten.",
+            "fullDescription": "Plane eine Woche voller Mahlzeiten in Minuten.",
+            "video": ""
+          },
+          {
+            "language": "en-US",
+            "title": "Sample Recipes",
+            "shortDescription": "Recipes and meal plans.",
+            "fullDescription": "Plan a week of meals in minutes. Sample Recipes picks recipes you'll like and writes the grocery list for you.",
+            "video": "https://www.youtube.com/watch?v=example0000"
+          }
+        ]
+      }
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/en-US/phoneScreenshots": {
+      "status": 200,
+      "body": {
+        "images": [
+          {
+            "id": "phone-1",
+            "url": "https://play-lh.googleusercontent.com/sample/phone-1/1080x1920bb.png",
+            "sha1": null,
+            "sha256": null
+          },
+          {
+            "id": "phone-2",
+            "url": "https://play-lh.googleusercontent.com/sample/phone-2/1080x1920bb.png",
+            "sha1": null,
+            "sha256": null
+          },
+          {
+            "id": "phone-3",
+            "url": "https://play-lh.googleusercontent.com/sample/phone-3/1080x1920bb.png",
+            "sha1": null,
+            "sha256": null
+          }
+        ]
+      }
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/en-US/sevenInchScreenshots": {
+      "status": 200,
+      "body": {
+        "images": [
+          {
+            "id": "tab-1",
+            "url": "https://play-lh.googleusercontent.com/sample/tab-1/1080x1920bb.png",
+            "sha1": null,
+            "sha256": null
+          }
+        ]
+      }
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/en-US/tenInchScreenshots": {
+      "status": 200,
+      "body": {
+        "images": [
+          {
+            "id": "tab-1",
+            "url": "https://play-lh.googleusercontent.com/sample/tab-1/1080x1920bb.png",
+            "sha1": null,
+            "sha256": null
+          }
+        ]
+      }
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/en-US/icon": {
+      "status": 200,
+      "body": {
+        "images": [
+          {
+            "id": "icon",
+            "url": "https://play-lh.googleusercontent.com/sample/icon/512x512bb.png",
+            "sha1": null,
+            "sha256": null
+          }
+        ]
+      }
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/en-US/featureGraphic": {
+      "status": 200,
+      "body": {
+        "images": [
+          {
+            "id": "feature",
+            "url": "https://play-lh.googleusercontent.com/sample/feature/1024x500bb.png",
+            "sha1": null,
+            "sha256": null
+          }
+        ]
+      }
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/de-DE/phoneScreenshots": {
+      "status": 200,
+      "body": {
+        "images": [
+          {
+            "id": "phone-de-1",
+            "url": "https://play-lh.googleusercontent.com/sample/phone-de-1/1080x1920bb.png",
+            "sha1": null,
+            "sha256": null
+          }
+        ]
+      }
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/en-US/tvScreenshots": {
+      "status": 200,
+      "body": {}
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/en-US/wearScreenshots": {
+      "status": 200,
+      "body": {}
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/en-US/tvBanner": {
+      "status": 200,
+      "body": {}
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/de-DE/tvScreenshots": {
+      "status": 200,
+      "body": {}
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/de-DE/wearScreenshots": {
+      "status": 200,
+      "body": {}
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/de-DE/tvBanner": {
+      "status": 200,
+      "body": {}
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/de-DE/sevenInchScreenshots": {
+      "status": 200,
+      "body": {}
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/de-DE/tenInchScreenshots": {
+      "status": 200,
+      "body": {}
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/de-DE/icon": {
+      "status": 200,
+      "body": {}
+    },
+    "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/edits/edit-pull-1/listings/de-DE/featureGraphic": {
+      "status": 200,
+      "body": {}
+    }
+  }
+}

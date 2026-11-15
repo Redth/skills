@@ -171,5 +171,32 @@ class RequestJsonTests(HttpTestCase):
             ahttp.request_json("GET", URL)
 
 
+
+class RedirectTests(unittest.TestCase):
+    """The real transport's redirect handler: GETs follow redirects, writes don't, and a guard can refuse one."""
+
+    def setUp(self):
+        self.handler = ahttp._NoRedirectForWrites()
+        self.addCleanup(setattr, ahttp, "REDIRECT_ALLOWED", ahttp.REDIRECT_ALLOWED)
+
+    def follow(self, method, newurl):
+        import urllib.request
+        req = urllib.request.Request("https://cdn.example.com/a.png", method=method)
+        return self.handler.redirect_request(req, None, 302, "Found", {}, newurl)
+
+    def test_a_get_follows_a_redirect(self):
+        ahttp.REDIRECT_ALLOWED = None
+        new = self.follow("GET", "https://cdn.example.com/b.png")
+        self.assertEqual(new.full_url, "https://cdn.example.com/b.png")
+
+    def test_a_write_never_follows_one(self):
+        self.assertIsNone(self.follow("POST", "https://cdn.example.com/b.png"))
+
+    def test_the_guard_refuses_a_redirect_to_another_host(self):
+        ahttp.REDIRECT_ALLOWED = lambda url: url.startswith("https://cdn.example.com/")
+        self.assertIsNotNone(self.follow("GET", "https://cdn.example.com/b.png"))
+        self.assertIsNone(self.follow("GET", "https://elsewhere.example.net/b.png"))
+
+
 if __name__ == "__main__":
     unittest.main()
