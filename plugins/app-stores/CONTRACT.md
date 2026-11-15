@@ -459,7 +459,8 @@ skills/store-screenshots/
   SKILL.md  VERSION
   references/      principles.md (each with its evidence grade), store-rules.md (what each store allows in a
                    screenshot), layouts.md, frames.md (why drawn frames; using your own Apple bezels as they are),
-                   panoramas.md, localisation.md, legibility.md, checklist.md (the pre-ship list), evidence.md
+                   panoramas.md, localisation.md, legibility.md, checklist.md (the pre-ship list), evidence.md,
+                   style.md, baseline.md, current-set.md (reading the listing's current set first)
   schema/store-screenshots.schema.json
   templates/       set.html (the engine page), layouts/*.css, base.css
   frames/          <name>.svg + <name>.json (the screen rectangle and corner radius): phone, phone-landscape,
@@ -469,7 +470,7 @@ skills/store-screenshots/
   rules/           (copied from shared/rules: the stores' `design` tables)
   scripts/
     appstores_lib/ (copied)
-    render.py  check.py  sheet.py  test_*.py
+    render.py  check.py  sheet.py  styles.py  baseline.py  samples.py (made-up screens for --styles)  test_*.py
   evals/  evals.json  trigger-evals.json  files/
 ```
 
@@ -586,7 +587,8 @@ hash (config section, strings, capture bytes, fonts, templates, frames) is uncha
 - `sheet.py [--config …] [--png]`: the mocks at real display size from the rendered files: Apple's search row (first
   three portrait shots at the row's real width, with the caption's size in points computed and shown), the product
   page's first screen, Play's listing row, and a contact sheet of every target × locale × shot with seams as
-  gutters. `--png` renders them through Chrome to `<out>/sheets/*.png` for an agent to look at.
+  gutters. `--png` renders them through Chrome to `<out>/sheets/*.png` for an agent to look at. The design sheets
+  (§8.7): `--current [DIR]`, `--inspiration`, `--styles`, `--directions DIRS [--draft]`, `--compare DIR`.
 
 ### 8.5a Settled details
 
@@ -624,19 +626,40 @@ half of a set shows the app in use), `backgrounds`, and `uiFirst` (Google: real 
 
 ### 8.7 Taste, directions and the baseline
 
-A set should look like one family across updates. The skill gets there in five steps; the files live in the user's
-project beside the config (paths relative to it), under `design/` unless the config's `"design"` names another folder.
+A set should look like one family across updates. The skill gets there in five steps, after a step 0 for an app
+that already has a listing; the files live in the user's project beside the config (paths relative to it), under
+`design/` unless the config's `"design"` names another folder.
 
+0. **The current set.** Most apps have a live listing; its screenshots are the baseline for the story. They come from
+   `store-listings`' `push.py pull` (`existing/<store>/screenshots/<locale>/<slot>/<NN>.<ext>`) or any folder (e.g.
+   `assets/screenshots/<device>/Screenshot-NN.png`). `sheet.py --current <folder>` groups the pictures (a pulled
+   listing by store, locale and slot, App Store first, its other pictures left out; any other folder by subfolder),
+   orders each group by the number in the names, writes a skeleton `design/current.json` when there's none, and lays
+   each shot beside its analysis in `design/sheets/current.png` (`--current` alone reads `current.json`'s `source`).
+   The agent fills `design/current.json` (schema `$defs/current` in the style schema): `{"version": 1, "source":
+   "<folder>", "shots": [{"file" (relative to source), "group", "order" (from 1), "screen" (the app screen it
+   shows), "capture" (the capture screen id for it now), "caption" (the words on it, read from the picture), "layout"
+   (the skill's vocabulary; a plain screenshot is gameplay), "traits": {…}, "verdict": "keep"|"change"|"drop"|null,
+   "notes"}], "summary": {"traits": {…}, "look": "keep"|"evolve"|"replace"|null, "whatWorks": [..], "whatDoesnt":
+   [..], "notes", "confirmedByUser": bool}}`. Verdicts, `look` and `confirmedByUser` are the user's. The storyboard
+   starts from it (the screens kept, in order; their captions kept or rewritten); the inspiration board shows it as
+   one example (to keep or move away from).
 1. **Inspiration.** The user provides 3–6 examples they like and 1–2 they don't (images they saved, of any app or game)
    in `design/inspiration/`. The agent writes `design/inspiration/inspiration.json`:
    `{"version": 1, "examples": [{"file", "source" (free text: where it came from), "likes": [..], "dislikes": [..],
    "traits": {…}}], "summary": {"traits": {…}, "confirmedByUser": true|false}}`. `traits` use the vocabulary in the
    style schema (§ below). Examples inform the style only: never their marks, illustrations or trade dress. Scripts
-   never fetch anything; `sheet.py --inspiration` lays the examples out with their notes for the user to confirm.
+   never fetch anything; `sheet.py --inspiration` lays the examples out with their notes for the user to confirm
+   (the current set's card first, when `current.json` exists). With no examples, `sheet.py --styles` renders every
+   starting style on one made-up app (screens drawn at run time by `samples.py`, never committed) into
+   `design/sheets/styles.png`, for the user to pick by eye.
 2. **Directions.** 2–4 candidate styles, each `design/directions/<name>/screenshot-style.json` (from the shipped
    starting points in `styles/` or written fresh). `render.py --style <file> --out design/explore/<name> --shots
    <first 3> --targets <one>` renders each; `sheet.py --directions design/explore/a,design/explore/b,…` shows them side
-   by side at search-row size and full size.
+   by side at search-row size and full size. When the user asks for directions up front, the agent may in one turn
+   draft the brief and storyboard (from the current set) and render 2–3 directions' first three shots; `--draft`
+   heads the sheet "Drafts for you to correct", and nothing is chosen, logged, approved or locked until the user
+   answers.
 3. **Iterate.** One change a round; `sheet.py --compare <previous out>` shows before and after. Each decision the user
    makes goes in `design/decisions.md` (date, what, why, in the user's terms).
 4. **Approve the baseline.** `baseline.py approve [--note "…"]`: needs a render report for the current config and style
@@ -671,6 +694,9 @@ project beside the config (paths relative to it), under `design/` unless the con
 }
 ```
 
+- A role may carry `stores`: `{"google": {"layout", "frame"}}`, the role's layout and frame on that store's targets
+  where the shot sets none of its own (between the shot's settings and the config's store overrides). The app
+  starting styles give their `hero` a Play layout of real UI this way, so shot 1 doesn't trip `google.design.ui_first`.
 - The config names it with `"style": "screenshot-style.json"`. With a style, a shot may give a `role` instead of a
   `layout` (the style's `roles` map it); a shot's own `layout` still works, and with a locked style one that isn't in
   `roles` is a warning. The config's `theme` and `stores` are merged under the style's (the style wins); with a locked

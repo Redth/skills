@@ -1,4 +1,6 @@
 [
+  {"query": "Our App Store screenshots are old. Look at what we have live and refresh them.", "should_trigger": true},
+  {"query": "Show me a few screenshot styles to pick from; I have no examples.", "should_trigger": true},
   {"query": "Design App Store screenshots with captions and device frames for our app.", "should_trigger": true},
   {"query": "Make our Google Play screenshots from these captures, every phone and tablet size.", "should_trigger": true},
   {"query": "Our screenshots don't read in App Store search results. Can you make the first three work better?", "should_trigger": true},

@@ -7,8 +7,10 @@ store overrides, rules for the words (``copy``) and how far a later render may d
 
 Merging: the config's ``theme`` and ``stores`` go under the style's (the style wins, key by key, into ``palette``,
 ``caption`` and ``background``); a shot with a ``role`` and no ``layout`` takes the role's layout (and its
-``frame``, ``tilt`` and ``at`` where the shot has none). Precedence is otherwise as before: target overrides beat
-store overrides beat the shot's settings beat the theme.
+``frame``, ``tilt`` and ``at`` where the shot has none). A role's own ``stores`` give it another layout or frame on
+one store (a hero that is real UI on Play, which wants the app's UI in the first three); they sit between the
+shot's settings and the config's store overrides. Precedence is otherwise as before: target overrides beat store
+overrides beat the shot's settings beat the theme.
 
 Stdlib only; used by render.py, check.py, sheet.py and baseline.py.
 """
@@ -31,6 +33,8 @@ STYLES_DIR = os.path.join(SKILL_DIR, "styles")
 DEFAULT_DESIGN = "design"
 STYLE_NAME = "screenshot-style.json"
 ROLE_KEYS = ("layout", "frame", "tilt", "at")
+ROLE_STORE_KEYS = ("layout", "frame")
+ROLE_STORES = "_roleStores"  # on an applied shot: {store: {layout, frame}} from its role, where the shot set none
 
 # How far a render may move from the baseline before check.py says so (screenshot-craft research: device box 1u,
 # caption top 0.5u, headline size 5% between releases). Positions are fractions of the slot's width (0.01 = 1u),
@@ -73,6 +77,25 @@ def validate_style(data, where="style"):
 def validate_inspiration(data):
     """Problems with ``inspiration.json`` (its shape and its traits' vocabulary)."""
     return schema.validate(data, _def(style_schema(), "inspiration"))
+
+
+def validate_current(data):
+    """Problems with ``design/current.json`` (the current set read shot by shot): its shape, its layouts and
+    traits' vocabulary, and each set's order (1, 2, 3... with no place twice)."""
+    problems = schema.validate(data, _def(style_schema(), "current"))
+    if problems:
+        return problems
+    seen = {}
+    for i, shot in enumerate(data.get("shots") or []):
+        key = (shot.get("group"), shot["order"])
+        if key in seen:
+            problems.append("/shots/%d: order %d of %s is shot %d's too" % (
+                i, shot["order"], shot.get("group") or "the set", seen[key]))
+        seen.setdefault(key, i)
+    files = [s["file"] for s in data.get("shots") or []]
+    for f in sorted(set(x for x in files if files.count(x) > 1)):
+        problems.append("/shots: %s is listed more than once" % f)
+    return problems
 
 
 def trait_vocabulary():
@@ -176,16 +199,33 @@ def apply(cfg, style):
         if not isinstance(spec, dict):
             raise StyleError("shot %s has role %r, which the style doesn't have (its roles: %s)" % (
                 s.get("id"), role, ", ".join(k for k in roles if not k.startswith("$")) or "none"))
+        per_store = {}
+        for store, over in (spec.get("stores") or {}).items():
+            if store.startswith("$") or not isinstance(over, dict):
+                continue
+            keep = dict((k, over[k]) for k in ROLE_STORE_KEYS if over.get(k) is not None and s.get(k) is None)
+            if keep:
+                per_store[store] = keep
         for key in ROLE_KEYS:
             if s.get(key) is None and spec.get(key) is not None:
                 s[key] = spec[key]
+        if per_store:
+            s[ROLE_STORES] = per_store
     return out
 
 
 def role_layouts(style):
-    """The layouts a style's roles use."""
-    return sorted(set(spec.get("layout") for k, spec in (style.get("roles") or {}).items()
-                      if not k.startswith("$") and isinstance(spec, dict) and spec.get("layout")))
+    """The layouts a style's roles use (on any store)."""
+    out = set()
+    for k, spec in (style.get("roles") or {}).items():
+        if k.startswith("$") or not isinstance(spec, dict):
+            continue
+        if spec.get("layout"):
+            out.add(spec["layout"])
+        for store, over in (spec.get("stores") or {}).items():
+            if not store.startswith("$") and isinstance(over, dict) and over.get("layout"):
+                out.add(over["layout"])
+    return sorted(out)
 
 
 def drift_tolerances(style):

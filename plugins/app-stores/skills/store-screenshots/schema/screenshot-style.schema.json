@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "screenshot-style.json: the look a screenshot set keeps across updates (CONTRACT.md 8.7). The config names it with \"style\"; its theme and stores merge over the config's (the style wins); roles map a shot's role to a layout; copy rules are checked on captions; drift says how far a later render may move from the approved baseline before check.py --baseline says so. The traits vocabulary lives in $defs (trait-*) and is shared with inspiration.json. theme and stores are validated against store-screenshots.schema.json's own theme and overrides. Uses only the subset appstores_lib/schema.py validates.",
+  "$comment": "screenshot-style.json: the look a screenshot set keeps across updates (CONTRACT.md 8.7). The config names it with \"style\"; its theme and stores merge over the config's (the style wins); roles map a shot's role to a layout; copy rules are checked on captions; drift says how far a later render may move from the approved baseline before check.py --baseline says so. The traits vocabulary lives in $defs (trait-*) and is shared with inspiration.json and current.json. theme and stores are validated against store-screenshots.schema.json's own theme and overrides. Uses only the subset appstores_lib/schema.py validates.",
   "type": "object",
   "required": [
     "version",
@@ -576,8 +576,22 @@
         }
       }
     },
+    "layout": {
+      "$comment": "The skill's layouts (CONTRACT.md 8.3, references/layouts.md).",
+      "enum": [
+        "fullbleed",
+        "band",
+        "framed",
+        "framed-bleed",
+        "tilt",
+        "pair",
+        "callout",
+        "hero",
+        "gameplay"
+      ]
+    },
     "role": {
-      "$comment": "What a kind of shot gets: its layout, and optionally its frame, tilt and fullbleed plate side. A shot's own settings win.",
+      "$comment": "What a kind of shot gets: its layout, and optionally its frame, tilt and fullbleed plate side. A shot's own settings win. 'stores' gives the role another layout or frame on one store (a hero that's real UI on Google Play, which wants the app's UI in its first three shots); the config's store and target overrides still beat it.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -585,17 +599,7 @@
           "type": "string"
         },
         "layout": {
-          "enum": [
-            "fullbleed",
-            "band",
-            "framed",
-            "framed-bleed",
-            "tilt",
-            "pair",
-            "callout",
-            "hero",
-            "gameplay"
-          ]
+          "$ref": "#/$defs/layout"
         },
         "frame": {
           "type": "string",
@@ -614,6 +618,34 @@
             "bottom",
             null
           ]
+        },
+        "stores": {
+          "$comment": "Per store (apple, google): the layout and frame this role takes on that store's targets, where the shot sets none of its own.",
+          "type": "object",
+          "properties": {
+            "$comment": {
+              "type": "string"
+            }
+          },
+          "patternProperties": {
+            "^[a-z][a-z0-9-]*$": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "$comment": {
+                  "type": "string"
+                },
+                "layout": {
+                  "$ref": "#/$defs/layout"
+                },
+                "frame": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "additionalProperties": false
         },
         "maxPerSet": {
           "$comment": "At most this many shots of a set in this role (check warns).",
@@ -702,6 +734,157 @@
             },
             "traits": {
               "$ref": "#/$defs/traits"
+            },
+            "notes": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "confirmedByUser": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "current": {
+      "$comment": "design/current.json: the app's current screenshot set (the live listing, pulled to existing/<store>/screenshots/<locale>/<slot>/, or a folder in the repo) read shot by shot: which screen each shows, the words on it, its layout and look in the skill's vocabulary, and what the user wants to keep. The storyboard starts from it; the inspiration step treats it as one example. sheet.py --current lays the set out and writes a skeleton of this file.",
+      "type": "object",
+      "required": [
+        "version",
+        "source",
+        "shots"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "$comment": {
+          "type": "string"
+        },
+        "version": {
+          "const": 1
+        },
+        "source": {
+          "$comment": "The folder the set was read from, relative to the config (existing/apple/screenshots/en-US/APP_IPHONE_67, assets/screenshots).",
+          "type": "string",
+          "minLength": 1
+        },
+        "shots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "file",
+              "order"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "$comment": {
+                "type": "string"
+              },
+              "file": {
+                "$comment": "The picture, relative to source.",
+                "type": "string",
+                "minLength": 1
+              },
+              "group": {
+                "$comment": "Which set it belongs to: store/locale/slot for a pulled listing, else its folder (sheet.py writes it).",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "order": {
+                "$comment": "Its place in its set, from 1.",
+                "type": "integer",
+                "minimum": 1
+              },
+              "screen": {
+                "$comment": "Which screen of the app it shows, in the user's words (the plan, a recipe, settings), or null for art with no app in it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "capture": {
+                "$comment": "The capture screen id that shows the same screen now, once known (for the storyboard).",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "caption": {
+                "$comment": "The words on it as they read in the picture (null for none); a second line after \\n.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "layout": {
+                "$comment": "The nearest of the skill's layouts (a plain screenshot with no words or frame is gameplay), or null when none is near (say how in notes).",
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/layout"
+                  }
+                ]
+              },
+              "traits": {
+                "$ref": "#/$defs/traits"
+              },
+              "verdict": {
+                "$comment": "What the user wants done with it: keep (the screen and its words as they are), change (the screen or the words), drop; null until they say.",
+                "enum": [
+                  "keep",
+                  "change",
+                  "drop",
+                  null
+                ]
+              },
+              "notes": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {
+              "type": "string"
+            },
+            "traits": {
+              "$ref": "#/$defs/traits"
+            },
+            "look": {
+              "$comment": "What the new set does with the current look: keep it (a direction made from it), evolve it (keep what works, fix what doesn't), replace it; null until the user says.",
+              "enum": [
+                "keep",
+                "evolve",
+                "replace",
+                null
+              ]
+            },
+            "whatWorks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "whatDoesnt": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             },
             "notes": {
               "type": [

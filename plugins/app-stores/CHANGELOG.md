@@ -34,6 +34,16 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   bleeding 12% (76u whole), leading 1.08, two caption lines reserved so devices line up across a set; `caption.case`.
   `check.py` warns when shots 1 to 3's captions are under 9.5u (any store) and when a set's device moves more than
   0.2u or its caption top more than 0.5u.
+- `store-screenshots`: start from the current set (CONTRACT.md 8.7 step 0). `sheet.py --current <folder>` lays out
+  the listing's current screenshots (pulled to `existing/<store>/screenshots/<locale>/<slot>/`, or any folder such as
+  `assets/screenshots/<device>/`) by store and device in order, writes a skeleton `design/current.json` (schema
+  `$defs/current`: each shot's screen, caption, layout, traits and the user's keep/change/drop, and the summary's
+  look: keep, evolve or replace) and shows each shot beside its analysis; the storyboard starts from the shots kept
+  and the inspiration board shows the set as one example. A batched first turn for users who ask for directions up
+  front, its sheet headed as drafts (`sheet.py --directions ... --draft`). `sheet.py --styles` renders every starting
+  style on one made-up app (`samples.py`, nothing committed) to pick by eye. A style role's `stores` gives it another
+  layout or frame on one store; the app starting styles' hero is real UI on Google Play, so shot 1 no longer trips
+  Play's UI-first warning.
 - `store-listings` 0.1.0 (#11): one `store-listing.json` for the App Store and Google Play; the stores' rules as
   dated, sourced data (`rules/apple.json`, `rules/google.json`), checked offline; `listing.py` import (fastlane
   deliver and supply, Gradle Play Publisher, Expo), check, build (fastlane-compatible output) and preview;

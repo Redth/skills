@@ -192,7 +192,8 @@ def semantic_problems(cfg):
         for t in s.get("targets") or []:
             if t not in targets:
                 out.append("shot %s names target %s, which isn't in targets" % (s["id"], t))
-        if (s.get("layout") == "callout") and not s.get("callout"):
+        layouts = [s.get("layout")] + [o.get("layout") for o in (s.get(styles.ROLE_STORES) or {}).values()]
+        if "callout" in layouts and not s.get("callout"):
             out.append("shot %s uses the callout layout but has no callout" % s["id"])
     pano = cfg.get("panorama")
     if pano:
@@ -322,14 +323,17 @@ class Resolver:
     # -- settings
 
     def settings(self, shot, target_id):
-        """A shot's layout, frame and caption style for a target: the theme's, then the shot's, then the store's
-        overrides, then the target's own (each later one wins)."""
+        """A shot's layout, frame and caption style for a target: the theme's, then the shot's (its role's), then
+        its role's for the target's store, then the store's overrides, then the target's own (each later one
+        wins)."""
         target = self.cfg["targets"][target_id]
         store = self.stores.get(target["store"]) or {}
+        role_store = (shot.get(styles.ROLE_STORES) or {}).get(target["store"]) or {}
         layers = [shot, store, target]
-        layout = _first(target.get("layout"), store.get("layout"), shot.get("layout"), DEFAULT_LAYOUT)
-        frame = _first(target.get("frame"), store.get("frame"), shot.get("frame"), self.theme.get("frame"),
-                       DEFAULT_FRAME)
+        layout = _first(target.get("layout"), store.get("layout"), role_store.get("layout"), shot.get("layout"),
+                        DEFAULT_LAYOUT)
+        frame = _first(target.get("frame"), store.get("frame"), role_store.get("frame"), shot.get("frame"),
+                       self.theme.get("frame"), DEFAULT_FRAME)
         style = dict(DEFAULT_CAPTION)
         style.update({k: v for k, v in (self.theme.get("caption") or {}).items() if v is not None})
         words = True

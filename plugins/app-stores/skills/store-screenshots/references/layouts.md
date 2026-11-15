@@ -98,7 +98,8 @@ The brand and its claim large, a `proof` line, and a sliver of real UI.
 - **Options:** `caption` (the claim), `proof` (a short, true, verifiable line), `kicker` (a small line above).
 - **Rules:** Apple 2.3.3 wants the app in use, not "merely the title art": the sliver of UI is why the layout has
   one, and more than half the set must still be the app in use (`check.py` counts a `hero` as not in use when it
-  counts). On Play, `check.py` warns about a `hero` among the first three shots: Google asks for UI first there. `proof` is where unverifiable claims, rankings and
+  counts). On Play, `check.py` warns about a `hero` among the first three shots: Google asks for UI first there; a
+  style's role can give the hero another layout on Play (`roles.hero.stores.google`, as the starting styles do). `proof` is where unverifiable claims, rankings and
   awards creep in: the check reads it like a caption. Brand art without UI belongs in iOS 27's header or search
   asset, which Apple sanctions for it.
 - **Examples:** Notion ("Your life, beautifully organized."), Headspace and Calm (logo and claim), Uber.

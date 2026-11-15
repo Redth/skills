@@ -327,6 +327,107 @@
         "The agent asks for the brand's own colours, font or art, or offers to use the app's",
         "The agent leaves the choice of direction to the user"
       ]
+    },
+    {
+      "id": 20,
+      "prompt": "Our App Store and Play screenshots are a couple of years old. Redo them. We pulled what's live into evals/files/current-set/existing; the app's captures are in evals/files/recipes/captures.",
+      "expected_output": "Before proposing any storyboard, style or direction, the agent reads the current set: runs sheet.py --current on the pulled folder (with --png), opens each picture, and fills design/current.json with each shot's screen, its caption read off the picture word for word, its nearest layout and traits, and what works and what doesn't. It shows the current-set sheet, proposes which shots to keep, change or drop (for example keeping 'Plan a week of meals in minutes' and dropping the 'Welcome to...' profile shot and the one-word 'Recipes') with reasons, and asks the user to decide those and whether to keep, evolve or replace the look. It renders nothing new yet.",
+      "files": [
+        "evals/files/current-set/README.txt",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/01.png",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/02.png",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/03.png",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/04.png",
+        "evals/files/current-set/existing/google/screenshots/en-US/phone/01.png"
+      ],
+      "expectations": [
+        "The agent runs sheet.py --current on evals/files/current-set/existing (or its apple/google subfolders) before any storyboard, style or render",
+        "The agent records the captions as they read in the pictures (e.g. 'Plan a week of meals in minutes', 'Welcome to Sample Recipes, the best cooking app', 'Recipes', 'Your list, sorted by aisle')",
+        "The agent writes design/current.json with each shot's screen, caption, layout and traits, and leaves the verdicts and confirmedByUser for the user (null/false, or proposed in words only)",
+        "The agent names what works and what doesn't in the current set (for example a long welcome caption, a one-word caption, a profile screen among the first three, small band captions)",
+        "The agent asks the user which shots to keep, change or drop and whether to keep, evolve or replace the look",
+        "The agent does not render new screenshots or directions in this turn"
+      ]
+    },
+    {
+      "id": 21,
+      "prompt": "Thanks. Keep 'Plan a week of meals in minutes' exactly as it is, it's the line people quote back to us. Drop the welcome one. The others you can rewrite. Now the storyboard. (Project: evals/files/current-set, captures in evals/files/recipes/captures.)",
+      "expected_output": "The agent records the verdicts in design/current.json (shot 1 keep, the welcome shot drop, the others change) and proposes a storyboard table that starts from the current set: the meal-plan shot first with its caption word for word, the recipe and shopping screens kept in their order with rewritten captions of 2 to 5 words, the dropped slot filled from the brief or the captures, a column saying which rows are kept, changed or new, and real UI in shots 1 to 3. It asks the user to agree the storyboard before rendering.",
+      "files": [
+        "evals/files/current-set/README.txt",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/01.png",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/02.png",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/03.png",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/04.png",
+        "evals/files/current-set/existing/google/screenshots/en-US/phone/01.png"
+      ],
+      "expectations": [
+        "The storyboard's first shot is the meal-plan screen with the caption 'Plan a week of meals in minutes' unchanged, word for word",
+        "The welcome/profile shot is gone from the storyboard",
+        "The other kept screens stay in their current order, with new captions (short, a benefit or a verb)",
+        "The storyboard says which rows are kept, changed or new",
+        "The agent updates design/current.json with the user's verdicts (keep, drop, change)",
+        "The agent asks the user to agree the storyboard before rendering anything"
+      ]
+    },
+    {
+      "id": 22,
+      "prompt": "I don't have time for back and forth. Sample Recipes, a meal planner for busy families, App Store and Play. Live screenshots are in evals/files/current-set/existing, captures in evals/files/recipes/captures. Just show me two or three directions and I'll pick.",
+      "expected_output": "In one turn the agent reads the current set (sheet.py --current, current.json with verdicts left to the user), drafts a brief and a storyboard from it (the kept-looking shots in order, their captions as they are where they work), writes the config's shots from that draft, renders 2 or 3 directions for the first three shots on one target with render.py --style ... --out design/explore/<name>, and shows sheet.py --directions ... --draft --png. It labels everything as drafts for the user to correct, lists its assumptions (core value, which shots, each caption, the directions' colours), records nothing in decisions.md, sets no confirmedByUser, and asks the user to correct the story and pick a direction or none.",
+      "files": [
+        "evals/files/current-set/README.txt",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/01.png",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/02.png",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/03.png",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/04.png",
+        "evals/files/current-set/existing/google/screenshots/en-US/phone/01.png",
+        "evals/files/recipes/store-screenshots.json"
+      ],
+      "expectations": [
+        "The agent renders 2 or 3 directions, only their first three shots on one target, in this same turn",
+        "The directions sheet is made with --draft (headed as drafts) or the reply clearly labels the brief, storyboard and directions as drafts for the user to correct",
+        "The draft storyboard starts from the current set (its shots and order, the captions that work kept as they are)",
+        "The agent lists what it assumed (the core value, which shots, the captions, the colours) and asks the user to correct it",
+        "The agent does not record a choice in design/decisions.md, set confirmedByUser, pick a direction, iterate, or run baseline.py approve",
+        "The agent opens the rendered drafts and the sheet before showing them"
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "Here are a few sets we like: evals/files/inspiration-board (the liked-* ones; the disliked one is the opposite of what we want). Our current screenshots are in evals/files/current-set/existing. Which way should we go?",
+      "expected_output": "The agent treats the current set as one example among the user's: it reads it (sheet.py --current, current.json), describes the liked examples in inspiration.json in the traits vocabulary, shows sheet.py --inspiration (which puts the current set's card first), compares the current look with what the user likes (for example the current band captions and orange background against the liked bold or calm sets), and asks whether to keep, evolve or replace the current look, recommending with a reason but leaving the choice to the user. It doesn't assume the old look is thrown away or kept.",
+      "files": [
+        "evals/files/current-set/README.txt",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/01.png",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/02.png",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/03.png",
+        "evals/files/current-set/existing/apple/screenshots/en-US/APP_IPHONE_67/04.png",
+        "evals/files/current-set/existing/google/screenshots/en-US/phone/01.png",
+        "evals/files/inspiration-board/liked-bold-blue.png",
+        "evals/files/inspiration-board/liked-calm-cream.png",
+        "evals/files/inspiration-board/liked-dark-glow.png",
+        "evals/files/inspiration-board/disliked-busy.png"
+      ],
+      "expectations": [
+        "The agent reads the current set and describes its look in the traits vocabulary (current.json's summary)",
+        "The agent shows the current set alongside the user's examples (sheet.py --inspiration with current.json, or both sheets) as one example among them",
+        "The agent says how the current look differs from or matches what the user likes",
+        "The agent asks whether to keep, evolve or replace the current look (summary.look) rather than deciding",
+        "The agent may recommend a direction, with a reason, but leaves the choice to the user",
+        "The agent does not copy the examples' marks or trade dress"
+      ]
+    },
+    {
+      "id": 24,
+      "prompt": "We don't have any example screenshots. What looks can you do? I'd rather see them than read about them.",
+      "expected_output": "The agent runs sheet.py --styles --png, opens design/sheets/styles.png, and shows the user the starting styles rendered on one made-up app (each one's first three shots in the search row and on the product page) with a line on who each suits, explaining the colours there are the styles' own and that the chosen one takes the brand's colours and fonts. It asks the user to point at one or two (or say what to mix), and doesn't pick for them.",
+      "files": [],
+      "expectations": [
+        "The agent runs sheet.py --styles (with --png) rather than only describing the styles in words",
+        "The agent opens and looks at design/sheets/styles.png before describing it",
+        "The agent explains that the preview uses a made-up app and the styles' own colours, and that a direction takes the brand's colours, fonts and words",
+        "The agent asks the user to pick one or two (or a mix) and doesn't choose for them"
+      ]
     }
   ]
 }

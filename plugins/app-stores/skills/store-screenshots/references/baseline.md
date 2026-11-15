@@ -1,14 +1,16 @@
 # Taste, directions and the baseline
 
-How a set gets its look from the user's taste, and keeps it across updates. Five steps; every file lives in the
-user's project beside the config, under `design/` (or the folder the config's `"design"` names).
+How a set gets its look from the user's taste, and keeps it across updates. Five steps, after reading the app's
+current set where it has one (step 0, [current-set.md](current-set.md)); every file lives in the user's project
+beside the config, under `design/` (or the folder the config's `"design"` names).
 
 ```
 design/
+  current.json           the app's current set read shot by shot, with the user's verdicts (step 0)
   inspiration/           the user's examples (images) and inspiration.json
   directions/<name>/     screenshot-style.json: each candidate look
   explore/<name>/        each candidate rendered (render.py --style ... --out ...)
-  sheets/                inspiration.png, directions.png
+  sheets/                current.png, inspiration.png, styles.png, directions.png
   decisions.md           what the user decided, in their words, dated
   baseline/              the approved set: baseline.json, render-report.json, screenshot-style.json, the PNGs
     history/<date>/      earlier baselines
@@ -35,6 +37,11 @@ in `design/inspiration/` and describe each in `inspiration.json`:
 
 `traits` use the vocabulary in [style.md](style.md). `sheet.py --inspiration --png` lays the examples out with their
 notes (`design/sheets/inspiration.png`); show it, and set `confirmedByUser` only when the user agrees the summary.
+
+The app's current set is one of the examples: with a `design/current.json`, the board shows it first, with its traits,
+what works and what doesn't, and whether the user keeps, evolves or replaces the look (`summary.look`). It isn't copied
+into `inspiration.json`. With no examples of their own, `sheet.py --styles --png` shows the starting styles rendered
+on one made-up app, for the user to point at.
 Examples inform the style only: never their marks, illustrations, characters or trade dress. No script fetches
 anything: the user brings the pictures.
 
@@ -50,7 +57,13 @@ sheet.py --directions design/explore/bold,design/explore/calm,design/explore/dar
 
 `design/sheets/directions.png` shows each direction's first three shots in Apple's search row (each caption's size
 in points) and at the product page's size, with its name and traits. The user picks; offer to mix ("the bold one's
-words with the calm one's background").
+words with the calm one's background"). When the user wants the current look kept or evolved, one direction is that
+look written as a style, so they compare like for like.
+
+**Drafts.** When the user asks for directions up front, the agent may render them before the brief and storyboard are
+agreed, in the same turn as drafting them from the current set: `sheet.py --directions ... --draft --png` heads the
+page "Drafts for you to correct". Nothing is chosen from drafts until the user answers: no entry in `decisions.md`, no
+`confirmedByUser`, no iterating. Their corrections to the story come first; then pick a direction as above.
 
 ## 3. Iterate
 

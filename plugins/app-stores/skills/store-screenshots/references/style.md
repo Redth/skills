@@ -5,7 +5,8 @@ store overrides, rules for the words, and how far a later render may drift from 
 from `store-screenshots.json` so the look can be explored, compared, approved and locked on its own, while the config
 keeps what changes every release (targets, shots, strings, captures). The schema is
 `schema/screenshot-style.schema.json`; the traits vocabulary lives there once, in `$defs` (`trait-*`), and
-`design/inspiration/inspiration.json` uses the same words.
+`design/inspiration/inspiration.json` and `design/current.json` (the app's current set, [current-set.md](current-set.md))
+use the same words.
 
 ## The file
 
@@ -37,7 +38,7 @@ keeps what changes every release (targets, shots, strings, captures). The schema
 | `locked` | set by `baseline.py approve`, cleared only by `baseline.py unlock --reason` ([baseline.md](baseline.md)) |
 | `traits` | the look in the fixed vocabulary below; for people and the sheets, not the renderer |
 | `theme` | the same object as the config's `theme` ([config.md](config.md)); the renderer uses it |
-| `roles` | `{role: {layout, frame?, tilt?, at?, maxPerSet?}}`: the layout each kind of shot gets |
+| `roles` | `{role: {layout, frame?, tilt?, at?, maxPerSet?, stores?}}`: the layout each kind of shot gets; `stores` gives the role another `layout` or `frame` on one store |
 | `stores` | per-store overrides, as the config's |
 | `copy` | `maxWords`, `maxLines`, `case` (`sentence`, `title`, `upper`, `lower`, `any`): `check.py` warns on captions that break them; `emphasis` is guidance in words |
 | `drift` | tolerances against the baseline: `captionSize` relative (0.05 = 5%), `captionPosition` and `deviceBox` as fractions of the slot's width (0.01 = 1u), `textShare` an absolute share, `colour` a CIE76 delta E |
@@ -51,6 +52,11 @@ keeps what changes every release (targets, shots, strings, captures). The schema
 - **Roles.** A shot may give `"role": "feature"` instead of a `layout`; the style's roles give it the layout (and
   `frame`, `tilt`, `at` where the shot has none). A shot's own `layout` still wins over its role, and store and target
   overrides beat both (target, then store, then shot, then theme, as before). A role the style lacks is a usage error.
+- **A role per store.** `"hero": {"layout": "hero", "stores": {"google": {"layout": "framed-bleed"}}}` makes the same
+  shot a brand-and-claim hero on Apple and the app's own screen on Play, which wants UI in its first three shots
+  (`google.design.ui_first`). It applies where the shot sets no layout (or frame) of its own; the config's store and
+  target overrides still beat it. Every app starting style does this for its hero, so shot 1 doesn't warn on Play;
+  the hero's claim must then fit the role's two lines there.
 - **Locked.** Once a baseline is approved the style is locked: a config `theme` key that contradicts it is a check
   error, a shot whose own layout none of the roles use is a warning, and a change to the style itself is an error until
   a new baseline is approved with the user.
@@ -88,7 +94,10 @@ trade dress are its owner's.
 
 Eight named directions, each a style file to copy into `design/directions/<name>/screenshot-style.json` and adapt
 (the brand's colours and font in `theme`; keep the sizes unless the eye says otherwise). Each file's `$comment` says
-who it suits. The public apps named are where the pattern was seen on 2026-11-14, described and never copied.
+who it suits. To show them rather than describe them, `sheet.py --styles --png` renders all eight on one made-up app
+(neutral screens drawn by `scripts/samples.py` at run time, sample words) and lays out each one's first three shots at
+search-row and product-page size in `design/sheets/styles.png`; the renders go in `design/sheets/styles-preview/`,
+safe to delete. The colours there are the styles' own. The public apps named are where the pattern was seen on 2026-11-14, described and never copied.
 
 | File | Direction | Suits | Seen in |
 |---|---|---|---|
