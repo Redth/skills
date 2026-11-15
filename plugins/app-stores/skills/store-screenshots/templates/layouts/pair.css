@@ -1,0 +1,23 @@
+/*
+  pair: two framed captures at their true relative scale (each frame's realWidthMm). Two of a kind overlap side by
+  side, the second set back and higher; a much smaller companion (a watch) sits in front at the end side; a much
+  bigger one (a tablet) stands behind. Cut off by the bottom edge like framed-bleed; on a tall slot two phones are
+  drawn big and run off the sides too (--stage-side below 0).
+*/
+.slot[data-layout="pair"] {
+  --device-w: 102;
+  --stage-side: -1;
+  --bleed: 0.2;
+  --pair-overlap: 0.42;
+  --pair-stagger: 0.16;
+  --caption-bias: 0.5;
+}
+body[data-aspect="tall"] .slot[data-layout="pair"] { --anchor-gap: 24; }
+body[data-aspect="mid"] .slot[data-layout="pair"] { --device-w: 92; --stage-side: 4; --pair-stagger: 0.12; }
+body[data-aspect="square"] .slot[data-layout="pair"] { --device-w: 80; --stage-side: 4; }
+body[data-aspect="wide"] .slot[data-layout="pair"] { --device-w: 80; --stage-side: 6; --bleed: 0.14; --pair-stagger: 0.12; }
+
+.slot[data-layout="pair"] .device-wrap[data-role="pair"] {
+  filter: drop-shadow(0 calc(var(--u) * 0.5) calc(var(--u) * 1) var(--shadow-near))
+          drop-shadow(0 calc(var(--u) * 2) calc(var(--u) * 3.2) var(--shadow-far));
+}

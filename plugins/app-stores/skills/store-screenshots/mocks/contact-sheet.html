@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${title}</title>
+<link rel="stylesheet" href="mocks.css">
+</head>
+<body class="sheet-page">
+<header class="sheet-head">
+  <h1>Contact sheet</h1>
+  <p>Every target &times; locale &times; shot from ${report}, in the set's order, each ${thumb_h} px tall. Gaps are the
+  gutters between shots; a red one marks a panorama's seam. Badges: what fell back to ${primary}, captions at the
+  floor or not fitting, captures shown larger than they are, files not rendered.</p>
+  <p class="legend"><span class="badge fallback">capture: ${primary}</span> <span class="badge fallback">words:
+  ${primary}</span> <span class="badge warn">caption at floor</span> <span class="badge bad">doesn't fit</span>
+  <span class="badge warn">upscaled</span> <span class="badge bad">not rendered</span></p>
+</header>
+${rows}
+</body>
+</html>

@@ -1,0 +1,62 @@
+{
+  "$schema": "../../../schema/store-screenshots.schema.json",
+  "$comment": "The invented Sample Recipes app's screenshot design: a hero, three app shots with one callout and one tilt, a pair, and a TV set. Make the captures first: python3 make_captures.py.",
+  "version": 1,
+  "captures": "captures",
+  "out": "screenshots",
+  "primaryLocale": "en-US",
+  "locales": ["en-US", "de-DE"],
+  "theme": {
+    "fonts": [],
+    "palette": { "background": "#0E3B2E", "ink": "#FFFFFF", "accent": "#FFC94D" },
+    "background": { "kind": "glow" },
+    "caption": { "placement": "top", "align": "center", "maxLines": 2, "weight": 800, "sizePct": 8.5, "floorPct": 6.0 },
+    "frame": "phone"
+  },
+  "targets": {
+    "iphone": { "store": "apple", "width": 1320, "height": 2868, "capture": "iphone-6.9" },
+    "ipad": { "store": "apple", "width": 2064, "height": 2752, "capture": "ipad-13", "frame": "tablet" },
+    "android-phone": { "store": "google", "width": 1080, "height": 1920, "capture": "android-phone" },
+    "apple-tv": { "store": "apple", "width": 1920, "height": 1080, "capture": "tv" }
+  },
+  "shots": [
+    { "id": "plan", "capture": "plan", "layout": "hero", "kicker": "brand", "caption": "cap.plan", "proof": "cap.proof",
+      "targets": ["iphone", "ipad", "android-phone"] },
+    { "id": "recipe", "capture": "recipe", "layout": "framed-bleed", "caption": "cap.recipe",
+      "targets": ["iphone", "ipad", "android-phone"] },
+    { "id": "shopping", "capture": "shopping", "layout": "callout", "caption": "cap.shop",
+      "callout": { "rect": [0.035, 0.216, 0.93, 0.064], "scale": 1.3 }, "targets": ["iphone", "android-phone"] },
+    { "id": "pantry", "capture": "pantry", "layout": "tilt", "tilt": "left", "caption": "cap.pantry",
+      "targets": ["iphone", "ipad", "android-phone"] },
+    { "id": "cook", "capture": "cook", "layout": "pair", "pair": "recipe", "caption": "cap.cook",
+      "targets": ["iphone", "android-phone"] },
+    { "id": "tv-plan", "capture": "plan", "layout": "fullbleed", "at": "bottom", "caption": "cap.tv", "targets": ["apple-tv"] },
+    { "id": "tv-cook", "capture": "cook", "layout": "gameplay", "targets": ["apple-tv"] }
+  ],
+  "panorama": null,
+  "stores": {
+    "apple": {},
+    "google": { "frame": "none" }
+  },
+  "strings": {
+    "en-US": {
+      "brand": "Sample Recipes",
+      "cap.plan": "Plan a week of meals in *minutes*",
+      "cap.proof": "Recipes, lists and leftovers in one place",
+      "cap.recipe": "Every recipe, *step by step*",
+      "cap.shop": "Your list, sorted by *aisle*",
+      "cap.pantry": "Know what's *in the cupboard*",
+      "cap.cook": "Cook along, *hands free*",
+      "cap.tv": "Your week on the big screen"
+    },
+    "de-DE": {
+      "cap.plan": "Eine Woche Essen in *Minuten* planen",
+      "cap.proof": "Rezepte, Listen und Reste an einem Ort",
+      "cap.recipe": "Jedes Rezept *Schritt für Schritt*",
+      "cap.shop": "Deine Liste, nach *Gängen* sortiert",
+      "cap.pantry": "Wissen, was *im Vorratsschrank* ist",
+      "cap.cook": "Mitkochen, *freihändig*",
+      "cap.tv": "Deine Woche auf dem großen Bildschirm"
+    }
+  }
+}

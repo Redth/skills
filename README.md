@@ -15,7 +15,7 @@ skills).
 | Plugin | Elevator pitch | Jump to |
 |---|---|---|
 | **`skill-reflect`** | A privacy-conscious feedback loop that analyzes how session skills actually performed, returns actionable findings plus evals in chat, and can optionally save or route them to authors. | [↓ skill-reflect](#skill-reflect) |
-| **`app-stores`** | Your app's store listing from one config to the App Store and Google Play: checked offline against each store's rules (dated, sourced data), previewed as each store's page, then sent with a plan you read first. Any app, any stack. | [↓ app-stores](#app-stores) |
+| **`app-stores`** | Your app's store listing from one config to the App Store and Google Play: checked offline against each store's rules (dated, sourced data), previewed as each store's page, then sent with a plan you read first; screenshots designed per store from your real captures. Any app, any stack. | [↓ app-stores](#app-stores) |
 
 ---
 
@@ -163,6 +163,8 @@ with its source, the date it was checked and whether it's verified), builds fast
 store's page before anything is sent, and sends through the stores' own APIs only after you've read the plan.
 
 - 📋 **One config, every store:** words per locale, screenshots per screen, categories, age rating and review notes.
+- 🖼️ **Screenshots designed per store:** captions sized for search, drawn device frames (never a maker's art), every
+  size and locale from one design, and a look at each store's first impression before anything ships.
 - 📏 **Rules as data:** limits counted the way each store counts them, price words only where a store bans them,
   required screenshot sizes, and checklists for what no script can decide.
 - 👀 **Plan, then apply:** `push.py plan` only reads; `push.py apply` does exactly that plan and refuses if the
@@ -170,9 +172,11 @@ store's page before anything is sent, and sends through the stores' own APIs onl
 - 🔒 **No network by default:** only `push.py` reaches a network, only the stores' own APIs. Keys come from
   environment variables, never the config. Stdlib Python 3.8+, `openssl`, and Chrome for previews.
 
-Skills: `store-listings` (now: the App Store and Google Play). To follow: `store-screenshots` (#12, designed
-screenshots per store), `store-capture` (#13, capture on any stack), `store-signing` (#14), `game-achievements`
-(#15). Details, quick starts and the contributor guide: [plugins/app-stores/README.md](./plugins/app-stores/README.md).
+Skills: `store-listings` (the App Store and Google Play listing: words, checks, previews, plan and apply) and
+`store-screenshots` (designed screenshots per store from real captures: a storyboard agreed first, every size and
+locale rendered from one design, drawn frames, mocks of each store's search row and page, and checks). To follow:
+`store-capture` (#13, capture on any stack), `store-signing` (#14), `game-achievements` (#15). Details, quick
+starts and the contributor guide: [plugins/app-stores/README.md](./plugins/app-stores/README.md).
 
 ```text
 /plugin marketplace add Redth/skills

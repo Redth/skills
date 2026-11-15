@@ -1,0 +1,176 @@
+{
+  "skill_name": "store-screenshots",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Make our App Store and Google Play screenshots for Sample Recipes. The captures are in evals/files/recipes/captures (iPhone 6.9\" and an Android phone, four screens each: plan, recipe, shopping, profile). It's for busy home cooks; the big thing is planning a whole week of meals in minutes. Just go ahead and make them.",
+      "expected_output": "The agent looks at the captures, writes a short brief and proposes a storyboard (shots 1 to N, the capture, one message, the layout and the stores for each), with the core value in real UI in shots 1 to 3 and Play frameless, then stops for the user's agreement before writing the config or running render.py, despite 'just go ahead'.",
+      "files": [
+        "evals/files/recipes/captures/en-US/iphone-6.9/plan.png",
+        "evals/files/recipes/captures/en-US/iphone-6.9/recipe.png",
+        "evals/files/recipes/captures/en-US/iphone-6.9/shopping.png",
+        "evals/files/recipes/captures/en-US/iphone-6.9/profile.png"
+      ],
+      "expectations": [
+        "The agent opens or describes the captures before proposing anything",
+        "The agent states a brief: who the app is for, its one core value (planning a week of meals in minutes), and the target stores and devices",
+        "The agent proposes a storyboard as an ordered list or table of shots, each with its capture, one message (a caption of about 2 to 5 words) and a layout",
+        "Shot 1 (and shots 2 and 3) carry the core value in real UI, with the reason that search shows the first one to three shots and most visitors never swipe",
+        "The proposed captions contain no price, ranking, award or call-to-action words",
+        "The agent says Play's set will be frameless by default (Google discourages device imagery) while Apple's may use a drawn frame",
+        "The agent offers options or asks where taste decides (order, tone, colours or fonts, a hero or not) rather than picking brand art itself",
+        "The agent asks the user to agree the storyboard and does not run render.py (and writes no rendered files) before that agreement"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I downloaded Apple's iPhone bezel from Apple Design Resources into frames/apple-iphone.png. Use it on every App Store screenshot, tilted like Calm does, and cut off at the bottom so the captions get room. Use it on the Play set too so everything matches. Sample Recipes is on iPhone and Android.",
+      "expected_output": "The agent declines to tilt, crop or overlap Apple's bezel and to put it on Play, explaining Apple's terms for its art and Google's guidance, and offers what works: the bezel whole and unmodified in the framed layout on an Apple-only set, or the skill's drawn generic frame tilted or cut off. It flags that Apple's licence covers mock-ups of Apple-only software, which this cross-platform app may not be, and leaves that decision to the user.",
+      "files": [],
+      "expectations": [
+        "The agent does not configure a tilt, framed-bleed, callout or any caption or graphic over Apple's bezel",
+        "The agent explains that Apple's marketing guidelines and design resources licence require Apple's bezels to be used as they are: no tilting, cropping, obstructing, 3D or graphics coming out of the screen",
+        "The agent says Apple's bezel must not go on the Google Play set (an Apple device is another platform there, and Google discourages device imagery on Play)",
+        "The agent notes that the Apple Design Resources licence covers mock-ups of software that runs only on Apple platforms, that an app also on Android may fall outside a strict reading, and that it's the user's decision (not legal advice)",
+        "The agent offers the alternatives: the Apple bezel whole in the framed layout, or the skill's drawn generic phone frame, which may be tilted and cut off",
+        "The agent says Play's set will be frameless by default",
+        "The agent does not copy the bezel into the skill, commit it, or download any device art itself",
+        "The agent asks the user to choose before rendering"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Our App Store set is configured in evals/files/apple-only/store-screenshots.json (framed-bleed with the phone frame). Add the Google Play phone set and make it match the App Store one exactly, frames and all.",
+      "expected_output": "The agent adds an android-phone target at a Play size (such as 1080x1920) with store google, keeps the captions, palette and shot order, but sets the Play store override to no frame and explains why (Google's guidance against device imagery, its effect on recommendation formats); it keeps frames on Play only if the user still wants them after hearing that, noting the check will warn. It also mentions Play's 20% text share and alt text.",
+      "files": [
+        "evals/files/apple-only/store-screenshots.json"
+      ],
+      "expectations": [
+        "The agent adds a target for the Play phone with store google at an accepted Play size (for example 1080x1920) and the android-phone capture device",
+        "The agent sets stores.google.frame to none (or otherwise makes the Play set frameless) by default",
+        "The agent explains the reason: Google Play's guidance recommends no device imagery in screenshots (frames date the shots and can alienate users), and meeting the guidance matters for recommendation formats",
+        "The agent keeps the same captions, palette, caption style and shot order across both stores (one visual system)",
+        "The agent says frames on Play remain the user's choice if they insist, and that check.py would warn",
+        "The agent mentions Play's limit of taglines to at most 20% of the image and/or alt text per screenshot typed in Play Console",
+        "The agent does not apply a tilt or other changes the user didn't ask for, and shows the planned change before rendering or rendering only what was asked"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "render.py stopped with exit 1 on evals/files/long-caption/store-screenshots.json; its report is evals/files/long-caption/render-report.json. Just make the font smaller on that one so it fits.",
+      "expected_output": "The agent reads the report: the recipe shot's caption needs 3 lines at the floor (atFloor true, fits false) on every target. It explains that the floor is the least legible size the check allows and lowering it makes the caption unreadable in search, then proposes a shorter caption with one message (about 2 to 5 words, at most two lines) for the user to choose, changes the string rather than floorPct, sizePct or maxLines, and re-renders and checks.",
+      "files": [
+        "evals/files/long-caption/store-screenshots.json",
+        "evals/files/long-caption/render-report.json"
+      ],
+      "expectations": [
+        "The agent identifies the failing caption (the recipe shot: 'Every recipe you love, organised step by step with timers, notes and photos') and that it needs 3 lines at the floor on every target",
+        "The agent explains that the floor exists so captions stay legible at search size, and that shrinking below it would make the caption unreadable where it matters most",
+        "The agent does not lower floorPct, sizePct below the floor, or raise maxLines above 2",
+        "The agent proposes one or more shorter captions of about 2 to 5 words carrying one message, and lets the user choose or confirms the choice",
+        "The agent edits the string in strings.en-US (cap.recipe), not the rendered PNG",
+        "The agent never truncates the caption or adds an ellipsis",
+        "The agent re-runs render.py and check.py (or states they are next) and confirms the caption now fits in at most two lines"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Before we render, check the captions in evals/files/price-caption/store-screenshots.json for anything the stores won't like. The app is free with a subscription, so 'Free' is true.",
+      "expected_output": "The agent finds 'Free meal plans every week' on shot 1 and explains that Apple's guideline 2.3.7 bans prices and price words in screenshots (the check's apple.metadata.prices on captions) and Google discourages 'Free' and promotions in screenshots (google.captions.promotional), whatever the truth of it; the description is where 'free' and the trial can be said. It proposes a caption about the value instead, changes the string, and doesn't relax or edit the rule.",
+      "files": [
+        "evals/files/price-caption/store-screenshots.json"
+      ],
+      "expectations": [
+        "The agent flags the caption 'Free meal plans every week' (cap.plan)",
+        "The agent cites Apple's guideline 2.3.7 (no prices or price words in screenshots) and/or the rule id apple.metadata.prices",
+        "The agent notes Google Play's equivalent for screenshots (no 'Free', prices or promotions; the rule google.captions.promotional)",
+        "The agent explains that being true doesn't make it allowed in a screenshot, and that the listing's description may say what's free and what the trial is",
+        "The agent proposes a replacement caption about the app's value with no price or promotional word and changes the string in the config",
+        "The agent does not edit any rules file and does not add the rule to a relax list",
+        "The agent runs check.py after rendering (or says it will) to confirm the captions pass"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "render.py exited 0 for our German App Store set (config evals/files/german-fallback/store-screenshots.json, report evals/files/german-fallback/render-report.json). Is it ready to hand to store-listings?",
+      "expected_output": "Not yet, or only with the user's say: the report shows every de-DE file used the English captures (captureFallback) and the shopping shot shows the English caption 'Your list, sorted by aisle' (stringFallback, cap.shop missing in de-DE). The agent reports both by locale and shot, offers a German caption as a draft for a native speaker's review, suggests capturing the app in German where the UI sells it, and re-renders, checks and looks at the de-DE contact sheet before handing over.",
+      "files": [
+        "evals/files/german-fallback/store-screenshots.json",
+        "evals/files/german-fallback/render-report.json"
+      ],
+      "expectations": [
+        "The agent reports that de-DE shopping shots show the English caption because cap.shop is missing from the de-DE strings (a string fallback)",
+        "The agent reports that every de-DE file used the en-US captures (a capture fallback), so German captions sit over an English UI",
+        "The agent does not call the set ready on the strength of the exit code alone",
+        "The agent proposes adding a German string for cap.shop, marking a machine or agent translation as a draft for a native speaker to review",
+        "The agent suggests capturing the app in German (where the UI is the selling point) or asks the user to accept the English UI explicitly",
+        "The agent runs check.py and sheet.py --png (or says they are next) and looks at the de-DE files before handing over",
+        "The handoff names the out folder and that target ids and shot ids must match store-listing.json's screens and shots"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "I read that panorama screenshots give +30% conversion and that showing Editor's Choice on the first screenshot adds 20% more installs. Redo our App Store and Play sets as one panorama with an Editor's Choice badge on shot 1.",
+      "expected_output": "The agent treats both numbers as unproven vendor claims (the panorama figure traces back to vendor posts with no study), explains the rules: Apple asks for no Apple-designated recognitions such as Editor's Choice in its assets and the check flags it, Play bans awards in screenshots; asks whether the app actually received it. It explains a panorama's conditions (shot 1 must stand alone, nothing across seams, rebuilt per size) and proposes testing shot 1 with Apple's product page optimisation and Play's store listing experiments, checking retention after the install.",
+      "files": [],
+      "expectations": [
+        "The agent says the +30% and +20% figures are unverified vendor or blog claims (no published method, several changes at once), to be treated as hypotheses",
+        "The agent proposes testing the change with Apple's product page optimisation and/or Google Play's store listing experiments rather than assuming a lift",
+        "The agent recommends checking what happens after the install (retention or similar) before keeping a winner",
+        "The agent explains that Apple asks for no Apple-designated recognitions (Editor's Choice, App of the Day) in its assets and the check flags it, and asks whether the app really received it",
+        "The agent says Play's screenshots must not carry awards or accolades",
+        "The agent explains a panorama's conditions: shot 1 must still stand alone at search size, nothing important within a seam margin, and each device size needs its own panorama",
+        "The agent leaves the final call to the user and does not render a set with the badge on Play"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Example Studio's other app is a landscape arcade racing game. Plan the App Store and Google Play screenshots for it: we have about ten gameplay captures at 2532x1170 and some key art.",
+      "expected_output": "The agent proposes a game's storyboard: optionally key art first with real play visible, then gameplay shots full-bleed (fullbleed with 1 to 4 word verb captions in a band, or gameplay with no words), no device frames, landscape targets, a Play set at 16:9 of at least 1920x1080 with 3 or more shots for featuring, every Apple shot fit for 4+, more than half the set the game in use, and asks the user to agree it before rendering.",
+      "files": [],
+      "expectations": [
+        "The agent proposes fullbleed and/or gameplay layouts for the gameplay shots, with no device frame",
+        "Captions, if any, are short (about 1 to 4 words, verbs) and placed where the play isn't, or absent",
+        "If key art leads, the agent keeps real gameplay in it (hero with a sliver of UI) or explains Apple 2.3.3 (not merely title art; more than half the set showing the game in use)",
+        "The agent plans landscape targets, and for Play a 16:9 set of at least 1920x1080 with at least 3 shots to be eligible for featuring",
+        "The agent notes Apple's screenshots must suit 4+ whatever the game's rating (no gore or weapons aimed at the viewer) and that Play allows no calls to action such as 'Play now'",
+        "The agent notices that 2532x1170 captures are smaller than Apple's required iPhone sizes in landscape (2556x1179 or 2622x1206 for the medium display, 2868x1320 for 6.9\") and would have to be enlarged, and asks for captures from a bigger device rather than upscaling; they're large enough for Play's 1920x1080",
+        "The agent presents the storyboard for the user's agreement before rendering",
+        "The agent looks at the captures (or asks to) before choosing which ones carry the story"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Render the screenshots from evals/files/recipes/store-screenshots.json and let me know when they're done.",
+      "expected_output": "The agent runs render.py, then sheet.py --png and check.py, opens every sheet and rendered file at full size, and reports what it saw shot by shot (including the caption's size in points in the search-row mock and whether shots 1 to 3 each say what the app is), plus the check's findings, before calling the set done; then explains the handoff to store-listings.",
+      "files": [
+        "evals/files/recipes/store-screenshots.json",
+        "evals/files/recipes/captures/en-US/iphone-6.9/plan.png"
+      ],
+      "expectations": [
+        "The agent runs render.py with the given config (or explains precisely why it can't, such as Chrome missing, with how to fix it)",
+        "The agent runs sheet.py --png and check.py",
+        "The agent opens the sheets in the out folder's sheets/ and the rendered files and reports specific visual observations shot by shot, not only exit codes",
+        "The agent reports how the captions read in the search-row mock (their size in points or whether shots 1 to 3 each read alone)",
+        "The agent goes through the look-only checklist items (captions over the app's UI, transient UI, frames, contrast, all-ages) or says which remain for the user",
+        "The agent does not declare the set done on render.py's exit code alone",
+        "The agent explains the handoff: the out folder is store-listing.json's screenshots folder, target ids are its screens, shot ids and order are its shots, and listing.py check is next",
+        "Nothing is sent to a store and nothing is committed"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Make our first App Store screenshot just our logo and 'The #1 meal planner' on a big gradient. No app UI on that one, it looks cleaner.",
+      "expected_output": "The agent explains that Apple 2.3.3 wants screenshots to show the app in use, not merely title art, so a logo-only first shot risks review (and most of the set must show the app in use), that '#1' is an unverifiable ranking claim Apple asks to avoid and Play bans in screenshots, and offers the hero layout (brand and claim large with a sliver of real UI and a true proof line) or iOS 27's header or search asset for brand art without UI. The user chooses.",
+      "files": [],
+      "expectations": [
+        "The agent cites Apple's guideline 2.3.3 (screenshots show the app in use, not merely title art or a splash screen)",
+        "The agent flags '#1' as an unverifiable ranking claim (Apple asks for no unverifiable claims; the check warns on it for Apple) and as not allowed in Play's screenshots",
+        "The agent offers the hero layout, which keeps the brand and claim large with a sliver of real UI",
+        "The agent suggests a true, specific claim or proof line instead of '#1', or asks what the user can back up",
+        "The agent mentions iOS 27's product page header or search asset as the place for brand art without UI",
+        "The agent leaves the choice to the user rather than silently rendering the logo-only shot or silently changing the wording"
+      ]
+    }
+  ]
+}

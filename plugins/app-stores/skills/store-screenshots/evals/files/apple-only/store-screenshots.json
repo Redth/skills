@@ -1,0 +1,91 @@
+{
+  "$comment": "Eval fixture for the invented app Sample Recipes. The captures are synthetic, text-free wireframes.",
+  "version": 1,
+  "captures": "../recipes/captures",
+  "out": "screenshots",
+  "primaryLocale": "en-US",
+  "locales": [
+    "en-US"
+  ],
+  "theme": {
+    "fonts": [],
+    "palette": {
+      "background": "#0E3B2E",
+      "ink": "#FFFFFF",
+      "accent": "#FFC94D"
+    },
+    "background": {
+      "kind": "color"
+    },
+    "caption": {
+      "placement": "top",
+      "align": "center",
+      "maxLines": 2,
+      "weight": 800,
+      "sizePct": 9.0,
+      "floorPct": 6.0
+    },
+    "frame": "phone"
+  },
+  "targets": {
+    "iphone": {
+      "store": "apple",
+      "width": 1320,
+      "height": 2868,
+      "capture": "iphone-6.9"
+    },
+    "iphone-medium": {
+      "store": "apple",
+      "width": 1206,
+      "height": 2622,
+      "capture": "iphone-6.9"
+    }
+  },
+  "shots": [
+    {
+      "id": "plan",
+      "capture": "plan",
+      "layout": "framed-bleed",
+      "caption": "cap.plan"
+    },
+    {
+      "id": "recipe",
+      "capture": "recipe",
+      "layout": "framed-bleed",
+      "caption": "cap.recipe"
+    },
+    {
+      "id": "shopping",
+      "capture": "shopping",
+      "layout": "callout",
+      "caption": "cap.shop",
+      "callout": {
+        "rect": [
+          0.05,
+          0.17,
+          0.9,
+          0.06
+        ],
+        "scale": 1.35
+      }
+    },
+    {
+      "id": "profile",
+      "capture": "profile",
+      "layout": "framed-bleed",
+      "caption": "cap.profile"
+    }
+  ],
+  "panorama": null,
+  "stores": {
+    "apple": {}
+  },
+  "strings": {
+    "en-US": {
+      "cap.plan": "Plan a week of meals in minutes",
+      "cap.recipe": "Every recipe, step by step",
+      "cap.shop": "Your list, sorted by aisle",
+      "cap.profile": "Your tastes, remembered"
+    }
+  }
+}

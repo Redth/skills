@@ -1,0 +1,23 @@
+{
+  "$comment": "A generic tablet, portrait: even bezels, softly rounded corners. Drawn for this skill: generic, no maker's details. Units are the SVG's.",
+  "name": "tablet",
+  "kind": "tablet",
+  "orientation": "portrait",
+  "drawn": true,
+  "maker": null,
+  "viewBox": [
+    0,
+    0,
+    1400,
+    1835
+  ],
+  "screen": {
+    "x": 48,
+    "y": 48,
+    "width": 1304,
+    "height": 1739
+  },
+  "screenRadius": 44,
+  "stretch": "y",
+  "realWidthMm": 215
+}

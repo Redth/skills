@@ -1,0 +1,429 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "The schema of a store's rules file (rules/<store>.json). Uses only the subset appstores_lib/schema.py validates. A rule's 'status' that isn't 'verified' is reported as a warning whatever its 'severity'.",
+  "type": "object",
+  "required": ["store", "checked", "rules", "slots"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "$comment": { "type": "string" },
+    "store": { "enum": ["apple", "google", "amazon", "steam", "itch"] },
+    "checked": { "$ref": "#/$defs/date" },
+    "rules": { "type": "array", "items": { "$ref": "#/$defs/rule" } },
+    "slots": { "type": "object" },
+    "categories": { "$ref": "#/$defs/categories" },
+    "ageRating": { "$ref": "#/$defs/ageRating" },
+    "design": { "$ref": "#/$defs/design" }
+  },
+  "anyOf": [
+    { "properties": { "store": { "const": "apple" }, "slots": { "$ref": "#/$defs/appleSlots" } } },
+    { "properties": { "store": { "const": "google" }, "slots": { "$ref": "#/$defs/googleSlots" } } },
+    { "properties": { "store": { "enum": ["amazon", "steam", "itch"] } } }
+  ],
+  "$defs": {
+    "date": { "type": "string", "format": "date", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "status": {
+      "$comment": "verified: the store's own page says so. observed: seen happening, not written down by the store. unverified: secondary sources only, or the store's page is silent.",
+      "enum": ["verified", "observed", "unverified"]
+    },
+    "severity": { "enum": ["error", "warning"] },
+    "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "stringList": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/nonEmptyString" } },
+    "pixelSize": {
+      "$comment": "[width, height] in pixels.",
+      "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": 1 }
+    },
+    "sizeList": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/pixelSize" } },
+    "orientation": {
+      "$comment": "Absent or null: each size in either orientation. portrait/landscape: only that orientation of each size. asListed: exactly the [w, h] written.",
+      "enum": ["portrait", "landscape", "asListed", null]
+    },
+    "range": {
+      "$comment": "Each side between minSide and maxSide pixels; aspect = long side / short side, between minAspect (default 1) and maxAspect.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minSide": { "type": "integer", "minimum": 1 },
+        "maxSide": { "type": "integer", "minimum": 1 },
+        "minAspect": { "type": "number", "minimum": 1 },
+        "maxAspect": { "type": "number", "minimum": 1 }
+      }
+    },
+    "platform": { "enum": ["IOS", "MAC_OS", "TV_OS", "VISION_OS"] },
+    "screenKind": { "enum": ["phone", "tablet", "desktop", "tv", "watch", "xr"] },
+    "applies": {
+      "$comment": "What a rule looks at. field/fields: dotted paths. Paths starting apple., google., altText. or description are a locale's words after fallback (apple.keywords is the list; captions are screenshot captions where a caption source supplies them); paths starting app. or stores. are the config's own, from its root (stores.apple.review.contact.phone is the value of the variable phoneEnv names). slot/slots: slot ids in this file's 'slots' table. each: apply the rule to every item of a list field (a keyword). media: preview for Apple's app previews, else screenshots. A 'required' rule with several slots is met by any one of them.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": { "$ref": "#/$defs/nonEmptyString" },
+        "fields": { "$ref": "#/$defs/stringList" },
+        "slot": { "$ref": "#/$defs/nonEmptyString" },
+        "slots": { "$ref": "#/$defs/stringList" },
+        "each": { "type": "boolean" },
+        "media": { "enum": ["screenshot", "preview"] }
+      },
+      "anyOf": [
+        { "required": ["field"] },
+        { "required": ["fields"] },
+        { "required": ["slot"] },
+        { "required": ["slots"] }
+      ]
+    },
+    "when": {
+      "$comment": "A rule applies only when every condition holds. platform: an Apple platform the config ships (one or any of a list). screenKind: a screen of that kind on that platform (Apple) or in a slot (Google). slotUsed / slotMissing: a slot that has / has no pictures (Google: one stores.google.slots fills). update: true when the version isn't the app's first. game: true when the app's category is a game (Apple GAMES, Google GAME_*).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "anyOf": [
+            { "$ref": "#/$defs/platform" },
+            { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/platform" } }
+          ]
+        },
+        "screenKind": { "$ref": "#/$defs/screenKind" },
+        "slotUsed": { "$ref": "#/$defs/nonEmptyString" },
+        "slotMissing": { "$ref": "#/$defs/nonEmptyString" },
+        "update": { "type": "boolean" },
+        "game": { "type": "boolean" }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "required": ["id", "kind", "applies", "severity", "source", "checked", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "id": {
+          "$comment": "<store>.<area>.<what>, lower case and underscores; stable forever (configs relax rules by id).",
+          "type": "string",
+          "pattern": "^(apple|google|amazon|steam|itch)(\\.[a-z0-9_]+){2,}$"
+        },
+        "kind": { "enum": ["limit", "count", "size", "format", "words", "required", "video", "pattern", "enum", "checklist"] },
+        "applies": { "$ref": "#/$defs/applies" },
+        "when": { "$ref": "#/$defs/when" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "source": { "$ref": "#/$defs/url" },
+        "checked": { "$ref": "#/$defs/date" },
+        "status": { "$ref": "#/$defs/status" },
+        "note": { "type": "string" },
+
+        "min": { "type": "integer", "minimum": 0 },
+        "max": { "type": "integer", "minimum": 0 },
+        "count": { "enum": ["characters", "graphemes", "bytes"] },
+
+        "unique": { "$comment": "count: the items must not repeat (case-insensitive).", "type": "boolean" },
+        "across": { "$comment": "count: min/max apply to the total across the listed slots, not to each.", "type": "boolean" },
+        "of": { "$comment": "count: count only the pictures within this size range.", "$ref": "#/$defs/range" },
+
+        "sizes": { "$ref": "#/$defs/sizeList" },
+        "range": { "$ref": "#/$defs/range" },
+        "orientation": { "$ref": "#/$defs/orientation" },
+        "fromSlots": { "$comment": "size/video: the sizes are each slot's own in the 'slots' table (a screenshot's 'sizes', a preview's 'preview.sizes').", "const": true },
+
+        "formats": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["png", "jpeg"] } },
+        "alpha": { "$comment": "format: false = an alpha channel (or transparency) is forbidden; true = allowed.", "type": "boolean" },
+        "transparency": { "$comment": "format: false = see-through pixels are forbidden, an opaque alpha channel is fine (a 32-bit PNG icon); true = allowed.", "type": "boolean" },
+        "maxBytes": { "type": "integer", "minimum": 1 },
+
+        "words": { "$ref": "#/$defs/stringList" },
+        "wordsFrom": { "$comment": "words: take the words from these fields' values (a field may not repeat another's words).", "$ref": "#/$defs/stringList" },
+
+        "codecs": { "$comment": "video: ffprobe's codec names.", "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "containers": { "$comment": "video: file extensions accepted.", "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "fps": { "$comment": "video: the highest frame rate.", "type": "number", "minimum": 1 },
+        "minSeconds": { "type": "number", "minimum": 0 },
+        "maxSeconds": { "type": "number", "minimum": 0 },
+        "audioRequired": { "type": "boolean" },
+
+        "regex": { "$comment": "pattern: a Python re pattern, searched (not anchored unless it says ^ or $). Inline flags like (?i) allowed.", "$ref": "#/$defs/nonEmptyString" },
+        "forbid": { "type": "boolean" },
+        "flags": { "$comment": "pattern: re flags as letters (i, m, s); inline flags in the regex work too.", "type": "string", "pattern": "^[ims]*$" },
+        "noun": { "$comment": "count: what's counted, for the message (pictures, keywords...).", "$ref": "#/$defs/nonEmptyString" },
+
+        "values": { "$comment": "enum: the allowed values.", "type": "array", "minItems": 1 },
+        "valuesFrom": { "$comment": "enum: a dotted path to a table in this file (categories.primary, categories.subcategories, ageRating.attributes).", "$ref": "#/$defs/nonEmptyString" },
+
+        "item": { "$comment": "checklist: what a person (or the agent, looking) confirms; no script can decide it. Printed in checklist.md.", "$ref": "#/$defs/nonEmptyString" }
+      },
+      "oneOf": [
+        {
+          "properties": { "kind": { "const": "limit" } },
+          "required": ["count"],
+          "anyOf": [ { "required": ["max"] }, { "required": ["min"] } ]
+        },
+        {
+          "properties": { "kind": { "const": "count" } },
+          "anyOf": [ { "required": ["min"] }, { "required": ["max"] }, { "required": ["unique"] } ]
+        },
+        {
+          "properties": { "kind": { "const": "size" } },
+          "oneOf": [ { "required": ["sizes"] }, { "required": ["range"] }, { "required": ["fromSlots"] } ]
+        },
+        {
+          "properties": { "kind": { "const": "format" } },
+          "anyOf": [ { "required": ["formats"] }, { "required": ["alpha"] }, { "required": ["transparency"] }, { "required": ["maxBytes"] } ]
+        },
+        {
+          "properties": { "kind": { "const": "words" } },
+          "anyOf": [ { "required": ["words"] }, { "required": ["wordsFrom"] } ]
+        },
+        {
+          "properties": { "kind": { "const": "required" } }
+        },
+        {
+          "properties": { "kind": { "const": "video" } },
+          "anyOf": [
+            { "required": ["codecs"] }, { "required": ["fps"] }, { "required": ["minSeconds"] },
+            { "required": ["maxSeconds"] }, { "required": ["sizes"] }, { "required": ["fromSlots"] },
+            { "required": ["audioRequired"] }, { "required": ["maxBytes"] }
+          ]
+        },
+        {
+          "properties": { "kind": { "const": "pattern" } },
+          "required": ["regex"]
+        },
+        {
+          "properties": { "kind": { "const": "enum" } },
+          "oneOf": [ { "required": ["values"] }, { "required": ["valuesFrom"] } ]
+        },
+        {
+          "properties": { "kind": { "const": "checklist" } },
+          "required": ["item"]
+        }
+      ]
+    },
+    "appleSlots": {
+      "$comment": "Keyed by App Store Connect's ScreenshotDisplayType, or by our own key (displayType null) for a device class the API doesn't have yet. Order matters: where a size fits several slots of a platform, the first listed wins.",
+      "type": "object",
+      "properties": { "$comment": { "type": "string" } },
+      "patternProperties": { "^[A-Z][A-Z0-9_]*$": { "$ref": "#/$defs/appleSlot" } },
+      "additionalProperties": false
+    },
+    "appleSlot": {
+      "type": "object",
+      "required": ["displayType", "platform", "kind", "sizes", "required", "fallsBackTo", "preview", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "displayType": { "$comment": "The API's ScreenshotDisplayType; null when the API has none yet (nothing can be sent by API).", "type": ["string", "null"], "pattern": "^APP_[A-Z0-9_]+$" },
+        "platform": { "$ref": "#/$defs/platform" },
+        "kind": { "$ref": "#/$defs/screenKind" },
+        "device": { "type": "string" },
+        "sizes": { "$ref": "#/$defs/sizeList" },
+        "orientation": { "$ref": "#/$defs/orientation" },
+        "required": { "type": "boolean" },
+        "requiredWhen": { "$ref": "#/$defs/when" },
+        "fallsBackTo": { "$comment": "The slot whose pictures App Store Connect scales down for this one when it has none.", "type": ["string", "null"] },
+        "preview": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["type", "sizes"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "$comment": "The API's PreviewType; null when the API has none.", "type": ["string", "null"], "pattern": "^[A-Z][A-Z0-9_]*$" },
+                "sizes": { "$ref": "#/$defs/sizeList" },
+                "orientation": { "$ref": "#/$defs/orientation" },
+                "note": { "type": "string" }
+              }
+            }
+          ]
+        },
+        "status": { "$ref": "#/$defs/status" },
+        "note": { "type": "string" }
+      }
+    },
+    "googleSlots": {
+      "type": "object",
+      "properties": { "$comment": { "type": "string" } },
+      "patternProperties": { "^[a-zA-Z][a-zA-Z0-9]*$": { "$ref": "#/$defs/googleSlot" } },
+      "additionalProperties": false
+    },
+    "googleSlot": {
+      "type": "object",
+      "required": ["imageType", "group", "kind", "count", "formats", "alpha", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "imageType": { "$comment": "The Play Developer API's AppImageType.", "enum": ["phoneScreenshots", "sevenInchScreenshots", "tenInchScreenshots", "tvScreenshots", "wearScreenshots", "icon", "featureGraphic", "tvBanner"] },
+        "group": { "enum": ["screenshots", "graphics"] },
+        "kind": { "anyOf": [ { "$ref": "#/$defs/screenKind" }, { "type": "null" } ] },
+        "count": {
+          "type": "object",
+          "required": ["min", "max"],
+          "additionalProperties": false,
+          "properties": { "min": { "type": "integer", "minimum": 0 }, "max": { "type": "integer", "minimum": 1 } }
+        },
+        "range": { "$ref": "#/$defs/range" },
+        "sizes": { "$ref": "#/$defs/sizeList" },
+        "orientation": { "$ref": "#/$defs/orientation" },
+        "formats": { "type": "array", "minItems": 1, "items": { "enum": ["png", "jpeg"] } },
+        "alpha": { "type": "boolean" },
+        "maxBytes": { "type": "integer", "minimum": 1 },
+        "status": { "$ref": "#/$defs/status" },
+        "note": { "type": "string" }
+      },
+      "oneOf": [ { "required": ["range"] }, { "required": ["sizes"] } ]
+    },
+    "categories": {
+      "$comment": "The store's category ids. Apple: primary (top-level ids), subcategories (parent id -> its subcategory ids), maxSubcategories. Google: ids, names (id -> Google's name), maxTags.",
+      "type": "object",
+      "required": ["source", "checked", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "source": { "$ref": "#/$defs/url" },
+        "checked": { "$ref": "#/$defs/date" },
+        "status": { "$ref": "#/$defs/status" },
+        "primary": { "$ref": "#/$defs/idList" },
+        "subcategories": {
+          "type": "object",
+          "patternProperties": { "^[A-Z][A-Z0-9_]*$": { "$ref": "#/$defs/idList" } },
+          "additionalProperties": false
+        },
+        "maxSubcategories": { "type": "integer", "minimum": 0 },
+        "ids": { "$ref": "#/$defs/idList" },
+        "names": {
+          "type": "object",
+          "patternProperties": { "^[A-Z][A-Z0-9_]*$": { "type": "string" } },
+          "additionalProperties": false
+        },
+        "maxTags": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "design": {
+      "$comment": "What the store allows in a screenshot's design (store-screenshots' check.py and sheet.py read it). Each entry says its value, source, checked date and status like a rule; severity is how a picture that breaks it is reported (an entry that isn't verified is reported as a warning). bySlot overrides an entry for slots of this file's 'slots' table.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "frames": { "allOf": [ { "$ref": "#/$defs/designEntry" }, { "$ref": "#/$defs/designPermissionValues" } ] },
+        "backgrounds": { "allOf": [ { "$ref": "#/$defs/designEntry" }, { "$ref": "#/$defs/designPermissionValues" } ] },
+        "captions": {
+          "allOf": [
+            { "$ref": "#/$defs/designEntry" },
+            {
+              "properties": {
+                "value": { "$ref": "#/$defs/designCaptionValue" },
+                "bySlot": { "additionalProperties": { "properties": { "value": { "$ref": "#/$defs/designCaptionValue" } } } }
+              }
+            }
+          ]
+        },
+        "awards": {
+          "allOf": [
+            { "$ref": "#/$defs/designEntry" },
+            { "properties": { "value": { "enum": ["allowed", "verifiableOnly", "forbidden"] } } }
+          ]
+        },
+        "deviceArt": {
+          "$comment": "ownAsIs: a maker's device art only as the user supplies it, unmodified (no tilt, crop or overlap). none: no maker's device art. allowed: no limit known.",
+          "allOf": [
+            { "$ref": "#/$defs/designEntry" },
+            { "properties": { "value": { "enum": ["ownAsIs", "none", "allowed"] } } }
+          ]
+        },
+        "maxTextShare": {
+          "$comment": "The most of a picture's area its text boxes may cover (0-1).",
+          "allOf": [
+            { "$ref": "#/$defs/designEntry" },
+            { "properties": { "value": { "type": "number", "minimum": 0, "maximum": 1 } } }
+          ]
+        },
+        "inUseMajority": {
+          "$comment": "More than this share of each set (per device and locale) shows the app in use (0-1).",
+          "allOf": [
+            { "$ref": "#/$defs/designEntry" },
+            { "properties": { "value": { "type": "number", "minimum": 0, "maximum": 1 } } }
+          ]
+        },
+        "uiFirst": {
+          "$comment": "The first this many shots of a set show the app's UI.",
+          "allOf": [
+            { "$ref": "#/$defs/designEntry" },
+            { "properties": { "value": { "type": "integer", "minimum": 0 } } }
+          ]
+        }
+      }
+    },
+    "designEntry": {
+      "type": "object",
+      "required": ["value", "source", "checked", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "value": { "$comment": "Typed by each entry." },
+        "severity": { "$ref": "#/$defs/severity" },
+        "source": { "$ref": "#/$defs/url" },
+        "checked": { "$ref": "#/$defs/date" },
+        "status": { "$ref": "#/$defs/status" },
+        "note": { "type": "string" },
+        "bySlot": {
+          "$comment": "Keyed by a slot id of this file's 'slots' table.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/designSlotEntry" }
+        }
+      }
+    },
+    "designSlotEntry": {
+      "type": "object",
+      "required": ["value", "source", "checked", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "value": { "$comment": "Typed as the entry's value." },
+        "severity": { "$ref": "#/$defs/severity" },
+        "source": { "$ref": "#/$defs/url" },
+        "checked": { "$ref": "#/$defs/date" },
+        "status": { "$ref": "#/$defs/status" },
+        "note": { "type": "string" }
+      }
+    },
+    "designPermission": { "enum": ["allowed", "discouraged", "required", "forbidden"] },
+    "designPermissionValues": {
+      "properties": {
+        "value": { "$ref": "#/$defs/designPermission" },
+        "bySlot": { "additionalProperties": { "properties": { "value": { "$ref": "#/$defs/designPermission" } } } }
+      }
+    },
+    "designCaptionValue": { "enum": ["allowed", "discouraged", "required", "forbidden", "oneUnaltered"] },
+    "idList": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+    },
+    "ageRating": {
+      "$comment": "Apple's age rating declaration: each attribute's API name, its type (string with 'values', boolean, or uri), and the questionnaire group.",
+      "type": "object",
+      "required": ["source", "checked", "status", "attributes"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "source": { "$ref": "#/$defs/url" },
+        "definitions": { "$ref": "#/$defs/url" },
+        "checked": { "$ref": "#/$defs/date" },
+        "status": { "$ref": "#/$defs/status" },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[a-z][A-Za-z0-9]*$": {
+              "type": "object",
+              "required": ["type"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "enum": ["string", "boolean", "uri"] },
+                "values": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+                "group": { "type": "string" },
+                "status": { "$ref": "#/$defs/status" },
+                "note": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

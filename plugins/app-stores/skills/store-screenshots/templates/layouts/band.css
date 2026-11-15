@@ -1,0 +1,15 @@
+/*
+  band: the words in a band of palette.band across the slot, the capture filling the rest, no frame. At the top by
+  default; caption.placement "bottom" puts the band at the foot.
+*/
+.slot[data-layout="band"] {
+  --pad-top: 8;
+  --band-pad: 6;
+}
+body[data-aspect="mid"] .slot[data-layout="band"] { --pad-top: 5.5; --band-pad: 4.5; }
+body[data-aspect="square"] .slot[data-layout="band"] { --pad-top: 5; --band-pad: 4; }
+body[data-aspect="wide"] .slot[data-layout="band"] { --pad-top: 3.2; --band-pad: 2.8; }
+
+.slot[data-layout="band"] .band {
+  box-shadow: 0 0 calc(var(--u) * 2.4) rgba(0, 0, 0, 0.22);
+}

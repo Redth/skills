@@ -7,6 +7,16 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 ## [Unreleased]
 
 ### Added
+- `store-screenshots` 0.1.0 (#12): designed store screenshots from an app's real captures, one design for every
+  store, size and locale. A brief and a storyboard agreed with the user before rendering; `store-screenshots.json`
+  (theme, targets at each store's exact sizes, shots with their layouts and captions, per-store overrides,
+  strings per locale, an optional panorama); `render.py` (HTML/CSS templates through headless Chrome, captions that
+  shrink to a floor and fail there, a render report); `check.py` (sizes, alpha, counts, caption fit and words,
+  Play's text share, frames per store, forbidden words in captions, missing glyphs, seams, contrast, upscaling,
+  fallbacks, and the checklist a person judges); `sheet.py` (Apple's search row, the product page, Play's listing
+  and a contact sheet, at real display size). Generic drawn device frames only; Play frameless by default. The
+  references give each design principle its evidence grade, what each store allows (read 2026-11-14), the makers'
+  device-art licences, localisation and legibility.
 - `store-listings` 0.1.0 (#11): one `store-listing.json` for the App Store and Google Play; the stores' rules as
   dated, sourced data (`rules/apple.json`, `rules/google.json`), checked offline; `listing.py` import (fastlane
   deliver and supply, Gradle Play Publisher, Expo), check, build (fastlane-compatible output) and preview;

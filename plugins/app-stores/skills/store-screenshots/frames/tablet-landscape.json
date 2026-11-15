@@ -1,0 +1,23 @@
+{
+  "$comment": "A generic tablet, landscape: even bezels, softly rounded corners. Drawn for this skill: generic, no maker's details. Units are the SVG's.",
+  "name": "tablet-landscape",
+  "kind": "tablet",
+  "orientation": "landscape",
+  "drawn": true,
+  "maker": null,
+  "viewBox": [
+    0,
+    0,
+    1835,
+    1400
+  ],
+  "screen": {
+    "x": 48,
+    "y": 48,
+    "width": 1739,
+    "height": 1304
+  },
+  "screenRadius": 44,
+  "stretch": "x",
+  "realWidthMm": 282
+}

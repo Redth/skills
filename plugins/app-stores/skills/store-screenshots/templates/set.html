@@ -1,0 +1,892 @@
+<!doctype html>
+<!--
+  store-screenshots' engine page: one screenshot slot (or one slot of a panorama) drawn from a job.
+
+  Inputs. The page reads one job, a JavaScript file that sets `window.__appstoresJob = {...}`, named by the query
+  string: `set.html?job=<URL of the job file>` (render.py writes it beside its other temporary files and passes its
+  file:// URL). A script rather than JSON because a file:// page can load a script but not fetch a file. With no
+  `?job=` the page uses a `window.__appstoresJob` set before it ran (tests, or a person debugging in a browser).
+
+  The job (render.py's `page_job` builds it; every path is a URL):
+    { "version": 1, "index": 0, "lang": "de-DE", "dir": "ltr",
+      "slot": { "width": 1320, "height": 2868 },
+      "theme": { "palette": {...}, "background": {...}, "fonts": [ {family, url, weight, style} ],
+                 "icon": url|null },
+      "panorama": null | { "count": N, "seam": 6, "background": url|null },
+      "slots": [ { "shot": "plan", "layout": "hero",
+                   "caption": null | { "text", "kicker", "proof", "placement", "align", "maxLines", "weight",
+                                       "sizePct", "floorPct", "font", "plate" },
+                   "capture": { "url", "width", "height" },
+                   "frame": null | { "name", "kind": "svg"|"image"|"none", "svg", "url", "meta": {...} },
+                   "pair": null | { "capture": {...}, "frame": {...} },
+                   "tilt": "left"|"right"|null, "at": "top"|"bottom"|null,
+                   "callout": null | { "rect": [x, y, w, h], "scale": 1.35 } } ] }
+
+  `slots` has one entry, or N for a panorama (the shots sharing the canvas, in order); `index` is the slot shown.
+
+  Outputs. `window.__appstoresReady` resolves once everything is drawn; `window.__appstoresReport` then holds what
+  was drawn, in slot pixels ([x, y, w, h], the slot's top left at 0, 0): the caption's size, lines, fit and box,
+  the text's share of the slot, the frame's and callout's boxes, how much each capture was scaled, the seams, and
+  any errors. render.py turns it into render-report.json's entry for the file.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="layouts/fullbleed.css">
+<link rel="stylesheet" href="layouts/band.css">
+<link rel="stylesheet" href="layouts/framed.css">
+<link rel="stylesheet" href="layouts/framed-bleed.css">
+<link rel="stylesheet" href="layouts/tilt.css">
+<link rel="stylesheet" href="layouts/pair.css">
+<link rel="stylesheet" href="layouts/callout.css">
+<link rel="stylesheet" href="layouts/hero.css">
+<link rel="stylesheet" href="layouts/gameplay.css">
+<script>
+(function () {
+  "use strict";
+
+  var report = { version: 1, errors: [] };
+  window.__appstoresReport = report;
+  var resolveReady;
+  window.__appstoresReady = new Promise(function (resolve) { resolveReady = resolve; });
+  function fail(message) { report.errors.push(String(message)); }
+  window.addEventListener("error", function (e) { fail(e.message || e); });
+
+  var LAYOUTS = ["fullbleed", "band", "framed", "framed-bleed", "tilt", "pair", "callout", "hero", "gameplay"];
+  var SYSTEM_STACK = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", ' +
+    'Arial, "Noto Sans", sans-serif';
+
+  // ---------------------------------------------------------------------------------------------- helpers
+
+  function make(tag, cls, parent) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function round(n, places) { var f = Math.pow(10, places || 0); return Math.round(n * f) / f; }
+  function box(r) { return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; }
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  // Captions may mark words to stress with *asterisks* (drawn in the accent) and break a line with "\n".
+  function richText(s) {
+    var parts = String(s).split(/\*([^*\n]+)\*/);
+    var html = "";
+    for (var i = 0; i < parts.length; i++) {
+      var piece = escapeHtml(parts[i]).replace(/[ \t]*\n[ \t]*/g, "<br>");
+      html += i % 2 ? "<em>" + piece + "</em>" : piece;
+    }
+    return html;
+  }
+  function plainText(s) {
+    return String(s).replace(/\*([^*\n]+)\*/g, "$1").replace(/\s*\n\s*/g, " ").trim();
+  }
+  function cssNum(style, name, fallback) {
+    var v = parseFloat(style.getPropertyValue(name));
+    return isNaN(v) ? fallback : v;
+  }
+
+  // Colours: any CSS colour in, [r, g, b, a] out (0-255, alpha 0-1), through a canvas's parser.
+  var colourCtx = document.createElement("canvas").getContext("2d");
+  function parseColour(c, fallback) {
+    colourCtx.fillStyle = "#000000";
+    colourCtx.fillStyle = fallback || "#000000";
+    colourCtx.fillStyle = c || fallback || "#000000";
+    var s = colourCtx.fillStyle;
+    if (s.charAt(0) === "#") {
+      return [parseInt(s.substr(1, 2), 16), parseInt(s.substr(3, 2), 16), parseInt(s.substr(5, 2), 16), 1];
+    }
+    var m = s.match(/rgba?\(([^)]+)\)/);
+    if (!m) return [0, 0, 0, 1];
+    var p = m[1].split(",").map(function (x) { return parseFloat(x); });
+    return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1];
+  }
+  function css(c, alpha) {
+    var a = alpha === undefined ? c[3] : alpha;
+    return "rgba(" + Math.round(c[0]) + "," + Math.round(c[1]) + "," + Math.round(c[2]) + "," + round(a, 3) + ")";
+  }
+  function hex(c) {
+    return "#" + c.slice(0, 3).map(function (v) {
+      var h = Math.round(v).toString(16).toUpperCase();
+      return h.length < 2 ? "0" + h : h;
+    }).join("");
+  }
+  function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, 1]; }
+  function luminance(c) {
+    var ch = c.slice(0, 3).map(function (v) {
+      v /= 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  }
+  var WHITE = [255, 255, 255, 1], BLACK = [0, 0, 0, 1];
+
+  function loadScript(url) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = url;
+      s.onload = resolve;
+      s.onerror = function () { reject(new Error("couldn't load the job " + url)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function loadImage(url, what) {
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.decoding = "sync";
+      img.onload = function () {
+        (img.decode ? img.decode() : Promise.resolve()).catch(function () {}).then(function () { resolve(img); });
+      };
+      img.onerror = function () { fail("couldn't load " + what + ": " + url); resolve(img); };
+      img.src = url;
+    });
+  }
+
+  // ---------------------------------------------------------------------------------------------- fonts
+
+  function loadFonts(fonts) {
+    return Promise.all((fonts || []).map(function (f) {
+      var desc = {};
+      if (f.weight) desc.weight = String(f.weight);
+      if (f.style) desc.style = f.style;
+      desc.display = "block";
+      var face;
+      try {
+        face = new FontFace(f.family, 'url("' + f.url + '")', desc);
+      } catch (e) {
+        fail("font " + f.family + ": " + e.message);
+        return null;
+      }
+      return face.load().then(function (loaded) { document.fonts.add(loaded); return loaded; },
+        function (e) { fail("couldn't load the font " + f.family + " (" + f.url + "): " + (e && e.message || e)); });
+    }));
+  }
+
+  // ---------------------------------------------------------------------------------------------- background
+
+  function paintBackground(layer, job, canvasW, W, H, u, count) {
+    var theme = job.theme, pal = theme.palette, bg = theme.background || {};
+    var base = parseColour(pal.background, "#101418");
+    var dark = luminance(base) < 0.35;
+    var kind = bg.kind || "glow";
+    var image = job.panorama && job.panorama.background ? job.panorama.background : (kind === "image" ? bg.url : null);
+    layer.style.backgroundColor = css(base, 1);
+    if (image) {
+      layer.style.backgroundImage = 'url("' + image + '")';
+      layer.style.backgroundSize = "cover";
+      layer.style.backgroundPosition = "center";
+      if (bg.dim) {
+        var veil = make("div", "bg-veil", layer);
+        veil.style.background = css(base, Math.max(0, Math.min(1, bg.dim)));
+      }
+      return;
+    }
+    if (kind === "color") return;
+    var second = pal.background2 ? parseColour(pal.background2) : mix(base, dark ? WHITE : BLACK, dark ? 0.16 : 0.06);
+    if (kind === "gradient") {
+      var angle = bg.angle === undefined || bg.angle === null ? 160 : bg.angle;
+      layer.style.backgroundImage = "linear-gradient(" + angle + "deg, " + css(second, 1) + ", " + css(base, 1) + ")";
+      return;
+    }
+    // "glow": the base colour, a soft light from the top, and two glows a slot (the accent and a tint), set at
+    // alternating sides so that in a panorama the glows either side of a seam meet and run across it.
+    var accent = parseColour(pal.accent, "#ffc94d");
+    var tint = mix(base, WHITE, dark ? 0.22 : 0.75);
+    var layers = [];
+    for (var i = 0; i < count; i++) {
+      var even = i % 2 === 0;
+      var tx = (i + (even ? 0.9 : 0.1)) * W, ty = 0.04 * H;
+      var ax = (i + (even ? 0.04 : 0.96)) * W, ay = 0.58 * H;
+      var rt = 95 * u, ra = 80 * u;
+      layers.push("radial-gradient(circle " + rt + "px at " + tx + "px " + ty + "px, " +
+        css(tint, dark ? 0.55 : 0.7) + ", " + css(tint, 0) + ")");
+      layers.push("radial-gradient(circle " + ra + "px at " + ax + "px " + ay + "px, " +
+        css(mix(accent, base, 0.35), dark ? 0.2 : 0.16) + ", " + css(accent, 0) + ")");
+    }
+    layers.push("linear-gradient(180deg, " + css(second, 1) + " 0%, " + css(base, 1) + " 55%, " +
+      css(mix(base, BLACK, dark ? 0.25 : 0.04), 1) + " 100%)");
+    layer.style.backgroundImage = layers.join(", ");
+  }
+
+  // ---------------------------------------------------------------------------------------------- devices
+
+  var svgCount = 0;
+  // A drawn frame's SVG, with its ids made unique (a pair puts two on one page) and stretched along its long
+  // side to the capture's shape: elements with class "s" grow, groups with class "m" move, the rest stay.
+  function svgFrame(markup, meta, captureAspect) {
+    svgCount += 1;
+    var prefix = "f" + svgCount + "-";
+    markup = markup.replace(/\bid="([^"]+)"/g, 'id="' + prefix + '$1"')
+                   .replace(/url\(#([^)]+)\)/g, "url(#" + prefix + "$1)");
+    var doc = new DOMParser().parseFromString(markup, "image/svg+xml");
+    var svg = document.importNode(doc.documentElement, true);
+    var vb = meta.viewBox.slice();
+    var screen = { x: meta.screen.x, y: meta.screen.y, width: meta.screen.width, height: meta.screen.height };
+    var delta = 0;
+    if (meta.stretch === "x") delta = screen.height * captureAspect - screen.width;
+    else delta = screen.width / captureAspect - screen.height;
+    if (Math.abs(delta) > 0.5) {
+      var sizeAttr = meta.stretch === "x" ? "width" : "height";
+      Array.prototype.forEach.call(svg.querySelectorAll(".s"), function (n) {
+        n.setAttribute(sizeAttr, Math.max(0, parseFloat(n.getAttribute(sizeAttr)) + delta));
+      });
+      Array.prototype.forEach.call(svg.querySelectorAll(".m"), function (n) {
+        var t = meta.stretch === "x" ? "translate(" + delta + " 0)" : "translate(0 " + delta + ")";
+        n.setAttribute("transform", t + " " + (n.getAttribute("transform") || ""));
+      });
+      if (meta.stretch === "x") { vb[2] += delta; screen.width += delta; }
+      else { vb[3] += delta; screen.height += delta; }
+    }
+    svg.setAttribute("viewBox", vb.join(" "));
+    svg.removeAttribute("width");
+    svg.removeAttribute("height");
+    svg.setAttribute("preserveAspectRatio", "none");
+    var title = svg.querySelector("title");
+    if (title) title.parentNode.removeChild(title);
+    return { node: svg, viewBox: vb, screen: screen };
+  }
+
+  // Build a device: { wrap, device, screen, img, aspect, frame, meta... }. Sized later by place().
+  function buildDevice(parent, frame, capture, role) {
+    var cAspect = capture.width / capture.height;
+    var wrap = make("div", "device-wrap", parent);
+    wrap.dataset.role = role;
+    var device = make("div", "device", wrap);
+    var d = { wrap: wrap, device: device, capture: capture, role: role, frame: frame };
+    var kind = frame ? frame.kind : "none";
+    if (kind === "svg") {
+      var f = svgFrame(frame.svg, frame.meta, cAspect);
+      device.appendChild(f.node);
+      d.viewBox = f.viewBox; d.screenRect = f.screen; d.screenRadius = frame.meta.screenRadius || 0;
+    } else if (kind === "image") {
+      // A user's own device art, as it is: never stretched; the capture is fitted into its screen.
+      d.viewBox = frame.meta.viewBox; d.screenRect = frame.meta.screen; d.screenRadius = frame.meta.screenRadius || 0;
+    } else {
+      device.classList.add("frameless");
+      d.viewBox = [0, 0, capture.width, capture.height];
+      d.screenRect = { x: 0, y: 0, width: capture.width, height: capture.height };
+      d.screenRadius = capture.width * 0.075;
+    }
+    d.aspect = d.viewBox[2] / d.viewBox[3];
+    var screen = make("div", "screen", device);
+    var img = make("img", "capture", screen);
+    img.src = capture.url;
+    img.alt = "";
+    d.screen = screen; d.img = img;
+    if (kind === "image") {
+      var art = make("img", "frame-art", device);
+      art.src = frame.url;
+      art.alt = "";
+      d.art = art;
+    }
+    var vb = d.viewBox, s = d.screenRect;
+    screen.style.left = ((s.x - vb[0]) / vb[2] * 100) + "%";
+    screen.style.top = ((s.y - vb[1]) / vb[3] * 100) + "%";
+    screen.style.width = (s.width / vb[2] * 100) + "%";
+    screen.style.height = (s.height / vb[3] * 100) + "%";
+    d.realWidth = frame && frame.meta && frame.meta.realWidthMm ? frame.meta.realWidthMm : 72;
+    return d;
+  }
+
+  function place(d, x, y, w) {
+    var h = w / d.aspect;
+    d.x = x; d.y = y; d.w = w; d.h = h;
+    var st = d.wrap.style;
+    st.left = x + "px"; st.top = y + "px"; st.width = w + "px"; st.height = h + "px";
+    var k = w / d.viewBox[2];
+    d.screen.style.borderRadius = (d.screenRadius * k) + "px";
+    d.screenPx = { width: d.screenRect.width * k, height: d.screenRect.height * k };
+  }
+
+  // ---------------------------------------------------------------------------------------------- captions
+
+  // Fit the caption in its box: from sizePx down to floorPx (2% steps) until it's within maxLines and no word
+  // overflows; first without hyphenation, then (only if that fails) with the language's hyphenation.
+  function fitCaption(c, sizePx, floorPx, maxLines, leading) {
+    var el = c.caption;
+    function attempt(px, hyphens) {
+      el.style.fontSize = px + "px";
+      el.style.hyphens = hyphens;
+      el.style.webkitHyphens = hyphens;
+      var h = el.getBoundingClientRect().height;
+      var lines = Math.max(1, Math.round(h / (px * leading)));
+      var over = el.scrollWidth > el.clientWidth + 1;
+      return { px: px, lines: lines, over: over, ok: !over && lines <= maxLines, hyphens: hyphens };
+    }
+    var m = null;
+    var modes = ["manual", "auto"];
+    for (var i = 0; i < modes.length; i++) {
+      var px = sizePx;
+      for (;;) {
+        m = attempt(px, modes[i]);
+        if (m.ok || px <= floorPx + 1e-6) break;
+        px = Math.max(floorPx, px - Math.max(0.5, px * 0.02));
+      }
+      if (m.ok) break;
+    }
+    return m;
+  }
+
+  // ---------------------------------------------------------------------------------------------- glyphs
+
+  var FALLBACK_PROBES = ["monospace", "serif", "sans-serif", '"PingFang SC"', '"Hiragino Sans"',
+    '"Apple SD Gothic Neo"', '"Noto Sans CJK SC"', '"Noto Sans"', '"Geeza Pro"', '"Noto Sans Arabic"',
+    '"Arial Hebrew"', '"Noto Sans Hebrew"', '"Thonburi"', '"Noto Sans Thai"', '"Kohinoor Devanagari"',
+    '"Noto Sans Devanagari"', '"Apple Symbols"', '"Noto Sans Symbols"', '"Segoe UI"', '"Microsoft YaHei"'];
+  var glyphCanvas = null, glyphCtx = null;
+  function glyphSignature(ch, font) {
+    if (!glyphCanvas) {
+      glyphCanvas = document.createElement("canvas");
+      glyphCanvas.width = 72; glyphCanvas.height = 72;
+      glyphCtx = glyphCanvas.getContext("2d", { willReadFrequently: true });
+    }
+    var g = glyphCtx;
+    g.clearRect(0, 0, 72, 72);
+    g.font = font;
+    g.fillStyle = "#000";
+    g.textBaseline = "alphabetic";
+    g.fillText(ch, 8, 52);
+    var data = g.getImageData(0, 0, 72, 72).data, sig = 0, ink = 0;
+    for (var i = 3; i < data.length; i += 4) {
+      if (data[i]) { ink += data[i]; sig = (sig * 31 + i * data[i]) % 2147483647; }
+    }
+    return Math.round(g.measureText(ch).width * 100) + ":" + ink + ":" + sig;
+  }
+  // Characters no loaded font draws (they come out as the "missing glyph" box), and, when the caption's font is
+  // one the theme brings, characters that font doesn't have (the browser draws them in another font).
+  function missingGlyphs(text, family) {
+    var chars = [];
+    Array.from(text).forEach(function (ch) {
+      if (/\s/.test(ch) || chars.indexOf(ch) >= 0) return;
+      var cp = ch.codePointAt(0);
+      if (cp === 0x200d || (cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x300 && cp <= 0x36f)) return;
+      chars.push(ch);
+    });
+    var stack = family ? '"' + family + '", ' + SYSTEM_STACK : SYSTEM_STACK;
+    var font = "48px " + stack;
+    var tofu = ["͸", "\u{10FFFD}", "\u{E01EF}"].map(function (c) { return glyphSignature(c, font); });
+    var missing = [];
+    chars.forEach(function (ch) {
+      var s = glyphSignature(ch, font);
+      if (tofu.indexOf(s) >= 0 && s.split(":")[1] !== "0") { missing.push(ch); return; }
+      if (family) {
+        // If the font had the character, putting it first would change how it's drawn whatever comes after it.
+        // So: drawn exactly as some other font alone draws it, with that font after the family, means the
+        // family lacks it. The other fonts span scripts so one of them has the character.
+        var lacks = FALLBACK_PROBES.some(function (other) {
+          var alone = glyphSignature(ch, "48px " + other);
+          return alone.split(":")[1] !== "0" &&
+            glyphSignature(ch, '48px "' + family + '", ' + other) === alone;
+        });
+        if (lacks) missing.push(ch);
+      }
+    });
+    if (family && document.fonts && !document.fonts.check('48px "' + family + '"', text)) {
+      fail("the font " + family + " isn't loaded for the caption");
+    }
+    return missing;
+  }
+
+  // ---------------------------------------------------------------------------------------------- boxes
+
+  function textRect(el) {
+    if (!el || !el.textContent.trim()) return null;
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    var rects = range.getClientRects(), l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+    for (var i = 0; i < rects.length; i++) {
+      var q = rects[i];
+      if (q.width < 0.5 || q.height < 0.5) continue;
+      l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+    }
+    if (l === Infinity) return null;
+    return { left: l, top: t, width: r - l, height: b - t, right: r, bottom: b };
+  }
+  function rel(r, origin) {
+    return { left: r.left - origin.left, top: r.top - origin.top, width: r.width, height: r.height,
+             right: r.right - origin.left, bottom: r.bottom - origin.top };
+  }
+  function clipArea(r, W, H) {
+    var w = Math.max(0, Math.min(r.right, W) - Math.max(r.left, 0));
+    var h = Math.max(0, Math.min(r.bottom, H) - Math.max(r.top, 0));
+    return w * h;
+  }
+  function overlaps(a, b) {
+    return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  }
+
+  // ---------------------------------------------------------------------------------------------- one slot
+
+  function buildSlot(canvas, job, spec, i, W, H) {
+    var slot = make("section", "slot", canvas);
+    var layout = LAYOUTS.indexOf(spec.layout) >= 0 ? spec.layout : "framed";
+    if (layout !== spec.layout) fail("unknown layout " + spec.layout + ": drew framed");
+    slot.dataset.layout = layout;
+    slot.style.left = (i * W) + "px";
+    slot.setAttribute("dir", job.dir || "ltr");
+    slot.setAttribute("lang", job.lang || "en");
+    var s = { el: slot, spec: spec, layout: layout, index: i, devices: [] };
+    var cap = spec.caption;
+    if (cap && layout !== "gameplay" && (cap.text || cap.kicker || cap.proof)) {
+      var host = slot;
+      if (layout === "fullbleed" && (cap.plate || "solid") !== "none") {
+        s.plate = make("div", "plate", slot);
+        s.plate.dataset.plate = cap.plate || "solid";
+        host = s.plate;
+      }
+      if (layout === "band") { s.band = make("div", "band", slot); }
+      var block = make("div", "caption-block", host);
+      block.dataset.align = cap.align || "center";
+      if (layout === "hero" && job.theme.icon) {
+        s.icon = make("img", "icon", block);
+        s.icon.src = job.theme.icon;
+        s.icon.alt = "";
+      }
+      if (cap.kicker) { s.kicker = make("div", "kicker", block); s.kicker.innerHTML = richText(cap.kicker); }
+      s.caption = make("h1", "caption", block);
+      s.caption.innerHTML = cap.text ? richText(cap.text) : "";
+      if (!cap.text) s.caption.style.display = "none";
+      if (cap.proof) { s.proof = make("div", "proof", block); s.proof.innerHTML = richText(cap.proof); }
+      if (cap.font) block.style.setProperty("--font-caption", '"' + cap.font + '", ' + SYSTEM_STACK);
+      if (cap.weight) block.style.setProperty("--caption-weight", String(cap.weight));
+      s.block = block;
+    }
+    if (layout === "fullbleed" || layout === "gameplay" || layout === "band") {
+      var holder = make("div", "fill-capture", slot);
+      var img = make("img", "capture", holder);
+      img.src = spec.capture.url;
+      img.alt = "";
+      s.fill = { holder: holder, img: img, capture: spec.capture };
+    } else {
+      var stage = make("div", "stage", slot);
+      s.stage = stage;
+      if (layout === "pair" && spec.pair) {
+        s.devices.push(buildDevice(stage, spec.pair.frame, spec.pair.capture, "pair"));
+      }
+      s.devices.unshift(buildDevice(stage, spec.frame, spec.capture, "main"));
+      if (layout === "pair" && s.devices.length > 1) {
+        // The second device is drawn behind the main one (groupShape brings a small companion forward).
+        stage.insertBefore(s.devices[1].wrap, s.devices[0].wrap);
+      }
+      if (layout === "tilt") {
+        s.devices[0].device.style.setProperty("--tilt-sign",
+          ((spec.tilt === "right") !== (job.dir === "rtl")) ? "-1" : "1");
+      }
+    }
+    return s;
+  }
+
+  function lay(s, job, W, H, u, seamLeft, seamRight) {
+    var style = getComputedStyle(s.el);
+    var bodyStyle = getComputedStyle(document.body);
+    var P = {
+      padTop: cssNum(style, "--pad-top", 9) * u,
+      padSide: cssNum(style, "--pad-side", 7) * u,
+      padBottom: cssNum(style, "--pad-bottom", 7) * u,
+      gap: cssNum(style, "--gap", 6) * u,
+      deviceW: cssNum(style, "--device-w", 84) * u,
+      deviceH: cssNum(style, "--device-h", 0) * u,
+      bleed: cssNum(style, "--bleed", 0.14),
+      bias: cssNum(style, "--caption-bias", 0.42),
+      captionScale: cssNum(style, "--caption-scale", 1),
+      extraLines: cssNum(style, "--caption-extra-lines", 0),
+      factor: cssNum(bodyStyle, "--caption-factor", 1),
+      leading: cssNum(style, "--caption-leading", 1.06),
+      platePad: cssNum(style, "--plate-pad", 3.2) * u,
+      bandPad: cssNum(style, "--band-pad", 6) * u,
+      pairOverlap: cssNum(style, "--pair-overlap", 0.36),
+      pairStagger: cssNum(style, "--pair-stagger", 0.06),
+      companion: cssNum(style, "--companion-w", 0.42),
+      anchorGap: cssNum(style, "--anchor-gap", 0) * u
+    };
+    var rtl = job.dir === "rtl";
+    P.stageSide = cssNum(style, "--stage-side", P.padSide / u) * u;
+    // The usable width: the side padding, or the seam keep-out where a seam is closer. (seamLeft and seamRight
+    // are in canvas order, left to right whatever the language.) Devices may use their own side margin.
+    var L = Math.max(P.padSide, seamLeft), R = W - Math.max(P.padSide, seamRight), availW = R - L;
+    // A negative --stage-side lets devices run off the sides (never into a panorama's seam).
+    var SL = seamLeft > 0 ? Math.max(P.stageSide, seamLeft) : P.stageSide;
+    var SR = W - (seamRight > 0 ? Math.max(P.stageSide, seamRight) : P.stageSide), stageW = SR - SL;
+    var cap = s.spec.caption;
+    var placement = s.layout === "fullbleed" ? (s.spec.at || (cap && cap.placement) || "bottom")
+                                             : ((cap && cap.placement) || "top");
+    s.el.dataset.placement = placement;
+    s.fit = null;
+
+    // 1. The caption: its block's width, then its size.
+    var ch = 0;
+    if (s.block) {
+      var blockW = availW;
+      if (s.plate) blockW = availW - 2 * P.platePad;
+      s.block.style.width = blockW + "px";
+      var base = (cap.sizePct || 8) / 100 * W * P.factor * P.captionScale;
+      var floor = (cap.floorPct || 6) / 100 * W * P.factor * P.captionScale;
+      if (floor > base) floor = base;
+      s.block.style.setProperty("--caption-base", base + "px");
+      var maxLines = (cap.maxLines || 2) + P.extraLines;
+      if (s.caption && cap.text) {
+        s.fit = fitCaption(s, base, floor, maxLines, P.leading);
+        s.fit.sizePx = base; s.fit.floorPx = floor; s.fit.maxLines = maxLines;
+      }
+      ch = s.block.getBoundingClientRect().height;
+    }
+
+    // 2. The picture, by layout.
+    if (s.fill) {
+      var holder = s.fill.holder.style;
+      var top = 0, bottom = H;
+      if (s.layout === "band" && s.block) {
+        var bandH = P.padTop + ch + P.bandPad;
+        if (placement === "bottom") {
+          bottom = H - bandH;
+          s.band.style.top = bottom + "px"; s.band.style.height = bandH + "px";
+          s.block.style.top = (bottom + P.bandPad) + "px";
+        } else {
+          top = bandH;
+          s.band.style.top = "0px"; s.band.style.height = bandH + "px";
+          s.block.style.top = P.padTop + "px";
+        }
+        s.block.style.left = L + "px";
+      }
+      holder.left = "0px"; holder.top = top + "px"; holder.width = W + "px"; holder.height = (bottom - top) + "px";
+      s.fill.box = { width: W, height: bottom - top };
+      if (s.plate) {
+        var pst = s.plate.style;
+        pst.left = L + "px";
+        pst.width = availW + "px";
+        var plateH = ch + 2 * P.platePad;
+        pst.height = plateH + "px";
+        if (placement === "top") pst.top = P.padTop + "px";
+        else pst.top = (H - P.padBottom - plateH) + "px";
+        s.block.style.left = P.platePad + "px";
+        s.block.style.top = P.platePad + "px";
+        if (s.plate.dataset.plate === "solid") shrinkPlate(s, P, L, availW);
+      } else if (s.block && s.layout === "fullbleed") {
+        s.block.style.left = L + "px";
+        s.block.style.top = (placement === "top" ? P.padTop : H - P.padBottom - ch) + "px";
+      }
+      return;
+    }
+
+    var devs = s.devices;
+    var main = devs[0];
+    var group = groupShape(s, P);   // the devices' arrangement, in a unit box: { w, h, items: [...] }
+    var gw, gh, gx, gy;
+    if (s.layout === "framed") {
+      var regionH = H - P.padTop - P.padBottom - (ch ? ch + P.gap : 0);
+      gw = Math.min(P.deviceW, stageW, regionH * group.w / group.h);
+      if (P.deviceH) gw = Math.min(gw, P.deviceH * group.w / group.h);
+      gh = gw * group.h / group.w;
+      var total = (ch ? ch + P.gap : 0) + gh;
+      var start = P.padTop + Math.max(0, (H - P.padTop - P.padBottom - total)) * 0.5;
+      if (placement === "bottom") {
+        gy = start;
+        if (s.block) s.block.style.top = (gy + gh + P.gap) + "px";
+      } else {
+        if (s.block) s.block.style.top = start + "px";
+        gy = start + (ch ? ch + P.gap : 0);
+      }
+    } else {
+      gw = Math.min(P.deviceW, stageW);
+      if (P.deviceH) gw = Math.min(gw, P.deviceH * group.w / group.h);
+      gh = gw * group.h / group.w;
+      var bleed = P.bleed;
+      if (placement === "bottom") {
+        var maxBottom = H - P.padBottom - (ch ? ch + P.gap : 0);
+        var gBottom = Math.min(maxBottom, (1 - bleed) * gh);
+        gy = gBottom - gh;
+        if (s.block) {
+          var free = (H - P.padBottom - ch) - (gBottom + P.gap);
+          s.block.style.top = (gBottom + P.gap + Math.max(0, free) * (1 - P.bias)) + "px";
+        }
+      } else {
+        var minTop = P.padTop + (ch ? ch + P.gap : 0);
+        gy = Math.max(minTop, H - (1 - bleed) * gh);
+        var blockTop = P.padTop + Math.max(0, gy - P.gap - P.padTop - ch) * P.bias;
+        if (s.block) s.block.style.top = blockTop + "px";
+        // --anchor-gap: the device comes up to this far under the words (never further down than the bleed
+        // puts it), so a tall slot's hero, tilt or pair doesn't leave a hole between the words and the device.
+        if (P.anchorGap > 0 && ch) gy = Math.max(minTop, Math.min(gy, blockTop + ch + P.anchorGap));
+      }
+    }
+    gx = SL + (stageW - gw) / 2;
+    if (s.block) s.block.style.left = L + "px";
+    var k = gw / group.w;
+    group.items.forEach(function (it) {
+      var x = gx + it.x * k;
+      if (rtl && group.items.length > 1) x = gx + (group.w - it.x - it.w) * k;
+      place(it.d, x, gy + it.y * k, it.w * k);
+    });
+    if (s.layout === "callout" && s.spec.callout) placeCallout(s, main, job, W, H, u, SL, SR);
+  }
+
+  // A solid plate hugs its words: as wide as the longest line plus its padding, placed by the caption's alignment.
+  function shrinkPlate(s, P, L, availW) {
+    var widest = 0;
+    [s.kicker, s.caption, s.proof].forEach(function (e) {
+      var r = e && e.style.display !== "none" ? textRect(e) : null;
+      if (r) widest = Math.max(widest, r.width);
+    });
+    if (!widest) return;
+    var w = Math.min(availW, widest + 2 * P.platePad + 2);
+    var align = s.block.dataset.align;
+    var left = L + (availW - w) / 2;
+    if (align === "start") left = s.spec && document.documentElement.dir === "rtl" ? L + availW - w : L;
+    s.plate.style.left = left + "px";
+    s.plate.style.width = w + "px";
+    s.block.style.width = (w - 2 * P.platePad) + "px";
+  }
+
+  // How a slot's devices sit together, in units where the main device is 1 wide.
+  function groupShape(s, P) {
+    var devs = s.devices, main = devs[0];
+    if (devs.length < 2) return { w: 1, h: 1 / main.aspect, items: [{ d: main, x: 0, y: 0, w: 1 }] };
+    var other = devs[1];
+    var ratio = other.realWidth / main.realWidth;   // the second device's width, the main one's being 1
+    var items;
+    if (ratio > 0.7 && ratio < 1.43) {
+      // Two of a kind, side by side and overlapping, the second higher and behind.
+      var w2 = ratio, x2 = 1 - P.pairOverlap * Math.min(1, w2);
+      var y1 = P.pairStagger * (1 / main.aspect);
+      items = [{ d: other, x: x2, y: 0, w: w2 }, { d: main, x: 0, y: y1, w: 1 }];
+    } else if (ratio <= 0.7) {
+      // A companion (a watch by a phone): drawn at its true scale, in front at the end side, high up.
+      var cw = ratio, cx = 1 - cw * 0.55, cy = (1 / main.aspect) * 0.16;
+      items = [{ d: main, x: 0, y: 0, w: 1 }, { d: other, x: cx, y: cy, w: cw }];
+      main.wrap.parentNode.appendChild(other.wrap);
+    } else {
+      // The second is much bigger (a tablet behind a phone): it goes behind, the phone in front at the start.
+      var bw = ratio, py = (1 / other.aspect) * bw * 0.22;
+      items = [{ d: other, x: 0.45, y: 0, w: bw }, { d: main, x: 0, y: py, w: 1 }];
+    }
+    var minX = Infinity, maxX = -Infinity, maxY = -Infinity;
+    items.forEach(function (it) {
+      minX = Math.min(minX, it.x); maxX = Math.max(maxX, it.x + it.w);
+      maxY = Math.max(maxY, it.y + it.w / it.d.aspect);
+    });
+    items.forEach(function (it) { it.x -= minX; });
+    return { w: maxX - minX, h: maxY, items: items };
+  }
+
+  function placeCallout(s, d, job, W, H, u, L, R) {
+    var c = s.spec.callout;
+    var rect = c.rect, scale = c.scale || 1.3;
+    var sw = d.screenPx.width, sh = d.screenPx.height;
+    var sx = d.x + d.screenRect.x / d.viewBox[2] * d.w, sy = d.y + d.screenRect.y / d.viewBox[3] * d.h;
+    var rw = rect[2] * sw, rh = rect[3] * sh;
+    var maxW = R - L + 2 * u;
+    if (rw * scale > maxW) scale = maxW / rw;
+    var cw = rw * scale, chh = rh * scale;
+    var cx = sx + (rect[0] + rect[2] / 2) * sw, cy = sy + (rect[1] + rect[3] / 2) * sh;
+    var left = Math.min(Math.max(cx - cw / 2, L - u), R + u - cw);
+    var top = Math.min(Math.max(cy - chh / 2, u * 4), H - chh - u * 4);
+    var el = make("div", "callout", s.el);
+    var img = make("img", "", el);
+    img.src = d.capture.url;
+    img.alt = "";
+    img.style.width = (sw * scale) + "px";
+    img.style.height = (sh * scale) + "px";
+    img.style.left = (-rect[0] * sw * scale) + "px";
+    img.style.top = (-rect[1] * sh * scale) + "px";
+    el.style.left = left + "px"; el.style.top = top + "px";
+    el.style.width = cw + "px"; el.style.height = chh + "px";
+    var radius = Math.min(cw, chh) * 0.12;
+    el.style.borderRadius = Math.min(radius, 2.4 * u * scale) + "px";
+    s.callout = { el: el, rect: rect, scale: scale,
+                  captureScale: (sw / d.capture.width) * scale,
+                  moved: Math.abs(left - (cx - cw / 2)) > 1 || Math.abs(top - (cy - chh / 2)) > 1 };
+  }
+
+  // ---------------------------------------------------------------------------------------------- report
+
+  function slotReport(s, job, W, H, origin, seamPx) {
+    var r = { layout: s.layout, shot: s.spec.shot };
+    var textBoxes = [];
+    function textItem(el, role) {
+      if (!el || el.style.display === "none") return null;
+      var q = textRect(el);
+      if (!q) return null;
+      q = rel(q, origin);
+      textBoxes.push({ role: role, rect: q });
+      var cs = getComputedStyle(el);
+      return { text: plainText(el.textContent), box: box(q), fontPx: round(parseFloat(cs.fontSize), 1),
+               ink: hex(parseColour(cs.color)) };
+    }
+    var kicker = textItem(s.kicker, "kicker");
+    var captionItem = textItem(s.caption, "caption");
+    var proof = textItem(s.proof, "proof");
+    var share = 0;
+    textBoxes.forEach(function (t) { share += clipArea(t.rect, W, H); });
+    share /= W * H;
+    if (s.spec.caption && (captionItem || kicker || proof)) {
+      var cap = s.spec.caption;
+      var all = [cap.text, cap.kicker, cap.proof].filter(Boolean).map(plainText).join(" ");
+      var fit = s.fit;
+      r.caption = {
+        text: cap.text ? plainText(cap.text) : "",
+        lines: fit ? fit.lines : 0,
+        maxLines: fit ? fit.maxLines : 0,
+        fontPx: fit ? round(fit.px, 1) : 0,
+        sizePx: fit ? round(fit.sizePx, 1) : 0,
+        floorPx: fit ? round(fit.floorPx, 1) : 0,
+        atFloor: fit ? fit.px <= fit.floorPx + 0.05 : false,
+        fits: fit ? fit.ok : true,
+        hyphenated: !!(fit && fit.ok && fit.hyphens === "auto"),
+        box: captionItem ? captionItem.box : null,
+        textShare: round(share, 4),
+        missingGlyphs: missingGlyphs(all, cap.font || null),
+        kicker: kicker,
+        proof: proof,
+        ink: captionItem ? captionItem.ink : null,
+        accent: s.caption && s.caption.querySelector("em") ? hex(parseColour(getComputedStyle(s.caption.querySelector("em")).color)) : null,
+        placement: s.el.dataset.placement,
+        align: cap.align || "center"
+      };
+      if (s.plate) r.caption.plate = box(rel(s.plate.getBoundingClientRect(), origin));
+      if (s.band) r.caption.band = box(rel(s.band.getBoundingClientRect(), origin));
+    } else {
+      r.caption = null;
+    }
+    r.textShare = round(share, 4);
+
+    var frames = [], scales = [];
+    var items = [];   // what mustn't sit in a seam: [name, rect]
+    textBoxes.forEach(function (t) { items.push([t.role, t.rect]); });
+    s.devices.forEach(function (d) {
+      var q = rel(d.wrap.getBoundingClientRect(), origin);
+      var tilted = s.layout === "tilt";
+      var cropped = q.left < -0.5 || q.top < -0.5 || q.right > W + 0.5 || q.bottom > H + 0.5;
+      var over = textBoxes.some(function (t) { return overlaps(t.rect, q); }) ||
+        (s.callout ? overlaps(rel(s.callout.el.getBoundingClientRect(), origin), q) : false) ||
+        s.devices.some(function (o) { return o !== d && overlaps(rel(o.wrap.getBoundingClientRect(), origin), q); });
+      var f = d.frame || { name: "none", kind: "none", meta: {} };
+      frames.push({ name: f.name || "none", role: d.role, box: box(q),
+                    kind: f.kind === "svg" ? "drawn" : f.kind === "image" ? "art" : "none",
+                    drawn: f.kind === "svg" ? true : f.kind === "image" ? (f.meta && f.meta.drawn === true) : null,
+                    maker: (f.meta && f.meta.maker) || null, tilted: tilted, cropped: cropped, overlapped: over,
+                    captureScale: round(Math.max(d.screenPx.width / d.capture.width,
+                                                 d.screenPx.height / d.capture.height), 3) });
+      scales.push(Math.max(d.screenPx.width / d.capture.width, d.screenPx.height / d.capture.height));
+      items.push(["frame", q]);
+    });
+    if (s.fill) {
+      scales.push(Math.max(s.fill.box.width / s.fill.capture.width, s.fill.box.height / s.fill.capture.height));
+    }
+    r.frame = frames.length ? frames[0] : null;
+    if (frames.length > 1) r.frames = frames;
+    if (s.callout) {
+      var cq = rel(s.callout.el.getBoundingClientRect(), origin);
+      r.callout = { box: box(cq), rect: s.callout.rect, scale: round(s.callout.scale, 3),
+                    captureScale: round(s.callout.captureScale, 3), moved: s.callout.moved };
+      items.push(["callout", cq]);
+    } else {
+      r.callout = null;
+    }
+    r.captureScale = scales.length ? round(Math.max.apply(null, scales), 3) : null;
+
+    r.seams = [];
+    var count = job.slots.length;
+    [["left", 0, s.index > 0], ["right", W, s.index < count - 1]].forEach(function (e) {
+      if (!e[2]) return;
+      var band = e[0] === "left" ? { left: 0, right: seamPx, top: 0, bottom: H }
+                                 : { left: W - seamPx, right: W, top: 0, bottom: H };
+      var intruders = [];
+      items.forEach(function (it) {
+        if (overlaps(it[1], band) && intruders.indexOf(it[0]) < 0) intruders.push(it[0]);
+      });
+      r.seams.push({ edge: e[0], x: e[1], marginPx: round(seamPx, 1), clear: intruders.length === 0,
+                     intruders: intruders });
+    });
+    return r;
+  }
+
+  // ---------------------------------------------------------------------------------------------- main
+
+  function build(job) {
+    var W = job.slot.width, H = job.slot.height, u = W / 100;
+    var slots = job.slots || [];
+    var count = slots.length;
+    var index = Math.max(0, Math.min(count - 1, job.index || 0));
+    var aspect = W / H;
+    var cls = aspect < 0.6 ? "tall" : aspect < 0.85 ? "mid" : aspect <= 1.2 ? "square" : "wide";
+    var root = document.documentElement;
+    root.lang = job.lang || "en";
+    root.dir = job.dir || "ltr";
+    var body = document.body;
+    body.dataset.aspect = cls;
+    var pal = job.theme.palette || {};
+    var base = parseColour(pal.background, "#101418");
+    body.dataset.tone = luminance(base) < 0.35 ? "dark" : "light";
+    var rs = root.style;
+    rs.setProperty("--slot-w", W + "px");
+    rs.setProperty("--slot-h", H + "px");
+    rs.setProperty("--u", u + "px");
+    rs.setProperty("--bg", css(base, 1));
+    rs.setProperty("--ink", css(parseColour(pal.ink, "#ffffff"), 1));
+    rs.setProperty("--accent", css(parseColour(pal.accent, "#ffc94d"), 1));
+    var plateColour = pal.plate ? parseColour(pal.plate) : base;
+    rs.setProperty("--plate", css(plateColour, 1));
+    rs.setProperty("--plate-ink", css(parseColour(pal.plateInk || pal.ink, "#ffffff"), 1));
+    rs.setProperty("--band", css(pal.band ? parseColour(pal.band) : base, 1));
+    rs.setProperty("--band-ink", css(parseColour(pal.bandInk || pal.ink, "#ffffff"), 1));
+    rs.setProperty("--font-caption", (job.theme.captionFont ? '"' + job.theme.captionFont + '", ' : "") + SYSTEM_STACK);
+    report.slot = { index: index, count: count, width: W, height: H, aspect: round(aspect, 4), aspectClass: cls };
+    report.lang = root.lang;
+    report.dir = root.dir;
+
+    var seam = job.panorama ? (job.panorama.seam === undefined ? 6 : job.panorama.seam) : 0;
+    var seamPx = seam * u;
+    var canvas = make("div", "", body);
+    canvas.id = "canvas";
+    canvas.style.width = (W * count) + "px";
+    var bgLayer = make("div", "bg", canvas);
+    paintBackground(bgLayer, job, W * count, W, H, u, count);
+
+    var built = slots.map(function (spec, i) { return buildSlot(canvas, job, spec, i, W, H); });
+
+    var images = Array.prototype.slice.call(document.images).map(function (img) {
+      if (img.complete && img.naturalWidth) return Promise.resolve();
+      return new Promise(function (resolve) {
+        img.addEventListener("load", resolve);
+        img.addEventListener("error", function () { fail("couldn't load the picture " + img.src); resolve(); });
+      }).then(function () { return img.decode ? img.decode().catch(function () {}) : null; });
+    });
+    return Promise.all(images).then(function () {
+      built.forEach(function (s, i) {
+        var start = i > 0 ? seamPx : 0, end = i < count - 1 ? seamPx : 0;
+        lay(s, job, W, H, u, start, end);
+      });
+      canvas.style.transform = "translateX(" + (-index * W) + "px)";
+      var origin = { left: 0, top: 0 };
+      var r = slotReport(built[index], job, W, H, origin, seamPx);
+      Object.keys(r).forEach(function (k) { report[k] = r[k]; });
+    });
+  }
+
+  function main() {
+    var params = new URLSearchParams(location.search);
+    var url = params.get("job");
+    var first = url && !window.__appstoresJob ? loadScript(url) : Promise.resolve();
+    return first.then(function () {
+      var job = window.__appstoresJob;
+      if (!job) throw new Error("no job: open set.html?job=<job file>");
+      return loadFonts(job.theme && job.theme.fonts).then(function () {
+        return document.fonts.ready;
+      }).then(function () { return build(job); });
+    });
+  }
+
+  function start() {
+    main().catch(function (e) { fail(e && e.stack ? e.stack : e); })
+      .then(function () { document.body.dataset.ready = "1"; resolveReady(report); });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+  else start();
+})();
+</script>
+</head>
+<body></body>
+</html>

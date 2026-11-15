@@ -1,0 +1,301 @@
+/*
+  store-screenshots: what every layout shares.
+
+  Units. --u is 1% of the slot's width (set by set.html, as are --slot-w and --slot-h). The layout parameters below
+  are plain numbers in --u (or fractions where noted) so the engine can read them and do the geometry; a layout's
+  file sets them per aspect class: body[data-aspect="tall" | "mid" | "square" | "wide"] (w/h under 0.6, 0.6-0.85,
+  0.85-1.2, over 1.2).
+
+  Layout parameters (on .slot):
+    --pad-top, --pad-side, --pad-bottom   the margins (u)
+    --stage-side                          the devices' side margin, if not --pad-side (u)
+    --gap                                 between the words and the device (u)
+    --device-w                            the device's (or devices') widest (u); --device-h its tallest (u, 0 = any)
+    --bleed                               the share of the device cut off by the slot's edge (bleed layouts)
+    --caption-bias                        where the words sit in the room left above the device (0 top, 1 bottom)
+    --anchor-gap                          if set, the device rises to this far under the words (u; 0 = off)
+    --caption-scale, --caption-extra-lines  the hero's bigger claim
+    --caption-leading                     the caption's line height (unitless)
+    --plate-pad, --band-pad               padding around the words on a plate or in a band (u)
+    --pair-overlap, --pair-stagger        how two devices overlap (share of a device) and step (share of its height)
+
+  On body: --caption-factor scales the caption's sizePct per aspect class (a landscape slot is shown about three
+  times as big as a portrait one in the stores, so its words need less of its width).
+
+  Right-to-left: set.html puts dir and lang on <html> and each slot; everything here uses logical properties or
+  is placed by the engine with the direction in mind. Nothing is mirrored but the layout (never the captures).
+*/
+
+:root {
+  --u: 10px;
+  --slot-w: 1000px;
+  --slot-h: 2000px;
+  --bg: #101418;
+  --ink: #ffffff;
+  --accent: #ffc94d;
+  --plate: #101418;
+  --plate-ink: #ffffff;
+  --band: #101418;
+  --band-ink: #ffffff;
+  --font-caption: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Noto Sans", sans-serif;
+  --caption-weight: 800;
+  --caption-tracking: -0.022em;
+  --caption-base: calc(var(--u) * 8);
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: var(--slot-w);
+  height: var(--slot-h);
+  overflow: hidden;
+  background: var(--bg);   /* opaque, so Chrome writes an RGB PNG with no alpha channel */
+}
+
+body {
+  font-family: var(--font-caption);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  font-kerning: normal;
+  font-synthesis-style: none;   /* a bold may be synthesised for a script whose font has none (Arabic, Thai) */
+}
+
+/* Aspect classes: how much of sizePct a caption gets. */
+body[data-aspect="tall"] { --caption-factor: 1; }
+body[data-aspect="mid"] { --caption-factor: 0.66; }
+body[data-aspect="square"] { --caption-factor: 0.78; }
+body[data-aspect="wide"] { --caption-factor: 0.42; }
+
+/* Shadows and hairlines that suit a dark or a light field. */
+body[data-tone="dark"] {
+  --shadow-near: rgba(0, 0, 0, 0.34);
+  --shadow-far: rgba(0, 0, 0, 0.42);
+  --hairline: rgba(255, 255, 255, 0.14);
+  --callout-shadow: rgba(0, 0, 0, 0.5);
+}
+body[data-tone="light"] {
+  --shadow-near: rgba(18, 24, 38, 0.14);
+  --shadow-far: rgba(18, 24, 38, 0.22);
+  --hairline: rgba(0, 0, 0, 0.10);
+  --callout-shadow: rgba(18, 24, 38, 0.32);
+}
+
+#canvas {
+  position: absolute;
+  inset-block-start: 0;
+  left: 0;
+  height: var(--slot-h);
+  direction: ltr;          /* a panorama's slots run left to right in shot order, whatever the language */
+}
+
+.bg, .bg-veil {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---------------------------------------------------------------------------------------------- the slot */
+
+.slot {
+  position: absolute;
+  top: 0;
+  width: var(--slot-w);
+  height: var(--slot-h);
+  overflow: hidden;
+  --pad-top: 9;
+  --pad-side: 7;
+  --pad-bottom: 7;
+  --gap: 6;
+  --device-w: 84;
+  --device-h: 0;
+  --bleed: 0.14;
+  --caption-bias: 0.42;
+  --caption-scale: 1;
+  --caption-extra-lines: 0;
+  --caption-leading: 1.06;
+  --plate-pad: 3.2;
+  --band-pad: 6;
+  --pair-overlap: 0.36;
+  --pair-stagger: 0.06;
+}
+body[data-aspect="mid"] .slot { --pad-top: 6.5; --pad-side: 8; --pad-bottom: 6; --gap: 4.5; }
+body[data-aspect="square"] .slot { --pad-top: 6; --pad-side: 7; --pad-bottom: 6; --gap: 4; --device-w: 64; }
+body[data-aspect="wide"] .slot { --pad-top: 4.6; --pad-side: 6; --pad-bottom: 4.6; --gap: 2.8; --device-w: 76; }
+
+/* ---------------------------------------------------------------------------------------------- words */
+
+.caption-block {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  text-align: center;
+}
+.caption-block[data-align="start"] { text-align: start; }
+.caption-block[data-align="end"] { text-align: end; }
+
+.caption {
+  margin: 0;
+  font-family: var(--font-caption);
+  font-size: var(--caption-base);
+  font-weight: var(--caption-weight);
+  line-height: var(--caption-leading, 1.06);
+  letter-spacing: var(--caption-tracking);
+  color: var(--ink);
+  text-wrap: balance;
+  hyphens: manual;
+  -webkit-hyphens: manual;
+  hyphenate-limit-chars: 8 4 4;
+  overflow-wrap: normal;
+  word-break: normal;
+  line-break: strict;
+}
+.caption em, .kicker em, .proof em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+.kicker {
+  margin: 0 0 0.62em;
+  font-family: var(--font-caption);
+  font-size: calc(var(--caption-base) * 0.34);
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-wrap: balance;
+}
+.proof {
+  margin: 0.72em 0 0;
+  font-family: var(--font-caption);
+  font-size: calc(var(--caption-base) * 0.36);
+  font-weight: 600;
+  line-height: 1.28;
+  letter-spacing: -0.005em;
+  color: var(--ink);   /* opaque, so the report's ink is what's drawn (contrast is checked from it) */
+  text-wrap: balance;
+}
+
+/* Korean keeps words whole; Japanese and Chinese break by the strict rules. */
+:lang(ko) .caption, :lang(ko) .proof { word-break: keep-all; }
+
+/* ---------------------------------------------------------------------------------------------- devices */
+
+.stage {
+  position: absolute;
+  inset: 0;
+}
+
+.device-wrap {
+  position: absolute;
+  z-index: 2;
+  filter: drop-shadow(0 calc(var(--u) * 0.6) calc(var(--u) * 1.1) var(--shadow-near))
+          drop-shadow(0 calc(var(--u) * 2.6) calc(var(--u) * 4.2) var(--shadow-far));
+}
+.device {
+  position: absolute;
+  inset: 0;
+}
+.device > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  shape-rendering: geometricPrecision;
+}
+.screen {
+  position: absolute;
+  overflow: hidden;
+  background: #000;
+  isolation: isolate;
+}
+.screen > img.capture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+.device.frameless .screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 calc(var(--u) * 0.12) var(--hairline);
+  pointer-events: none;
+}
+.frame-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+}
+
+/* ---------------------------------------------------------------------------------------------- full-slot captures */
+
+.fill-capture {
+  position: absolute;
+  overflow: hidden;
+  z-index: 1;
+}
+.fill-capture > img.capture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+/* ---------------------------------------------------------------------------------------------- callouts */
+
+.callout {
+  position: absolute;
+  z-index: 6;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 calc(var(--u) * 0.4) calc(var(--u) * 0.9) rgba(0, 0, 0, 0.16),
+              0 calc(var(--u) * 2.2) calc(var(--u) * 5) var(--callout-shadow);
+}
+.callout > img {
+  position: absolute;
+  max-width: none;
+}
+
+/* ---------------------------------------------------------------------------------------------- plates and bands */
+
+.plate {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+}
+.plate[data-plate="solid"] {
+  background: var(--plate);
+  border-radius: calc(var(--u) * 3);
+  box-shadow: 0 calc(var(--u) * 0.8) calc(var(--u) * 2.4) rgba(0, 0, 0, 0.28);
+}
+.plate .caption, .plate .proof { color: var(--plate-ink); }
+.plate[data-plate="scrim"] .caption, .plate[data-plate="none"] .caption {
+  text-shadow: 0 calc(var(--u) * 0.15) calc(var(--u) * 0.8) rgba(0, 0, 0, 0.35);
+}
+
+.band {
+  position: absolute;
+  left: 0;
+  width: var(--slot-w);
+  z-index: 4;
+  background: var(--band);
+}
+.slot[data-layout="band"] .caption, .slot[data-layout="band"] .proof { color: var(--band-ink); }
+
+.icon {
+  display: block;
+  width: calc(var(--u) * 17);
+  height: calc(var(--u) * 17);
+  margin: 0 auto calc(var(--u) * 4);
+  border-radius: 22.5%;
+  box-shadow: 0 calc(var(--u) * 0.8) calc(var(--u) * 2.4) rgba(0, 0, 0, 0.25);
+}
+.caption-block[data-align="start"] .icon { margin-inline: 0 auto; }

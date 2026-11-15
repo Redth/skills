@@ -1,0 +1,23 @@
+{
+  "$comment": "A generic laptop: a thin-bezelled lid over a base. Drawn for this skill: generic, no maker's details. Units are the SVG's.",
+  "name": "laptop",
+  "kind": "desktop",
+  "orientation": "landscape",
+  "drawn": true,
+  "maker": null,
+  "viewBox": [
+    0,
+    0,
+    1800,
+    1078
+  ],
+  "screen": {
+    "x": 126.0,
+    "y": 30,
+    "width": 1548,
+    "height": 968
+  },
+  "screenRadius": 8,
+  "stretch": "y",
+  "realWidthMm": 330
+}
