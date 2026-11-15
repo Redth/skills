@@ -2,16 +2,14 @@
 name: store-screenshots
 description: >
   Use this skill to design App Store or Google Play screenshots for our app, add captions, a device frame,
-  a tilt, a callout or a panorama to our screenshots, make one screenshot design come out at every iPhone,
-  iPad and Android size and in every language, translate or fit our screenshot captions (German, Japanese,
-  Arabic), check whether our screenshots read in App Store search results, say what each store allows in a
-  screenshot (frames, awards, prices, text), plan which shots go first and what each one says, make a
-  game's gameplay screenshots for the stores, find a look from screenshots we like (another app's set we
-  admire), or keep this release's screenshots consistent with the ones we did last time. Takes real captures
-  (or PNGs from any design tool) and renders them with HTML templates in headless Chrome. Do not use for
-  capturing screenshots from a simulator, emulator or device (store-capture), writing the listing's words, checking the listing or sending it to a
-  store (store-listings), app icons, website or marketing images, preview videos, or building a screenshot
-  editor.
+  a tilt, a callout or a panorama, render one design at every iPhone, iPad and Android size and in every
+  language, fit or translate screenshot captions, check whether our screenshots read in search results, say
+  what each store allows in a screenshot, plan which shots go first and what each says, make a game's
+  screenshots for the stores, find a look from screenshots we like, or keep this release's screenshots
+  consistent with last time's. Takes real captures (or any tool's PNGs) and renders them with HTML templates
+  in headless Chrome. Do not use for capturing from a simulator, emulator or device (store-capture), the
+  listing's words or sending it to a store (store-listings), app icons, website images, preview videos, or
+  building a screenshot editor.
 license: MIT
 ---
 

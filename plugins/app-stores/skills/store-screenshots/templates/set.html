@@ -70,9 +70,12 @@
   function escapeHtml(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
-  // Captions may mark words to stress with *asterisks* (drawn in the accent) and break a line with "\n".
+  // Captions may mark words to stress with *asterisks* (drawn in the accent) and break a line with "\n". A soft
+  // hyphen, U+00AD (in JSON "\u00ad") or written "&shy;", marks where a long word may break with a hyphen: it works
+  // in every Chrome, where hyphens: auto needs the language's dictionary (Linux builds often lack them).
+  var SOFT = "\u00ad";
   function richText(s) {
-    var parts = String(s).split(/\*([^*\n]+)\*/);
+    var parts = String(s).replace(/&shy;/g, SOFT).split(/\*([^*\n]+)\*/);
     var html = "";
     for (var i = 0; i < parts.length; i++) {
       var piece = escapeHtml(parts[i]).replace(/[ \t]*\n[ \t]*/g, "<br>");
@@ -81,7 +84,45 @@
     return html;
   }
   function plainText(s) {
-    return String(s).replace(/\*([^*\n]+)\*/g, "$1").replace(/\s*\n\s*/g, " ").trim();
+    return String(s).replace(/&shy;|\u00ad/g, "").replace(/\*([^*\n]+)\*/g, "$1").replace(/\s*\n\s*/g, " ").trim();
+  }
+
+  // Whether this Chrome hyphenates a language with hyphens: auto (it needs that language's dictionary): a long
+  // word of the language, in a box far narrower than it, overflows with manual hyphenation; with auto it breaks.
+  // The probe word is a known one for common languages, else the caption's longest word; null when there's none
+  // long enough to tell (CJK, short captions).
+  var PROBE_WORDS = {
+    de: "Donaudampfschifffahrtsgesellschaft", en: "internationalization", fr: "anticonstitutionnellement",
+    nl: "arbeidsongeschiktheidsverzekering", es: "electroencefalografista", it: "precipitevolissimevolmente",
+    pt: "inconstitucionalissimamente", fi: "lentokonesuihkuturbiinimoottori", sv: "realisationsvinstbeskattning",
+    da: "speciallægepraksisplanlægning", nb: "personopplysningsloven", pl: "konstantynopolitańczykowianeczka",
+    ru: "человеконенавистничество", uk: "непередбачуваність", cs: "nejneobhospodařovávatelnějšími",
+    hu: "megszentségteleníthetetlenség", tr: "çekoslovakyalılaştıramadıklarımızdan"
+  };
+  var hyphenCache = {};
+  function hyphenationAvailable(lang, text) {
+    var language = String(lang || "en").split("-")[0].toLowerCase();
+    var word = PROBE_WORDS[language];
+    if (!word) {
+      word = plainText(text || "").split(/[\s\-\u2010-\u2015,.;:!?]+/).sort(function (a, b) {
+        return b.length - a.length;
+      })[0] || "";
+      if (word.length < 10 || /[\u2e80-\u9fff\uac00-\ud7af\u3040-\u30ff]/.test(word)) return null;
+    }
+    var key = language + ":" + word;
+    if (key in hyphenCache) return hyphenCache[key];
+    var probe = make("div", "", document.body);
+    probe.setAttribute("lang", lang || language);
+    probe.style.cssText = "position:absolute;left:-10000px;top:0;width:4em;font:20px sans-serif;" +
+      "overflow-wrap:normal;word-break:normal;white-space:normal;";
+    probe.textContent = word;
+    probe.style.hyphens = "manual"; probe.style.webkitHyphens = "manual";
+    var manual = probe.scrollWidth;
+    probe.style.hyphens = "auto"; probe.style.webkitHyphens = "auto";
+    var auto = probe.scrollWidth;
+    probe.parentNode.removeChild(probe);
+    hyphenCache[key] = auto < manual - 2;
+    return hyphenCache[key];
   }
   function cssNum(style, name, fallback) {
     var v = parseFloat(style.getPropertyValue(name));
@@ -362,7 +403,7 @@
     Array.from(text).forEach(function (ch) {
       if (/\s/.test(ch) || chars.indexOf(ch) >= 0) return;
       var cp = ch.codePointAt(0);
-      if (cp === 0x200d || (cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x300 && cp <= 0x36f)) return;
+      if (cp === 0x200d || cp === 0xad || (cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x300 && cp <= 0x36f)) return;
       chars.push(ch);
     });
     var stack = family ? '"' + family + '", ' + SYSTEM_STACK : SYSTEM_STACK;
@@ -748,6 +789,8 @@
         atFloor: fit ? fit.px <= fit.floorPx + 0.05 : false,
         fits: fit ? fit.ok : true,
         hyphenated: !!(fit && fit.ok && fit.hyphens === "auto"),
+        hyphenationAvailable: cap.text ? hyphenationAvailable(job.lang, cap.text) : null,
+        softHyphens: /&shy;|\u00ad/.test(cap.text || ""),
         box: captionItem ? captionItem.box : null,
         textShare: round(share, 4),
         missingGlyphs: missingGlyphs(all, cap.font || null),

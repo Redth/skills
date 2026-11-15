@@ -703,8 +703,8 @@ def run(config_path, locales=None, targets=None, shots=None, out=None, force=Fal
     for e in files:
         cap = e.get("caption") or {}
         if cap and cap.get("fits") is False:
-            log("error: %s: the caption doesn't fit in %d lines even at its floor (%.1f px): shorten it"
-                % (e["path"], cap.get("maxLines") or 0, cap.get("floorPx") or 0))
+            log("error: %s: the caption doesn't fit in %d lines even at its floor (%.1f px)%s"
+                % (e["path"], cap.get("maxLines") or 0, cap.get("floorPx") or 0, fit_hint(e)))
             code = EXIT_ERRORS
         elif cap and cap.get("atFloor"):
             log("note: %s: the caption shrank to its floor (%.1f px)" % (e["path"], cap.get("fontPx") or 0))
@@ -725,6 +725,20 @@ def run(config_path, locales=None, targets=None, shots=None, out=None, force=Fal
     log("%d rendered, %d unchanged, %d failed: %s" % (rendered, report["unchanged"], len(errors),
                                                        os.path.join(res.out, REPORT_NAME)))
     return code, report
+
+
+SOFT_HYPHEN_HELP = 'soft hyphens ("\\u00ad" in the JSON, or "&shy;")'
+
+
+def fit_hint(entry):
+    """How to fix a caption that doesn't fit: shorten it, or (where this Chrome can't hyphenate the language)
+    mark its break points with soft hyphens, which work in every Chrome."""
+    cap = entry.get("caption") or {}
+    if cap.get("hyphenationAvailable") is False:
+        lang = (entry.get("lang") or entry.get("locale") or "").split("-")[0]
+        return "; this Chrome can't hyphenate %s: add %s at the break points, or shorten it" % (
+            lang, SOFT_HYPHEN_HELP)
+    return ": shorten it"
 
 
 def _order(cfg):

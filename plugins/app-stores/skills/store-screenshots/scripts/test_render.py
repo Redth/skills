@@ -276,17 +276,69 @@ class RenderTests(Base):
         self.assertEqual(cap["proof"]["ink"], "#FFFFFF")
         self.assertIsNone(self.entry(report, "en-US/phone/plain.png")["caption"]["accent"])
 
+    LONG_DE = "Lebensmittelvorratsverwaltung leicht gemacht"
+    SOFT_DE = "Lebens\u00admittel\u00advorrats\u00adverwaltung leicht gemacht"
+
     def test_a_long_german_word_hyphenates_or_fits(self):
         cfg = kit.base_config()
         cfg["locales"] = ["en-US", "de-DE"]
-        cfg["strings"]["de-DE"] = {"cap.plan": "Lebensmittelvorratsverwaltung leicht gemacht"}
+        cfg["strings"]["de-DE"] = {"cap.plan": self.LONG_DE}
         code, report, lines = self.run_render(self.project(cfg), locales=["de-DE"])
+        cap = self.entry(report, "de-DE/phone/plan.png")["caption"]
+        if cap["hyphenationAvailable"]:
+            self.assertEqual(code, render.EXIT_OK, "\n".join(lines) + json.dumps(cap))
+            self.assertTrue(cap["fits"])
+            self.assertTrue(cap["hyphenated"] or cap["fontPx"] < cap["sizePx"])
+            self.assertLessEqual(cap["box"][0] + cap["box"][2], 300)
+            self.assertGreaterEqual(cap["box"][0], 0)
+            return
+        # This Chrome has no German dictionary (Linux builds often don't): the message says what to do, and the
+        # same words with soft hyphens at the break points fit.
+        self.assertIs(cap["hyphenationAvailable"], False)
+        self.assertEqual(code, render.EXIT_ERRORS)
+        self.assertTrue(any("this Chrome can't hyphenate de" in line and "soft hyphens" in line for line in lines),
+                        lines)
+        cfg["strings"]["de-DE"] = {"cap.plan": self.SOFT_DE}
+        code, report, lines = self.run_render(self.project(cfg, name="soft"), locales=["de-DE"])
         cap = self.entry(report, "de-DE/phone/plan.png")["caption"]
         self.assertEqual(code, render.EXIT_OK, "\n".join(lines) + json.dumps(cap))
         self.assertTrue(cap["fits"])
-        self.assertTrue(cap["hyphenated"] or cap["fontPx"] < cap["sizePx"])
-        self.assertLessEqual(cap["box"][0] + cap["box"][2], 300)
-        self.assertGreaterEqual(cap["box"][0], 0)
+
+    def test_no_dictionary_says_to_add_soft_hyphens(self):
+        # A language no Chrome has a hyphenation dictionary for: the probe says so on every platform.
+        cfg = kit.base_config()
+        cfg["locales"] = ["en-US", "zz-ZZ"]
+        cfg["strings"]["zz-ZZ"] = {"cap.plan": "Plimbarovastikulanderiomentaz voka"}
+        code, report, lines = self.run_render(self.project(cfg), locales=["zz-ZZ"])
+        cap = self.entry(report, "zz-ZZ/phone/plan.png")["caption"]
+        self.assertIs(cap["hyphenationAvailable"], False)
+        self.assertFalse(cap["fits"])
+        self.assertEqual(code, render.EXIT_ERRORS)
+        self.assertTrue(any("this Chrome can't hyphenate zz: add soft hyphens" in line for line in lines), lines)
+        cfg["strings"]["zz-ZZ"] = {"cap.plan": "Plimba&shy;rovasti&shy;kulande&shy;riomentaz voka"}
+        code, report, lines = self.run_render(self.project(cfg, name="soft"), locales=["zz-ZZ"])
+        cap = self.entry(report, "zz-ZZ/phone/plan.png")["caption"]
+        self.assertEqual(code, render.EXIT_OK, "\n".join(lines) + json.dumps(cap))
+        self.assertTrue(cap["fits"] and cap["softHyphens"])
+        self.assertEqual(cap["text"], "Plimbarovastikulanderiomentaz voka")
+
+    def test_soft_hyphens_break_even_where_hyphenation_works(self):
+        # Hyphenation (where this Chrome has it for English) finds no break in a word without vowels: the soft
+        # hyphens are what break it.
+        cfg = kit.base_config()
+        cfg["shots"] = [{"id": "plain", "capture": "plan", "caption": "a"},
+                        {"id": "soft", "capture": "plan", "caption": "b"}]
+        cfg["strings"]["en-US"] = {"a": "Mmmmmmmmmmmmmmmmmmmmmm",
+                                   "b": "Mmmmmmmmmmm\u00admmmmmmmmmmm"}
+        code, report, lines = self.run_render(self.project(cfg))
+        plain = self.entry(report, "en-US/phone/plain.png")["caption"]
+        soft = self.entry(report, "en-US/phone/soft.png")["caption"]
+        self.assertFalse(plain["fits"])
+        self.assertTrue(soft["fits"], soft)
+        self.assertTrue(soft["softHyphens"])
+        self.assertEqual(soft["text"], "Mmmmmmmmmmmmmmmmmmmmmm")
+        self.assertEqual(soft["missingGlyphs"], [])
+        self.assertGreater(soft["lines"], 1)
 
     def test_right_to_left_mirrors_the_layout(self):
         cfg = kit.base_config()

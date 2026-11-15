@@ -39,8 +39,15 @@ least legible a caption may be, not a target.
 ## Line breaking
 
 Each locale renders with its own language set on the page, so hyphenation and line breaking follow it:
-`hyphens: auto` breaks a long German compound with a hyphen, and lines are balanced. Hyphenation needs the
-language's dictionary in the Chrome that renders (check a German set rendered on Linux CI the first time).
+`hyphens: auto` breaks a long German compound with a hyphen, and lines are balanced.
+
+**Hyphenation depends on the Chrome that renders.** `hyphens: auto` needs the language's dictionary, and Linux
+builds of Chrome often have none (macOS's has them), so a caption that fits on a Mac can fail at its floor on Linux
+CI. The report says which: `caption.hyphenationAvailable` (`true`, `false`, or `null` where it can't tell), and a
+caption that doesn't fit where it's `false` says to add soft hyphens. **Soft hyphens are the portable fix:** mark
+where a long word may break with U+00AD (`"\u00ad"` in the JSON) or `&shy;`, as in
+`"Lebens\u00admittel\u00advorrats\u00adverwaltung"`. Every Chrome breaks there, with a hyphen, only when it needs to;
+the report's `text` (and the checks' word counts) leave them out.
 For CJK, read the breaks on the contact sheet: Korean reads best with words kept whole, Japanese with strict line
 breaking (no small kana or closing punctuation starting a line). A bad break is a reason to reword, as a too-long
 line is.

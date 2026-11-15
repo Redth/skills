@@ -955,10 +955,16 @@ class Check:
             return
         text = cap["text"]
         if cap.get("fits") is False:
+            if cap.get("hyphenationAvailable") is False:
+                lang = (f.get("lang") or f.get("locale") or "").split("-")[0]
+                fix = ("; this Chrome can't hyphenate %s: add soft hyphens (\"\\u00ad\" in the JSON, or \"&shy;\") "
+                       "at the break points, or shorten it" % lang)
+            else:
+                fix = ": shorten it"
             self.report.add(store, own_finding(
                 "design.caption.fit", "error", where,
-                "caption \"%s\" doesn't fit even at the font floor (%s px): shorten it" % (
-                    text, _num(cap.get("floorPx")))))
+                "caption \"%s\" doesn't fit even at the font floor (%s px)%s" % (
+                    text, _num(cap.get("floorPx")), fix)))
         elif cap.get("atFloor"):
             self.report.add(store, own_finding(
                 "design.caption.floor", "warning", where,
