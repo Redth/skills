@@ -1,16 +1,15 @@
 ---
 name: store-capture
 description: >
-  Use this skill to take our app's App Store or Google Play screenshots on every iPhone, iPad, Android phone,
-  tablet, TV or Mac size the stores need, in every language, with a clean status bar and demo data, staged with
-  the user (which screens, who's signed in, what data each shows) and reused on every later capture; capture
-  from a simulator, emulator, device, browser, Mac window or game engine; drive the app there with its in-app
-  agent (DevFlow for .NET MAUI, Ailoha), Appium, XCUITest, UI Automator, Maestro, simctl or adb; add a
-  screenshot mode (a launch argument or deep link) to the app; import fastlane snapshot, screengrab, xcresult,
-  Maestro, Flutter, Detox or Playwright screenshots; check captures' sizes; or record and encode an App Store
-  preview video. Any stack. Do not use for designing, captioning or framing screenshots (store-screenshots),
-  the listing's words or sending it to a store (store-listings), building, signing or uploading the app, or
-  UI testing, test automation or videos that aren't for a store listing.
+  Use this skill to take our app's App Store or Google Play screenshots on every iPhone, iPad, Android, TV or
+  Mac size the stores need, in every language, with a clean status bar and demo data, staged with the user
+  (which screens, who's signed in, what each shows) and reused on later captures; capture from a simulator,
+  emulator, device, browser, Mac window or game engine; drive the app with its in-app agent (DevFlow for .NET
+  MAUI, Ailoha), Appium, XCUITest, UI Automator, Maestro, simctl or adb; add a screenshot mode (a launch
+  argument or deep link); import fastlane, xcresult, Maestro, Flutter, Detox or Playwright screenshots; check
+  captures' sizes; or record and encode an App Store preview video. Any stack. Do not use for designing,
+  captioning or framing screenshots (store-screenshots), the listing's words or sending it (store-listings),
+  building, signing or uploading the app, or UI testing and videos that aren't for a store listing.
 license: MIT
 ---
 
