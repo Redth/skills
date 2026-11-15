@@ -3,17 +3,19 @@
 
 Subcommands (run from the user's project; every one is offline):
 
-    listing.py import --from fastlane|supply|triple-t|expo <path> [--out store-listing.json] [--platform P]
+    listing.py import --from fastlane|supply|triple-t|expo|live <path> [--out store-listing.json] [--platform P]
     listing.py check  [--config store-listing.json] [--stores apple,google] [--json]
     listing.py build  [--config store-listing.json] [--out out]
     listing.py preview [--config store-listing.json] [--out out] [--png]
+    listing.py diff   [--config store-listing.json] [--existing existing] [--stores apple,google] [--json]
 
 ``check`` validates the config against ``schema/store-listing.schema.json``, then runs every rule in
 ``rules/<store>.json`` for each enabled store on the words (after locale fallback) and the picture files.
 ``build`` runs the check (errors stop it) and writes ``out/``: fastlane ``deliver`` and ``supply`` layouts,
 ``out/listing.json`` (what ``push.py`` reads) and ``out/checklist.md``. ``preview`` draws each store's page
 from ``out/`` as HTML (and, with ``--png``, pictures through headless Chrome). ``import`` starts or extends a
-config from fastlane, Triple-T or Expo metadata.
+config from fastlane, Triple-T or Expo metadata, or from what ``push.py pull`` read off the stores (``live``);
+``diff`` compares the config's words with that (offline: it reads ``existing/``).
 
 Exit codes: 0 done; 1 a check error; 3 usage or environment (no config, no Chrome).
 """
@@ -2000,6 +2002,12 @@ def cmd_preview(args):
     return listing_preview.main(args)
 
 
+def cmd_diff(args):
+    """``listing.py diff``."""
+    import listing_live
+    return listing_live.cmd_diff(args)
+
+
 def cmd_import(args):
     """``listing.py import``."""
     import listing_import
@@ -2012,8 +2020,9 @@ def parser():
                                 "(store-listing.json). Offline: nothing here reaches a network.")
     sub = p.add_subparsers(dest="command")
     imp = sub.add_parser("import", help="start or extend a config from fastlane, supply, Triple-T or Expo metadata")
-    imp.add_argument("--from", dest="source", required=True, choices=("fastlane", "supply", "triple-t", "expo"))
-    imp.add_argument("path", help="the metadata folder (or Expo's store.config.json)")
+    imp.add_argument("--from", dest="source", required=True, choices=("fastlane", "supply", "triple-t", "expo", "live"))
+    imp.add_argument("path", help="the metadata folder (Expo's store.config.json; for live, what push.py pull wrote: "
+                                  "existing/)")
     imp.add_argument("--out", default="store-listing.json", help="the config to write or merge into")
     imp.add_argument("--platform", choices=APPLE_PLATFORMS,
                      help="fastlane only: the Apple platform the folder is for (default: what its screenshots fit, "
@@ -2025,6 +2034,11 @@ def parser():
     bld = sub.add_parser("build", help="check, then write out/ (fastlane layouts, listing.json, checklist.md)")
     bld.add_argument("--config", default="store-listing.json")
     bld.add_argument("--out", default="out")
+    dif = sub.add_parser("diff", help="the config's words and picture counts against what push.py pull read")
+    dif.add_argument("--config", default="store-listing.json")
+    dif.add_argument("--existing", default="existing", help="what push.py pull wrote (default: existing)")
+    dif.add_argument("--stores", help="comma-separated: apple,google (default: every store pulled)")
+    dif.add_argument("--json", action="store_true", help="print the entries as JSON")
     prv = sub.add_parser("preview", help="draw each store's page from out/ as HTML (and PNG with --png)")
     prv.add_argument("--config", default="store-listing.json", help="(unused unless out/ has no build)")
     prv.add_argument("--out", default="out")
@@ -2042,7 +2056,8 @@ def main(argv=None):
     if not args.command:
         p.print_help()
         return EXIT_USAGE
-    handler = {"import": cmd_import, "check": cmd_check, "build": cmd_build, "preview": cmd_preview}[args.command]
+    handler = {"import": cmd_import, "check": cmd_check, "build": cmd_build, "preview": cmd_preview,
+               "diff": cmd_diff}[args.command]
     try:
         return handler(args)
     except UsageError as e:

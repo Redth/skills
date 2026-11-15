@@ -15,9 +15,11 @@ Hard constraints everywhere:
    annotations` is fine. External commands allowed: `openssl` (token signing), Google Chrome / Chromium
    (rendering), `ffmpeg`/`ffprobe` (video, optional, detected). Each is found at run time and its absence
    explained.
-2. **No network by default.** Only `push.py` reaches a network, only the stores' own API hosts
+2. **No network by default.** Only `push.py` reaches a network, only the stores' own hosts
    (`api.appstoreconnect.apple.com`, Apple's upload hosts it's told to use, `oauth2.googleapis.com`,
-   `androidpublisher.googleapis.com`), and only `push.py apply` writes.
+   `androidpublisher.googleapis.com`; for `pull`, also Apple's public `itunes.apple.com`, Apple's image and media
+   CDN `*.mzstatic.com` and Play's image hosts `play-lh.googleusercontent.com` and `lhN.googleusercontent.com`), and
+   only `push.py apply` writes. `push.py pull` only reads, like `plan`.
 3. **Privacy.** No real names, emails, ids, hosts, paths or keys in anything committed: examples use the
    invented app below. Secrets come from environment variables, never the config.
 4. **Self-contained skills.** A skill references only files inside its own folder. Code and data two skills
@@ -55,8 +57,8 @@ plugins/app-stores/
       rules/                      (copied from shared/rules)
       scripts/
         appstores_lib/            (copied from shared)
-        listing.py                import | check | build | preview (§5)
-        push.py                   plan | apply (§5)
+        listing.py                import | check | build | preview | diff (§5)
+        push.py                   plan | apply | pull (§5; pull's code is push_pull.py)
         test_*.py                 unit tests, against fixtures in evals/files/
       templates/preview/          the page previews' HTML/CSS
       evals/evals.json  evals/trigger-evals.json  evals/files/
@@ -295,6 +297,8 @@ Every function documented with a docstring; every module has `test_<module>.py`.
   `HttpError(status, method, url, body_text)` only from `request_json(...)`, which also parses JSON.
   `TRANSPORT`: a module-level hook tests replace with a fake (`callable(method, url, headers, body, timeout) ->
   Response`), so no test touches a network.
+  `REDIRECT_ALLOWED`: a caller's guard (`callable(url) -> bool`, default `None`: any) on the real transport's
+  redirects: a GET follows one only to a URL it accepts (a refused one comes back as its 3xx); writes never follow.
 - **`jwt.py`**: `load_key(value) -> str` (PEM text from a path, the text, or base64 of either; strips
   whitespace damage); `es256(pem, header, claims) -> str` (signs with `openssl dgst -sha256 -sign`, converts the
   DER signature to raw `r‖s`, 32 bytes each); `rs256(pem, header, claims) -> str`; `find_openssl()`.
@@ -305,7 +309,7 @@ Every function documented with a docstring; every module has `test_<module>.py`.
 
 `listing.py` (store-listings):
 
-- `import --from fastlane|supply|triple-t|expo <path> [--out store-listing.json] [--platform IOS|MAC_OS|TV_OS|VISION_OS]`:
+- `import --from fastlane|supply|triple-t|expo|live <path> [--out store-listing.json] [--platform IOS|MAC_OS|TV_OS|VISION_OS]`:
   a first config from those layouts (words per locale, URLs, categories where present, screenshots copied into
   the folder layout). A fastlane folder is one Apple platform's (`--platform`, else its screenshots', else IOS); a
   later platform's differing words become its `apple.platforms.<P>` overrides. Each store's `locales` and primary
@@ -313,6 +317,15 @@ Every function documented with a docstring; every module has `test_<module>.py`.
   `shot-NN` for a folder whose names don't each name a moment); Apple screens are named by device class
   (`iphone`, `ipad`, `mac`, `apple-tv`, `vision-pro`) unless a class has two display types; Play slots whose
   pictures are byte-identical share one screen.
+  `--from live <existing/>` reads what `push.py pull` wrote (below): words, ids, URLs, categories, the age rating
+  answers the rules know, App Review's notes, screenshots (their slot by display type, or by pixel size for the
+  public lookup's device folders; pictures at no store size stay in `existing/`; shot ids from the uploaded file
+  names, another locale's by position), and a field a non-primary locale leaves empty on the store as `""`; then it
+  prints a summary of what's live (locales, lengths, pictures per slot).
+- `diff [--config …] [--existing existing] [--stores apple,google] [--json]`: the config's resolved words (per
+  locale and Apple platform), categories, copyright and picture counts per slot against `existing/<store>/listing.json`;
+  each entry `unchanged`, `changed` (before → after), `only-live` (the config leaves it: the store keeps it) or
+  `only-ours`. Fields a public pull lacks (`notPublic`) aren't compared. Offline; exit 0, or 3 with nothing pulled.
 - `check [--config …] [--stores apple,google] [--json]`: schema, then every rule of every enabled store on the
   resolved words and the screenshot files; prints findings grouped by store and severity; exit 1 on any error.
 - `build [--config …] [--out out]`: runs `check` first (stops on errors), then writes `out/` (below).
@@ -403,6 +416,63 @@ The plan file:
 
 `apply` also refuses when `out/listing.json` no longer matches `listingSha256`.
 
+- `pull <apple|google> [--out existing] [--config store-listing.json] [--id ID] [--public] [--country us,gb]`: reads
+  what's live (GET only; on Google an edit opened to read and deleted, as `plan` does) and writes `existing/<store>/`
+  (below). The app is `--id` (Apple's bundle id or numeric app id, Play's package), else the config's `app.ids`; the
+  key is the environment's, as for `plan` (the config's `stores.<store>.auth` may name the variables). Apple: the
+  app information that's live (categories, the age rating declaration, each locale's name, subtitle, privacy URLs
+  and Apple TV text), and per platform the version on sale (else the newest): copyright, each locale's words,
+  screenshots per display type and previews per preview type, downloaded at full size from each asset's
+  `templateUrl`; App Review's `notes` and `demoAccountRequired`, never its contact or demo account. Google: the
+  details, each language's listing and every image type's images. `--public` (Apple, no key): Apple's iTunes Lookup
+  API (`https://itunes.apple.com/lookup?bundleId=…&country=…`, then `&entity=macSoftware`), per storefront country
+  (`--country`, default `us`; `CC:locale` names its language): name, description, release notes, seller, website,
+  version, genres as categories, and the iPhone, iPad and Apple TV screenshot URLs, downloaded; a storefront whose
+  words repeat an earlier one's is left out. `pull google --public` is exit 3 (no public API). Downloads go only to
+  the hosts in constraint 2, following redirects only there; one that can't be had is listed in `failed` and the
+  pull exits 1 with the words written. A folder at `existing/<store>/` that `pull` didn't write is never replaced
+  (exit 3).
+
+`existing/` layout:
+
+```
+existing/<store>/
+  listing.json                   the store's shape in listing.json's vocabulary (store's own locale codes)
+  README.md                      a summary: locales, lengths, pictures per slot, notes, what isn't public
+  screenshots/<locale>/<slot>/<NN>.<ext>     Apple: display type (public: iphone|ipad|apple-tv|mac); Google: image type
+  previews/<locale>/<preview type>/<NN>.<ext>   Apple only
+```
+
+`existing/<store>/listing.json`:
+
+```json
+{
+  "version": 1, "store": "apple", "source": "App Store Connect", "pulledBy": "push.py pull", "pulledAt": "…",
+  "apple": {
+    "appId": "…", "bundleId": "…", "primaryLocale": "en-US",
+    "app": { "state": "READY_FOR_DISTRIBUTION", "categories": {…}, "ageRating": {…},
+             "localizations": { "en-US": { "name": "…", "subtitle": "…", "privacyPolicyUrl": "…",
+                                           "privacyChoicesUrl": null, "privacyPolicyText": null } } },
+    "platforms": { "IOS": { "version": "1.3", "state": "READY_FOR_DISTRIBUTION", "copyright": "…",
+      "localizations": { "en-US": { "description": "…", "keywords": "…", "promotionalText": "…", "whatsNew": "…",
+                                    "marketingUrl": "…", "supportUrl": "…" } },
+      "screenshots": { "en-US": { "APP_IPHONE_67": [ { "file": "screenshots/en-US/APP_IPHONE_67/01.png",
+          "fileName": "…", "width": 1290, "height": 2796, "md5": "the upload's", "downloadedMd5": "the file's" } ] } },
+      "previews": { "en-US": { "IPHONE_67": [ { "file": "…", "url": null, "posterFrame": "…", "mime": "video/mp4" } ] } } } },
+    "review": { "notes": "…", "demoAccountRequired": false }
+  },
+  "notes": [ "…" ], "failed": [ ]
+}
+```
+
+Google's `google` section: `package`, `defaultLanguage`, `details` (`contactEmail`, `contactWebsite`,
+`contactPhone`), `listings` per language (`title`, `shortDescription`, `fullDescription`, `video`), `images` per
+language and image type (`file`, `sha256` Play's, `downloadedSha256`, `width`, `height`). A public pull adds
+`notPublic` (the fields it can't have: subtitle, keywords, promotional text, support and privacy URLs, copyright,
+the age rating answers, review notes, previews) and `public` (per country: locale, store URL, seller, website,
+version, release date, genres, age rating text, advisories, languages, price, icon URL); its source is
+`iTunes Lookup (public)`.
+
 As built (wave 2): `listing.json` also has the Apple TV privacy text in `apple.app.localizations[<primary>].privacyPolicyText`, `apple.auth` and
 `google.auth` (variable names), and `apple.review.contact`/`demoAccount` as variable names (`demoAccount: null` = no
 sign-in needed). An unset Play `video` is `null` (left as the store has it); `""` clears it. The plan file also
@@ -442,7 +512,8 @@ Behaviour the docs and evals rely on:
 rule and its source and date), `apple.md`, `google.md` (what each sends, slots, quirks, keys and roles),
 `words.md` (limits, price words by field, other platforms, What's New), `forms.md` (App Privacy, Play Data safety,
 age and content ratings: the stores' definitions quoted and dated), `sending.md` (plan and apply, retries, the one
-open edit, review in progress), `importing.md`, `pitfalls.md`, `agent-rules.md`.
+open edit, review in progress; pull is read-only), `existing.md` (starting from what's live: pull, `existing/`,
+the public lookup, import, diff), `importing.md`, `pitfalls.md`, `agent-rules.md`.
 
 ---
 

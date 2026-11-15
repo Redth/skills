@@ -21,5 +21,8 @@
   { "query": "Set up a monthly subscription and in-app purchases in App Store Connect.", "should_trigger": false },
   { "query": "Fix the code signing error when archiving for the App Store.", "should_trigger": false },
   { "query": "Write a product description for our landing page.", "should_trigger": false },
-  { "query": "Add Game Center achievements to our game.", "should_trigger": false }
+  { "query": "Add Game Center achievements to our game.", "should_trigger": false },
+  { "query": "Our app is already on the App Store. Pull what our listing says right now so we can start the rewrite from it.", "should_trigger": true },
+  { "query": "We don't have App Store Connect keys. Can you get our current App Store description and screenshots from the public page?", "should_trigger": true },
+  { "query": "Before we send the new store copy, show me what changes compared with what's live on Google Play.", "should_trigger": true }
 ]

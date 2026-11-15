@@ -6,6 +6,7 @@ Sources (``references/importing.md``):
 - ``supply``: fastlane ``supply``'s ``metadata/android/`` for Google Play.
 - ``triple-t``: Gradle Play Publisher's ``play/`` folder for Google Play.
 - ``expo``: Expo's ``store.config.json`` (EAS Metadata) for the App Store.
+- ``live``: what ``push.py pull`` read from the stores into ``existing/<store>/`` (``references/existing.md``).
 
 Running it again into the same config merges: a value the config already has (not null) is never
 overwritten, and the import says what it took and what it kept. App Review's contact details and demo
@@ -744,10 +745,12 @@ def _apple_screenshots(m, shots_dir, platform=None):
     return out
 
 
-def _import_apple_screenshots(m, pictures):
-    """Copy fastlane's screenshots into the config's layout: a screen per device class (``iphone``, ``ipad``,
-    ``mac``, ``apple-tv``…), or per display type (``iphone-67``) where a class has pictures in two; shot ids
-    from the file names."""
+def _import_apple_screenshots(m, pictures, names=None, primary=None):
+    """Copy fastlane's (or a pull's) screenshots into the config's layout: a screen per device class (``iphone``,
+    ``ipad``, ``mac``, ``apple-tv``…), or per display type (``iphone-67``) where a class has pictures in two; shot
+    ids from the file names. ``names``: each source file's own name to take the id from (a pull's files are
+    ``01.png``…; the store kept the uploaded name), and then another locale's pictures on a screen take the
+    ``primary`` locale's ids by position (the same set, translated)."""
     keys_by_class = collections.OrderedDict()
     for _, _, key, slot in pictures:
         cls = DEVICE_CLASS.get((slot.get("platform"), slot.get("kind")))
@@ -768,8 +771,22 @@ def _import_apple_screenshots(m, pictures):
             (c for c in classes if screen.startswith(c.split("-")[0] + "-")), None)
         return (loc, classes.index(cls) if cls in classes else len(classes), screen)
 
+    first_ids = {}
+    if names:
+        for (loc, screen), (_, _, files) in groups.items():
+            if loc == primary:
+                first_ids[screen], named = shot_ids([names.get(f, f) for f in files], loc, _display_types())
+                m.generic_ids = m.generic_ids or not named
     for (loc, screen), (kind, platform, files) in sorted(groups.items(), key=rank):
-        m.add_screenshots(files, loc, screen, kind)
+        ids = None
+        if names:
+            ids = first_ids.get(screen) if loc == primary else None
+            if ids is None and screen in first_ids and len(files) <= len(first_ids[screen]):
+                ids = first_ids[screen][:len(files)]
+            if ids is None:
+                ids, named = shot_ids([names.get(f, f) for f in files], loc, _display_types())
+                m.generic_ids = m.generic_ids or not named
+        m.add_screenshots(files, loc, screen, kind, ids)
         m.add_platform_screen(platform, screen)
     return len(pictures)
 
@@ -1076,15 +1093,348 @@ def import_triple_t(m, path):
 
 
 # ---------------------------------------------------------------------------------------------------------
+# What's live: push.py pull's existing/<store>/
 
-SOURCES = {"fastlane": import_fastlane, "supply": import_supply, "triple-t": import_triple_t, "expo": import_expo}
+LIVE_VERSION_FIELDS = ("description", "keywords", "promotionalText", "whatsNew", "marketingUrl", "supportUrl")
+LIVE_URLS = {"marketingUrl": "marketing", "supportUrl": "support"}
+PLATFORM_KIND = {"IOS": "phone", "MAC_OS": "desktop", "TV_OS": "tv", "VISION_OS": "xr"}
+
+
+def _blank(value):
+    """A store's empty value (``None``, ``""``, ``[]``) as None: nothing to take."""
+    if value is None or (isinstance(value, (str, list)) and not value):
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
+def import_live(m, path):
+    """What ``push.py pull`` wrote (``existing/``, or one store's folder) into the config: the words, ids, URLs,
+    categories, age rating answers, App Review's notes and the pictures, as the other imports do (a value the
+    config has is never replaced)."""
+    import listing_live
+    try:
+        found = listing_live.find(path)
+    except listing_live.LiveError as e:
+        raise ImportError_(str(e))
+    except jsonio.JsonError as e:
+        raise ImportError_(str(e))
+    m.live = found
+    if "apple" in found:
+        _live_apple(m, *found["apple"])
+    if "google" in found:
+        _live_google(m, *found["google"])
+
+
+def _live_apple(m, folder, doc):
+    import listing
+    A = doc["apple"]
+    m.apple()
+    m.set(["app", "ids", "apple", "bundleId"], A.get("bundleId"))
+    m.set(["app", "ids", "apple", "appId"], A.get("appId"))
+    app = A.get("app") or {}
+    infos = app.get("localizations") or {}
+    plats = [(p, A["platforms"][p]) for p in listing.APPLE_PLATFORMS
+             if isinstance((A.get("platforms") or {}).get(p), dict)]
+    codes = list(infos)
+    for _, P in plats:
+        codes += [c for c in (P.get("localizations") or {}) if c not in codes]
+    bcp = collections.OrderedDict((c, _bcp47(c, "apple")) for c in codes)
+    store_primary = _bcp47(A["primaryLocale"], "apple") if A.get("primaryLocale") else None
+    m.choose_primary(list(bcp.values()), store_primary)
+    apple_locs = list(bcp.values())
+    apple_primary = None
+    for cand in (m.get(["stores", "apple", "primaryLocale"]), store_primary, m.primary) + tuple(apple_locs[:1]):
+        if cand in apple_locs:
+            apple_primary = cand
+            break
+    if apple_locs:
+        m.set_store_locales("apple", apple_locs, "primaryLocale", apple_primary)
+    first = plats[0][0] if plats else None
+    overriding_first = "apple" not in m.new_stores and first not in m.old_platforms and bool(m.old_platforms)
+    overridden = []
+    order = sorted(bcp.items(), key=lambda kv: (kv[1] != apple_primary, kv[1] != m.primary, codes.index(kv[0])))
+    for code, loc in order:
+        a = infos.get(code) or {}
+        name = _blank(a.get("name"))
+        if loc == m.primary and name is not None and m.set(["app", "name"], name):
+            name = None
+        if name is not None and name == m.get(["app", "name"]) and m.primary_value("apple", "name") is None:
+            name = None
+        m.set_word(loc, "apple", "name", name)
+        m.set_word(loc, "apple", "subtitle", _blank(a.get("subtitle")))
+        for key, target in (("privacyPolicyUrl", "privacy"), ("privacyChoicesUrl", "privacyChoices")):
+            value = _blank(a.get(key))
+            if value is None:
+                continue
+            if loc == apple_primary or m.get(["app", "urls", target]) is None:
+                m.set(["app", "urls", target], value)
+            elif m.get(["app", "urls", target]) != value:
+                m.notes.append("%s's %s differs from the primary locale's: the config has one for every locale"
+                               % (loc, key))
+        if _blank(a.get("privacyPolicyText")) and loc == apple_primary:
+            rel = "apple-tv-privacy.txt"
+            dst = os.path.join(m.dir, rel)
+            if not os.path.exists(dst):
+                with open(dst, "w", encoding="utf-8") as f:
+                    f.write(a["privacyPolicyText"].strip() + "\n")
+            m.set(["stores", "apple", "tvPrivacyText"], rel)
+        for i, (platform, P) in enumerate(plats):
+            words = (P.get("localizations") or {}).get(code)
+            if not words:
+                continue
+            overriding = i > 0 or overriding_first
+            for field in LIVE_VERSION_FIELDS:
+                value = _blank(words.get(field))
+                if field == "keywords":
+                    value = _keywords(value)
+                if value is None:
+                    continue
+                if overriding:
+                    now = listing.Listing(m.path, m.data).resolve(loc, "apple." + field, "apple", platform)[0]
+                    if now is not None:
+                        if now != value:
+                            m.set(["locales", loc, "apple", "platforms", platform, field], value)
+                            overridden.append("%s %s %s" % (loc, platform, field))
+                        continue
+                if field == "description":
+                    m.set_description(loc, "apple", "description", value)
+                elif field in LIVE_URLS:
+                    key = LIVE_URLS[field]
+                    if loc == apple_primary or m.get(["app", "urls", key]) is None:
+                        m.set(["app", "urls", key], value)
+                    elif m.get(["app", "urls", key]) != value:
+                        m.set(["locales", loc, "apple", "platforms", platform, field], value)
+                else:
+                    m.set_word(loc, "apple", field, value)
+            if loc == apple_primary and _blank(words.get("whatsNew")) and i == 0:
+                text = words["whatsNew"].strip()
+                m.notes.append("%s What's New came across from version %s (\"%s\"): the next version needs its own"
+                               % (loc, P.get("version") or "?", text[:60] + ("…" if len(text) > 60 else "")))
+    if overridden:
+        m.notes.append("words that differ between the live platforms are each platform's own "
+                       "(locales.<loc>.apple.platforms.<P>): %s" % ", ".join(overridden))
+    _live_apple_empties(m, plats, order, infos, apple_primary, overriding_first)
+    for _, P in plats:
+        text, changed = _copyright(_blank(P.get("copyright")))
+        if text and m.set(["app", "copyright"], text) and changed:
+            m.notes.append("the copyright's leading sign was dropped: Apple adds it")
+        if text:
+            break
+    cats = app.get("categories") or {}
+    for which in ("primary", "secondary"):
+        m.set(["stores", "apple", "categories", which], _blank(cats.get(which)))
+        subs = [x for x in (cats.get(which + "Subcategories") or []) if x]
+        node = m.node(["stores", "apple", "categories"])
+        if subs and not node.get(which + "Subcategories"):
+            node[which + "Subcategories"] = subs[:2]
+            m.took.append("stores.apple.categories.%sSubcategories" % which)
+    rating = app.get("ageRating") or {}
+    if rating:
+        try:
+            known = jsonio.load(os.path.join(RULES_DIR, "apple.json")).get("ageRating", {}).get("attributes", {})
+        except (jsonio.JsonError, OSError):
+            known = {}
+        skipped = []
+        for key, value in rating.items():
+            if value is None:
+                continue
+            if key in known:
+                m.set(["stores", "apple", "ageRating", key], value)
+            else:
+                skipped.append(key)
+        if skipped:
+            m.notes.append("age rating answers App Store Connect keeps that aren't in the rules' current attributes "
+                           "weren't imported: %s" % ", ".join(sorted(skipped)))
+    review = A.get("review") or {}
+    m.set(["stores", "apple", "review", "notes"], _blank(review.get("notes")))
+    if review.get("demoAccountRequired"):
+        a = m.apple()
+        if a["review"].get("demoAccount") is None:
+            a["review"]["demoAccount"] = collections.OrderedDict(DEMO_ENV)
+            m.took.append("stores.apple.review.demoAccount (environment variable names)")
+            m.not_copied.append("the demo account (App Review needs a sign-in): set %s" % ", ".join(DEMO_ENV.values()))
+    m.not_copied.append("App Review's contact (personal: never pulled): set %s" % ", ".join(REVIEW_ENV.values()))
+    _live_apple_pictures(m, folder, plats, apple_primary)
+    if doc.get("notPublic"):
+        m.notes.append("pulled from the public lookup: %s aren't public, so the config doesn't have them yet (pull "
+                       "with the key, or write them)" % ", ".join(doc["notPublic"]))
+
+
+def _live_apple_empties(m, plats, order, infos, primary, overriding_first):
+    """A field a locale leaves empty on the store, where the config would fall back to another locale's words, is
+    set to ``""`` (so a plan leaves it empty, not filled with the primary's); a platform missing a locale is said."""
+    import listing
+    lst = listing.Listing(m.path, m.data)
+    emptied, missing = [], []
+    for code, loc in order:
+        a = infos.get(code)
+        if a is not None and loc != primary and _blank(a.get("subtitle")) is None \
+                and _blank(lst.resolve(loc, "apple.subtitle")[0]) is not None:
+            if m.set(["locales", loc, "apple", "subtitle"], ""):
+                emptied.append("%s subtitle" % loc)
+        for i, (platform, P) in enumerate(plats):
+            words = (P.get("localizations") or {}).get(code)
+            if words is None:
+                missing.append("%s %s" % (platform, loc))
+                continue
+            own = i > 0 or overriding_first
+            if not own and loc == primary:
+                continue
+            for field in ("description", "keywords", "promotionalText", "whatsNew"):
+                if _blank(words.get(field)) is not None:
+                    continue
+                if _blank(lst.resolve(loc, "apple." + field, "apple", platform)[0]) is None:
+                    continue
+                keys = ["locales", loc, "apple"] + (["platforms", platform] if own else []) + [field]
+                if m.set(keys, [] if field == "keywords" else ""):
+                    emptied.append("%s%s %s" % (loc, " " + platform if own else "", field))
+    if emptied:
+        m.notes.append("empty on the store, so set to \"\" (not left to fall back to another locale's words): %s"
+                       % ", ".join(emptied))
+    if missing:
+        m.notes.append("the store has no %s listing: the config gives every App Store locale to every platform, so "
+                       "a plan would add %s (with the locale's words): leave the locale out of stores.apple.locales "
+                       "if that's not wanted" % (", ".join(missing), "it" if len(missing) == 1 else "them"))
+
+
+def _live_apple_pictures(m, folder, plats, primary):
+    """The pulled screenshots into the config's layout (their slot by display type, or by pixel size for the
+    public lookup's device folders); pictures at no store size stay in existing/ as the current set."""
+    import listing
+    slots = _apple_slots()
+    pictures, names = [], {}
+    reference = collections.Counter()
+    copies = 0
+    for platform, P in plats:
+        for code, by_slot in (P.get("screenshots") or {}).items():
+            loc = _bcp47(code, "apple")
+            for slot_key, items in (by_slot or {}).items():
+                for item in items or []:
+                    src = os.path.join(folder, item["file"]) if item.get("file") else None
+                    if not src or not os.path.isfile(src):
+                        continue
+                    try:
+                        info = png.info(src)
+                    except (png.ImageError, OSError) as e:
+                        m.notes.append("%s wasn't imported: %s" % (item["file"], e))
+                        continue
+                    key, slot = slot_key, slots.get(slot_key)
+                    if slot is None or not listing.fits((info.width, info.height), slot.get("sizes") or [],
+                                                        slot.get("orientation")):
+                        key, slot = _apple_slot_for((info.width, info.height), slots, platform)
+                    if key is None:
+                        reference[slot_key] += 1
+                        continue
+                    pictures.append((src, loc, key, slot))
+                    names[src] = item.get("fileName") or os.path.basename(src)
+                    if item.get("md5") and item.get("downloadedMd5") and item["md5"] != item["downloadedMd5"]:
+                        copies += 1
+    _import_apple_screenshots(m, pictures, names, primary)
+    for platform, P in plats:
+        if not isinstance((m.apple().get("platforms") or {}).get(platform), dict):
+            kind = PLATFORM_KIND[platform]
+            screen = DEVICE_CLASS.get((platform, kind))
+            m.add_platform_screen(platform, screen)
+            m.node(["screens"]).setdefault(screen, collections.OrderedDict([("kind", kind)]))
+            m.notes.append("no %s screenshots at a store size were imported: stores.apple.platforms.%s lists the "
+                           "screen '%s' for the new pictures" % (platform, platform, screen))
+    if reference:
+        m.notes.append("%s at no App Store size (the public page's smaller copies) weren't copied into the config: "
+                       "they're the current set in %s/screenshots/, for making the new ones (%s)" % (
+                           "1 picture is" if sum(reference.values()) == 1 else "%d pictures are" % sum(reference.values()),
+                           _shown(folder), ", ".join("%s %d" % kv for kv in reference.items())))
+    if copies:
+        m.notes.append("%d screenshot%s copied in %s App Store Connect's own cop%s, not the file%s uploaded: if %s "
+                       "stay, push.py plan replaces the store's with %s. Put the originals or the new set in their "
+                       "place before planning, or leave a screen out of stores.apple.platforms.<P>.screens to keep "
+                       "that slot as the store has it" % (
+                           copies, "" if copies == 1 else "s", "is" if copies == 1 else "are", "y" if copies == 1 else "ies",
+                           "" if copies == 1 else "s", "it" if copies == 1 else "they", "it" if copies == 1 else "them"))
+
+
+def _live_files(folder, items, copies):
+    """A pulled image type's files that are there, in order; ``copies`` gains each that isn't Play's original."""
+    out = []
+    for item in items or []:
+        src = os.path.join(folder, item["file"]) if item.get("file") else None
+        if src and os.path.isfile(src):
+            out.append(src)
+            if item.get("sha256") and item.get("downloadedSha256") and item["sha256"] != item["downloadedSha256"]:
+                copies.append(src)
+    return out
+
+
+def _live_google(m, folder, doc):
+    G = doc["google"]
+    m.google()
+    m.set(["app", "ids", "google", "package"], G.get("package"))
+    details = G.get("details") or {}
+    m.set(["app", "contact", "email"], _blank(details.get("contactEmail")))
+    m.set(["app", "contact", "website"], _blank(details.get("contactWebsite")))
+    m.set(["app", "contact", "phone"], _blank(details.get("contactPhone")))
+    listings = G.get("listings") or {}
+    if not listings:
+        m.notes.append("Play has no listing in any language yet")
+        return
+    bcp = collections.OrderedDict((c, _bcp47(c, "google")) for c in listings)
+    preferred = _bcp47(G["defaultLanguage"], "google") if G.get("defaultLanguage") else None
+    m.choose_primary(list(bcp.values()), preferred)
+    values = collections.OrderedDict()
+    for code, loc in bcp.items():
+        v = listings.get(code) or {}
+        values[loc] = {"title": _blank(v.get("title")), "shortDescription": _blank(v.get("shortDescription")),
+                       "fullDescription": _blank(v.get("fullDescription")), "video": _blank(v.get("video")),
+                       "releaseNotes": None}
+    _set_google_words(m, values)
+    import listing
+    lst = listing.Listing(m.path, m.data)
+    emptied = []
+    for code, loc in bcp.items():
+        if loc == m.get(["stores", "google", "defaultLanguage"]) or loc == preferred:
+            continue
+        for field in ("title", "shortDescription", "fullDescription", "video"):
+            if values[loc][field] is None and _blank(lst.resolve(loc, "google." + field)[0]) is not None:
+                if m.set(["locales", loc, "google", field], ""):
+                    emptied.append("%s %s" % (loc, field))
+    if emptied:
+        m.notes.append("empty on Play, so set to \"\" (not left to fall back to another language's): %s"
+                       % ", ".join(emptied))
+    images = collections.OrderedDict()
+    graphics = collections.OrderedDict()
+    copies = []
+    for code, loc in bcp.items():
+        types = (G.get("images") or {}).get(code) or {}
+        images[loc] = collections.OrderedDict((t, _live_files(folder, types.get(t), copies)) for t in SUPPLY_SCREENSHOTS)
+        graphics[loc] = collections.OrderedDict()
+        for name in SUPPLY_GRAPHICS:
+            found = _live_files(folder, types.get(name), copies)
+            if found:
+                graphics[loc][name] = found[0]
+    copies = len(copies)
+    _google_images(m, images, graphics, preferred)
+    m.notes.append("Play Console only, so not pulled: the category (stores.google.category tells the check whether "
+                   "it's a game), tags, content rating, target audience and the feature graphic's alt text")
+    if copies:
+        m.notes.append("%d Play picture%s copied in %s Play's own cop%s, not the file%s uploaded: if they stay, "
+                       "push.py plan replaces Play's with them. Put the originals or the new set in their place "
+                       "before planning" % (copies, "" if copies == 1 else "s", "is" if copies == 1 else "are",
+                                            "y" if copies == 1 else "ies", "" if copies == 1 else "s"))
+
+
+# ---------------------------------------------------------------------------------------------------------
+
+SOURCES = {"fastlane": import_fastlane, "supply": import_supply, "triple-t": import_triple_t, "expo": import_expo,
+           "live": import_live}
 
 
 def run_import(source, path, out, platform=None):
     """Import ``path`` (a ``source`` layout) into the config at ``out``; return the ``Merge`` (saved).
     ``platform``: the Apple platform a fastlane folder is (else its screenshots say, else IOS)."""
     if not os.path.exists(path):
-        raise ImportError_("%s doesn't exist" % path)
+        raise ImportError_("%s doesn't exist%s" % (path, ": run push.py pull apple|google first (it writes existing/)"
+                                                   if source == "live" else ""))
     if platform and source != "fastlane":
         raise ImportError_("--platform is for --from fastlane (an Apple platform's folder)")
     m = Merge(out)
@@ -1133,6 +1483,17 @@ def main(args):
         out.write("Notes:\n")
         for n in m.notes:
             out.write("  %s\n" % n)
+    live = getattr(m, "live", None)
+    if live:
+        import listing_live
+        out.write("What's live (as pulled):\n")
+        for store, (folder, doc) in live.items():
+            for line in listing_live.describe(doc):
+                out.write("  %s\n" % line)
+        out.write("Next: look at the draft with the user and decide what to keep, then listing.py diff --config %s "
+                  "--existing %s shows what a new listing would change; listing.py check --config %s\n"
+                  % (_shown(m.path), args.path, _shown(m.path)))
+        return listing.EXIT_OK
     out.write("Next: read the config, fill what's missing (ids, URLs, the other store), then run "
               "listing.py check --config %s\n" % _shown(m.path))
     return listing.EXIT_OK

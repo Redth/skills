@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "app": {
+    "name": "Sample Recipes",
+    "ids": {
+      "apple": {
+        "bundleId": "com.example.samplerecipes",
+        "appId": "1234567890"
+      }
+    },
+    "copyright": "2026 Example Studio",
+    "contact": {
+      "email": null,
+      "phone": null,
+      "website": null
+    },
+    "urls": {
+      "marketing": "https://example.com",
+      "support": "https://example.com/support",
+      "privacy": "https://example.com/privacy",
+      "privacyChoices": null
+    }
+  },
+  "primaryLocale": "en-US",
+  "locales": {
+    "en-US": {
+      "description": "Plan a week of meals in minutes. Sample Recipes picks recipes you'll like, writes the grocery list and tells you what's already in the pantry.",
+      "apple": {
+        "subtitle": "Plan meals in minutes",
+        "keywords": [
+          "recipes",
+          "meal plan",
+          "grocery"
+        ],
+        "promotionalText": "New: a pantry that knows what you have.",
+        "whatsNew": "A pantry that knows what you have, and a faster grocery list.",
+        "platforms": {
+          "TV_OS": {
+            "description": "Plan a week of meals in minutes. Sample Recipes picks recipes you'll like and writes the grocery list for you. On Apple TV, the Siri Remote does it all."
+          }
+        }
+      }
+    },
+    "de-DE": {
+      "description": "Plane eine Woche voller Mahlzeiten in Minuten.",
+      "apple": {
+        "subtitle": "Rezepte und Essenspl\u00e4ne",
+        "keywords": [
+          "rezepte",
+          "essensplan",
+          "einkauf"
+        ],
+        "whatsNew": "Fehlerbehebungen.",
+        "promotionalText": ""
+      }
+    }
+  },
+  "screenshots": {
+    "folder": "screenshots",
+    "shots": []
+  },
+  "screens": {
+    "iphone": {
+      "kind": "phone"
+    },
+    "apple-tv": {
+      "kind": "tv"
+    }
+  },
+  "stores": {
+    "apple": {
+      "enabled": true,
+      "primaryLocale": "en-US",
+      "locales": [
+        "en-US",
+        "de-DE"
+      ],
+      "categories": {
+        "primary": "FOOD_AND_DRINK",
+        "primarySubcategories": [],
+        "secondary": "LIFESTYLE",
+        "secondarySubcategories": []
+      },
+      "platforms": {
+        "IOS": {
+          "screens": [
+            "iphone"
+          ],
+          "previews": {}
+        },
+        "MAC_OS": null,
+        "TV_OS": {
+          "screens": [
+            "apple-tv"
+          ],
+          "previews": {}
+        },
+        "VISION_OS": null
+      },
+      "ageRating": {
+        "alcoholTobaccoOrDrugUseOrReferences": "INFREQUENT_OR_MILD",
+        "userGeneratedContent": false,
+        "violenceCartoonOrFantasy": "NONE"
+      },
+      "review": {
+        "notes": "Sign in with the demo account; the pantry fills itself after a day.",
+        "contact": {
+          "firstNameEnv": "APPLE_REVIEW_FIRST_NAME",
+          "lastNameEnv": "APPLE_REVIEW_LAST_NAME",
+          "phoneEnv": "APPLE_REVIEW_PHONE",
+          "emailEnv": "APPLE_REVIEW_EMAIL"
+        },
+        "demoAccount": {
+          "usernameEnv": "APPLE_REVIEW_DEMO_USER",
+          "passwordEnv": "APPLE_REVIEW_DEMO_PASSWORD"
+        }
+      },
+      "tvPrivacyText": null
+    }
+  },
+  "forms": {},
+  "rules": {
+    "extraForbiddenWords": [],
+    "relax": []
+  }
+}

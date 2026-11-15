@@ -4,6 +4,8 @@
     python3 push.py plan apple  [--out out] [--plan plan-apple.json] [--age-rating] [--new-version 1.2.0]
     python3 push.py plan google [--out out] [--plan plan-google.json]
     python3 push.py apply <plan file> [--cancel-review]
+    python3 push.py pull apple  [--out existing] [--config store-listing.json] [--id ID] [--public] [--country us,gb]
+    python3 push.py pull google [--out existing] [--config store-listing.json] [--id PACKAGE]
 
 ``plan`` reads ``out/listing.json`` (written by ``listing.py build``) and the store, writes the plan file and
 prints it. It never writes to a store: on Google Play it opens an edit to read (the API needs one) and deletes
@@ -14,8 +16,12 @@ changed since the plan, or when the store's values the plan compared against cha
 performs exactly the plan's actions in order and reports each. Google Play commits with
 ``changesInReviewBehavior=ERROR_IF_IN_REVIEW`` unless ``--cancel-review``.
 
-Exit codes: 0 done; 1 a store's error (printed as it came) or a stale build; 2 a refusal; 3 usage or
-environment (a missing key, openssl). Keys come only from environment variables and are never printed.
+``pull`` reads what's live (read-only, like ``plan``) into ``existing/<store>/``: the words, categories, age rating
+answers, App Review's notes and every screenshot and preview, downloaded. ``pull apple --public`` needs no key: it
+reads Apple's public iTunes Lookup API. It lives in ``push_pull.py``.
+
+Exit codes: 0 done; 1 a store's error (printed as it came), a stale build, or a pull's download that failed;
+2 a refusal; 3 usage or environment (a missing key, openssl). Keys come only from environment variables and are never printed.
 """
 
 from __future__ import annotations
@@ -36,6 +42,10 @@ import urllib.parse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from appstores_lib import jsonio, jwt, web  # noqa: E402
+
+if __name__ == "__main__":
+    # push_pull imports this module as ``push``: make that this same module (one set of classes).
+    sys.modules.setdefault("push", sys.modules[__name__])
 
 APPLE_API = "https://api.appstoreconnect.apple.com"
 GOOGLE_API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications"
@@ -1640,16 +1650,31 @@ def build_parser():
     a.add_argument("plan", help="the plan file push.py plan wrote")
     a.add_argument("--cancel-review", action="store_true",
                    help="google: let the commit cancel what's in review (a release too) and resubmit everything")
+    u = sub.add_parser("pull", help="read what's live into existing/<store>/ (never writes to the store)")
+    u.add_argument("store", choices=["apple", "google"])
+    u.add_argument("--out", default="existing", help="where to write existing/<store>/ (default: existing)")
+    u.add_argument("--config", default="store-listing.json",
+                   help="the config whose app.ids and stores.<store>.auth say which app and key (optional)")
+    u.add_argument("--id", help="the app: Apple's bundle id or numeric app id, or Play's package (default: the "
+                                "config's app.ids)")
+    u.add_argument("--public", action="store_true",
+                   help="apple: no key; read Apple's public iTunes Lookup API (no subtitle, keywords or promotional "
+                        "text: they aren't public)")
+    u.add_argument("--country", help="apple --public: storefront countries, comma-separated (default us); "
+                                     "CC:locale names a storefront's language (ca:fr-CA)")
     return parser
 
 
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command not in ("plan", "apply"):
+    if args.command not in ("plan", "apply", "pull"):
         parser.print_usage(sys.stderr)
         return 3
     try:
+        if args.command == "pull":
+            import push_pull
+            return push_pull.cmd_pull(args)
         return cmd_plan(args) if args.command == "plan" else cmd_apply(args)
     except StoreError as e:
         warn(e.report())

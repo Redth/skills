@@ -201,6 +201,14 @@ A store section can name other variables with an `"auth"` object of `…Env` fie
 the schema), for projects that keep several apps' keys side by side. App Review's contact and a demo account are
 named the same way.
 
+## Starting from what's live
+
+For an app already on the stores, the first config is usually the live listing: `push.py pull` then
+`listing.py import --from live existing/` ([existing.md](existing.md)). The import fills only what's `null`, so it
+can be run again after the user's edits without losing them. Where a non-primary locale's field is empty on the
+store but would fall back to the primary's words, the import writes `""`, so the plan leaves it empty.
+`listing.py diff --existing existing/` compares the config's resolved words with what was pulled.
+
 ## A minimal config
 
 For an Android-only app with no screenshots yet (the check will say what's missing):
@@ -236,6 +244,9 @@ For an Android-only app with no screenshots yet (the check will say what's missi
 - Findings about the config itself (a screen named but not defined, a file that isn't there, a locale a store
   doesn't have) use `config.*` ids. They can't be relaxed: fix the config.
 - `preview` works from `out/` (run `build` first), so it shows what was built, not the config as it is now.
+- `diff [--existing existing] [--stores …] [--json]` compares the config with what `push.py pull` wrote: each entry has
+  `store`, `locale` (the store's code), `platform`, `field`, `kind` (`words` or `pictures`), `status` (`unchanged`,
+  `changed`, `only-live`, `only-ours`), `live` and `ours`.
 - `out/listing.json` carries the Apple TV privacy text in `apple.app.localizations[<primary>].privacyPolicyText`, each store's
   `auth` (variable names only) and App Review's `contact` and `demoAccount` (variable names only). Each Apple
   platform's `localizations` are that platform's own words; each store lists only its own locales, its primary
