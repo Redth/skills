@@ -335,10 +335,12 @@ def pull_apple(client, ident, pulled):
             _apple_media(client, pulled, l["id"], loc, P)
         detail = (client.get("/v1/appStoreVersions/%s/appStoreReviewDetail" % version["id"], ok404=True)
                   or {}).get("data")
-        if detail and review is None:
+        if detail:
             da = push.attrs(detail)
             # Only the notes and whether a sign-in is needed: App Review's contact and demo account are personal.
-            review = od(("notes", da.get("notes")), ("demoAccountRequired", da.get("demoAccountRequired")))
+            P["review"] = od(("notes", da.get("notes")), ("demoAccountRequired", da.get("demoAccountRequired")))
+            if review is None:
+                review = P["review"]
         platforms[platform] = P
     if not platforms:
         pulled.note("App Store Connect has no version of this app yet: only the app information was read")

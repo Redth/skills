@@ -29,7 +29,7 @@
           "subtitle": "Recipes and meal plans",
           "privacyPolicyUrl": "https://example.com/privacy",
           "privacyChoicesUrl": null,
-          "privacyPolicyText": null
+          "privacyPolicyText": "Sample Recipes keeps your meal plans on this device. Example Studio collects no personal data."
         },
         "de-DE": {
           "name": "Sample Recipes",
@@ -64,7 +64,11 @@
           }
         },
         "screenshots": {},
-        "previews": {}
+        "previews": {},
+        "review": {
+          "notes": "Sign in with the demo account; the pantry fills itself after a day.",
+          "demoAccountRequired": true
+        }
       },
       "TV_OS": {
         "version": "1.3",
@@ -81,7 +85,11 @@
           }
         },
         "screenshots": {},
-        "previews": {}
+        "previews": {},
+        "review": {
+          "notes": "Sign in with the demo account; the pantry fills itself after a day.",
+          "demoAccountRequired": true
+        }
       }
     },
     "review": {

@@ -21,6 +21,15 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   store, locale and field (unchanged, changed before → after, only live, only ours), as text or `--json`.
 - `references/existing.md`; SKILL.md's first step is now "Start from what's live"; four evals for it.
 - `appstores_lib.web.REDIRECT_ALLOWED`: a guard on which URLs a GET's redirect may follow.
+- `stores.apple.platforms.<P>.locales`: the App Store locales one platform gets (an Apple TV version in fewer
+  languages); check, build, diff and plan keep to them.
+- `stores.<store>.keep`: slots whose pictures stay as the store has them (checked and previewed, never sent).
+- The live import round-trips: pull → import → build → plan against the same store plans nothing. The copyright is
+  kept as live (its © too), each platform's languages and the kept slots are set, and the pull records each
+  platform's App Review notes.
+
+### Fixed
+- `pattern` rules skip `""` (a field cleared on purpose): Play's `video: ""` no longer fails the YouTube rule.
 - `store-listings` 0.1.0 (#11): one `store-listing.json` for the App Store and Google Play; the stores' rules as
   dated, sourced data (`rules/apple.json`, `rules/google.json`), checked offline; `listing.py` import (fastlane
   deliver and supply, Gradle Play Publisher, Expo), check, build (fastlane-compatible output) and preview;

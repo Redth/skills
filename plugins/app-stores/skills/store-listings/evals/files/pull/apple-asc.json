@@ -89,7 +89,7 @@
               "subtitle": "Recipes and meal plans",
               "privacyPolicyUrl": "https://example.com/privacy",
               "privacyChoicesUrl": null,
-              "privacyPolicyText": null
+              "privacyPolicyText": "Sample Recipes keeps your meal plans on this device. Example Studio collects no personal data."
             }
           },
           {
@@ -225,9 +225,9 @@
         "data": [
           {
             "type": "appScreenshotSets",
-            "id": "set-en-67",
+            "id": "set-en-61",
             "attributes": {
-              "screenshotDisplayType": "APP_IPHONE_67"
+              "screenshotDisplayType": "APP_IPHONE_61"
             }
           },
           {
@@ -246,9 +246,9 @@
         "data": [
           {
             "type": "appScreenshotSets",
-            "id": "set-de-67",
+            "id": "set-de-61",
             "attributes": {
-              "screenshotDisplayType": "APP_IPHONE_67"
+              "screenshotDisplayType": "APP_IPHONE_61"
             }
           }
         ]
@@ -268,21 +268,21 @@
         ]
       }
     },
-    "GET api.appstoreconnect.apple.com/v1/appScreenshotSets/set-en-67/appScreenshots?limit=200": {
+    "GET api.appstoreconnect.apple.com/v1/appScreenshotSets/set-en-61/appScreenshots?limit=200": {
       "status": 200,
       "body": {
         "data": [
           {
             "type": "appScreenshots",
-            "id": "s67-1",
+            "id": "s61-1",
             "attributes": {
-              "fileName": "01_APP_IPHONE_67_week.png",
+              "fileName": "01_APP_IPHONE_61_week.png",
               "fileSize": 123456,
               "sourceFileChecksum": "synthetic-upload-checksum-1",
               "imageAsset": {
-                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/s67-1/{w}x{h}bb.{f}",
-                "width": 1290,
-                "height": 2796
+                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/s61-1/{w}x{h}bb.{f}",
+                "width": 1206,
+                "height": 2622
               },
               "assetDeliveryState": {
                 "state": "COMPLETE"
@@ -291,15 +291,15 @@
           },
           {
             "type": "appScreenshots",
-            "id": "s67-2",
+            "id": "s61-2",
             "attributes": {
-              "fileName": "02_APP_IPHONE_67_recipe.png",
+              "fileName": "02_APP_IPHONE_61_recipe.png",
               "fileSize": 123456,
               "sourceFileChecksum": "synthetic-upload-checksum-2",
               "imageAsset": {
-                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/s67-2/{w}x{h}bb.{f}",
-                "width": 1290,
-                "height": 2796
+                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/s61-2/{w}x{h}bb.{f}",
+                "width": 1206,
+                "height": 2622
               },
               "assetDeliveryState": {
                 "state": "COMPLETE"
@@ -308,15 +308,15 @@
           },
           {
             "type": "appScreenshots",
-            "id": "s67-3",
+            "id": "s61-3",
             "attributes": {
-              "fileName": "03_APP_IPHONE_67_grocery-list.png",
+              "fileName": "03_APP_IPHONE_61_grocery-list.png",
               "fileSize": 123456,
               "sourceFileChecksum": "synthetic-upload-checksum-3",
               "imageAsset": {
-                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/s67-3/{w}x{h}bb.{f}",
-                "width": 1290,
-                "height": 2796
+                "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/s61-3/{w}x{h}bb.{f}",
+                "width": 1206,
+                "height": 2622
               },
               "assetDeliveryState": {
                 "state": "COMPLETE"
@@ -367,7 +367,7 @@
         ]
       }
     },
-    "GET api.appstoreconnect.apple.com/v1/appScreenshotSets/set-de-67/appScreenshots?limit=200": {
+    "GET api.appstoreconnect.apple.com/v1/appScreenshotSets/set-de-61/appScreenshots?limit=200": {
       "status": 200,
       "body": {
         "data": [
@@ -375,13 +375,13 @@
             "type": "appScreenshots",
             "id": "sde-1",
             "attributes": {
-              "fileName": "01_APP_IPHONE_67_woche.png",
+              "fileName": "01_APP_IPHONE_61_woche.png",
               "fileSize": 123456,
               "sourceFileChecksum": "synthetic-upload-checksum-6",
               "imageAsset": {
                 "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/sde-1/{w}x{h}bb.{f}",
-                "width": 1290,
-                "height": 2796
+                "width": 1206,
+                "height": 2622
               },
               "assetDeliveryState": {
                 "state": "COMPLETE"
@@ -392,13 +392,13 @@
             "type": "appScreenshots",
             "id": "sde-2",
             "attributes": {
-              "fileName": "02_APP_IPHONE_67_rezept.png",
+              "fileName": "02_APP_IPHONE_61_rezept.png",
               "fileSize": 123456,
               "sourceFileChecksum": "synthetic-upload-checksum-7",
               "imageAsset": {
                 "templateUrl": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/sde-2/{w}x{h}bb.{f}",
-                "width": 1290,
-                "height": 2796
+                "width": 1206,
+                "height": 2622
               },
               "assetDeliveryState": {
                 "state": "COMPLETE"
@@ -438,9 +438,9 @@
         "data": [
           {
             "type": "appPreviewSets",
-            "id": "pset-en-67",
+            "id": "pset-en-61",
             "attributes": {
-              "previewType": "IPHONE_67"
+              "previewType": "IPHONE_61"
             }
           }
         ]
@@ -458,7 +458,7 @@
         "data": []
       }
     },
-    "GET api.appstoreconnect.apple.com/v1/appPreviewSets/pset-en-67/appPreviews?limit=200": {
+    "GET api.appstoreconnect.apple.com/v1/appPreviewSets/pset-en-61/appPreviews?limit=200": {
       "status": 200,
       "body": {
         "data": [
@@ -496,14 +496,22 @@
       }
     },
     "GET api.appstoreconnect.apple.com/v1/appStoreVersions/ver-tv-13/appStoreReviewDetail": {
-      "status": 404,
+      "status": 200,
       "body": {
-        "errors": [
-          {
-            "status": "404",
-            "code": "NOT_FOUND"
+        "data": {
+          "type": "appStoreReviewDetails",
+          "id": "rd-2",
+          "attributes": {
+            "contactFirstName": "Testfirst",
+            "contactLastName": "Testlast",
+            "contactPhone": "+1 555 555 0142",
+            "contactEmail": "reviewer-contact@example.com",
+            "demoAccountName": "demo-user@example.com",
+            "demoAccountPassword": "not-a-real-password",
+            "demoAccountRequired": true,
+            "notes": "Sign in with the demo account; the pantry fills itself after a day."
           }
-        ]
+        }
       }
     }
   }

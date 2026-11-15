@@ -891,6 +891,9 @@ def _apple_assets(client, listing, asset, platform, locale, loc_id, made_by, slo
         seen.put("%s %s %s sets" % (platform, locale, asset.name), sorted([t, i] for t, i in sets.items()))
     type_key = "displayType" if asset is SCREENSHOTS else "previewType"
     for slot, entries in sorted(slots.items()):
+        if entries and all(isinstance(e, dict) and e.get("keep") for e in entries):
+            plan.unchanged.append("%s %s %s: kept as the store has it (stores.apple.keep)" % (platform, locale, slot))
+            continue
         ours = []
         for entry in entries or []:
             item = {"file": entry["file"], "md5": listing.checked(entry, "md5"),
@@ -1294,6 +1297,9 @@ def google_survey(client, edit_id, listing):
     for locale, types in sorted((G.get("images") or {}).items()):
         for image_type, entries in sorted((types or {}).items()):
             if not entries:
+                continue
+            if all(isinstance(e, dict) and e.get("keep") for e in entries):
+                plan.unchanged.append("%s %s: kept as Play has it (stores.google.keep)" % (locale, image_type))
                 continue
             files = [e["file"] if isinstance(e, dict) else e for e in entries]
             ours = [listing.checked(e if isinstance(e, dict) else {"file": e}, "sha256") for e in entries]

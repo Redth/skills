@@ -206,7 +206,8 @@ def describe(doc):
 class Entry(object):
     """One compared value: ``status`` is ``unchanged``, ``changed``, ``only-live`` or ``only-ours``."""
 
-    def __init__(self, store, locale, platform, field, live, ours, kind="words"):
+    def __init__(self, store, locale, platform, field, live, ours, kind="words", kept=False):
+        self.kept = kept
         self.store = store
         self.locale = locale
         self.platform = platform
@@ -214,7 +215,9 @@ class Entry(object):
         self.live = live
         self.ours = ours
         self.kind = kind
-        if kind == "pictures":
+        if kept:
+            self.status = "unchanged"
+        elif kind == "pictures":
             self.status = ("unchanged" if live == ours else "only-live" if not ours else "only-ours" if not live
                            else "changed")
         elif kind == "listing":
@@ -226,10 +229,13 @@ class Entry(object):
     def to_json(self):
         return collections.OrderedDict([("store", self.store), ("locale", self.locale), ("platform", self.platform),
                                         ("field", self.field), ("kind", self.kind), ("status", self.status),
-                                        ("live", self.live), ("ours", self.ours)])
+                                        ("live", self.live), ("ours", self.ours), ("kept", self.kept)])
 
     def line(self):
         where = "%s%s" % (self.platform + " " if self.platform else "", self.field)
+        if self.kept:
+            return "= %s: %s live, kept as the store has it (stores.%s.keep: a plan doesn't send them)" % (
+                where, self.live or 0, self.store)
         if self.kind == "pictures":
             if self.status == "unchanged":
                 return "= %s: %s, the same number (a plan compares the pictures themselves)" % (
@@ -308,8 +314,10 @@ def diff_apple(listing, doc, report=None):
             entries.append(Entry("apple", code, None, field, theirs.get(field), ours))
         for platform in platforms:
             P = (S.get("platforms") or {}).get(platform) or {}
+            ours_here = loc is not None and platform in listing.apple_platforms() \
+                and loc in listing.platform_locale_codes(platform)
             if isinstance((S.get("platforms") or {}).get(platform), dict) and code not in (P.get("localizations") or {}) \
-                    and loc is not None and platform in listing.apple_platforms():
+                    and ours_here:
                 ours = collections.OrderedDict()
                 for field in VERSION_FIELDS:
                     value = listing.resolve(loc, "apple." + field, "apple", platform)[0]
@@ -322,9 +330,7 @@ def diff_apple(listing, doc, report=None):
             for field in VERSION_FIELDS:
                 if field in not_public:
                     continue
-                ours = None
-                if loc is not None and platform in listing.apple_platforms():
-                    ours = listing.resolve(loc, "apple." + field, "apple", platform)[0]
+                ours = listing.resolve(loc, "apple." + field, "apple", platform)[0] if ours_here else None
                 if words.get(field) is None and ours is None:
                     continue
                 entries.append(Entry("apple", code, platform, field, words.get(field), ours))
@@ -375,7 +381,7 @@ def _apple_pictures(listing, doc, report, ours_codes):
                 if not theirs.get(slot) and not ours.get(slot):
                     continue
                 entries.append(Entry("apple", code, platform, slot, theirs.get(slot, 0), ours.get(slot, 0),
-                                     "pictures"))
+                                     "pictures", slot in listing.keep("apple")))
     return entries
 
 
@@ -418,7 +424,7 @@ def diff_google(listing, doc, report=None):
             if not theirs.get(image_type) and not ours.get(image_type):
                 continue
             entries.append(Entry("google", code, None, image_type, theirs.get(image_type, 0), ours.get(image_type, 0),
-                                 "pictures"))
+                                 "pictures", GOOGLE_IMAGE_SLOTS[image_type] in listing.keep("google")))
     return entries
 
 

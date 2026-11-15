@@ -178,6 +178,15 @@ Meanings:
   and for Google by `stores.google.slots`.
 - **Stores** are opt-in by `enabled`. Apple platforms are `IOS`, `MAC_OS`, `TV_OS`, `VISION_OS` (App Store
   Connect's names); `null` = not shipped.
+- **Locales per Apple platform:** `stores.apple.platforms.<P>.locales` lists the App Store locales a platform gets
+  (each one of the store's, the store's primary among them; `null` or absent: every one). App Store Connect keeps a
+  version's listing per platform, so an Apple TV version can have fewer languages than the iPhone one. Only those are
+  checked, built (`out/listing.json`'s `apple.platforms.<P>`, fastlane's `apple/<P>/`) and sent for that platform.
+- **Kept slots:** `stores.<store>.keep` lists slots whose pictures stay as the store has them (Apple's display
+  types, e.g. `APP_IPHONE_61`; Play's `phone`, `tablet7`, `tablet10`, `tv`, `wear`, `icon`, `featureGraphic`,
+  `tvBanner`). Their pictures are still checked and previewed; the build marks each entry `"keep": true` in
+  `out/listing.json`, and `push.py plan` leaves the slot alone (listed as unchanged). An unknown slot name is a
+  `config.keep` warning.
 - **Secrets** are never here. Fixed environment variables (overridable with `"auth": {…Env}` per store):
   Apple `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY` (a `.p8` path, its text, or its text in base64); Google
   `GOOGLE_PLAY_SERVICE_ACCOUNT` (a JSON key path, its text, or base64).
@@ -321,7 +330,12 @@ Every function documented with a docstring; every module has `test_<module>.py`.
   answers the rules know, App Review's notes, screenshots (their slot by display type, or by pixel size for the
   public lookup's device folders; pictures at no store size stay in `existing/`; shot ids from the uploaded file
   names, another locale's by position), and a field a non-primary locale leaves empty on the store as `""`; then it
-  prints a summary of what's live (locales, lengths, pictures per slot).
+  prints a summary of what's live (locales, lengths, pictures per slot). It round-trips: the copyright exactly as
+  live (a leading © kept, unlike the fastlane import); `stores.apple.platforms.<P>.locales` where a platform has
+  fewer of the App Store's locales; `stores.<store>.keep` for every slot holding the store's re-encoded copies, or
+  pictures per locale the config's fallback can't reproduce (a locale with fewer, or a Play graphic one language
+  lacks). Pull → import → build → plan against the same store plans no action; only fields no API reads (Play's
+  feature graphic alt text and privacy URL) may need writing for the check to pass.
 - `diff [--config …] [--existing existing] [--stores apple,google] [--json]`: the config's resolved words (per
   locale and Apple platform), categories, copyright and picture counts per slot against `existing/<store>/listing.json`;
   each entry `unchanged`, `changed` (before → after), `only-live` (the config leaves it: the store keeps it) or
@@ -458,7 +472,8 @@ existing/<store>/
                                     "marketingUrl": "…", "supportUrl": "…" } },
       "screenshots": { "en-US": { "APP_IPHONE_67": [ { "file": "screenshots/en-US/APP_IPHONE_67/01.png",
           "fileName": "…", "width": 1290, "height": 2796, "md5": "the upload's", "downloadedMd5": "the file's" } ] } },
-      "previews": { "en-US": { "IPHONE_67": [ { "file": "…", "url": null, "posterFrame": "…", "mime": "video/mp4" } ] } } } },
+      "previews": { "en-US": { "IPHONE_67": [ { "file": "…", "url": null, "posterFrame": "…", "mime": "video/mp4" } ] } },
+      "review": { "notes": "…", "demoAccountRequired": false } } },
     "review": { "notes": "…", "demoAccountRequired": false }
   },
   "notes": [ "…" ], "failed": [ ]

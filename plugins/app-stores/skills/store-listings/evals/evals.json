@@ -197,13 +197,13 @@
     {
       "id": 14,
       "prompt": "Our new listing is in evals/files/live-import/store-listing.json and what's live on the App Store was pulled into evals/files/live-import/existing. Send the App Store update.",
-      "expected_output": "Before any plan, the agent runs listing.py diff against existing/ and shows the user what the new listing changes: the subtitle, the description, What's New, the copyright's ©, and a de-DE Apple TV listing the store hasn't got (which a plan would add). It flags that last one as possibly unintended, then checks, builds and plans, and stops before apply.",
+      "expected_output": "Before any plan, the agent runs listing.py diff against existing/ and shows the user what the new listing changes: the en-US subtitle, the iPhone description and What's New on both platforms. It points out that Apple TV keeps its own (old) description, since that's TV_OS's override, and asks whether it should change too; then it checks, builds and plans, and stops before apply.",
       "files": ["evals/files/live-import/store-listing.json", "evals/files/live-import/existing/apple/listing.json"],
       "expectations": [
         "The agent runs listing.py diff --config evals/files/live-import/store-listing.json --existing evals/files/live-import/existing (or equivalent) before running push.py plan",
         "The agent shows the changed subtitle ('Recipes and meal plans' → 'Plan meals in minutes'), the changed description and the new What's New, with before and after",
-        "The agent points out that a plan would add a de-DE listing on Apple TV (TV_OS) that the store doesn't have, and asks whether that's wanted (or how to leave it out)",
-        "The agent mentions the copyright would change from '© 2026 Example Studio' to '2026 Example Studio' (Apple adds the ©)",
+        "The agent points out that the Apple TV (TV_OS) description is unchanged because it's that platform's own words (locales.en-US.apple.platforms.TV_OS.description), and asks whether the new description should go there too",
+        "The agent doesn't claim a de-DE Apple TV listing or a copyright change: the diff shows neither (Apple TV has only en-US, stores.apple.platforms.TV_OS.locales)",
         "The agent runs listing.py check and build (or says they come next) and push.py plan apple, and presents the plan",
         "The agent does not run push.py apply: sending waits for the user's go-ahead after the plan"
       ]

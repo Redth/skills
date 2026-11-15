@@ -79,8 +79,8 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
      already has, and prints a summary of what's live (locales, lengths, pictures per slot).
    - **Look at it with the user and decide what to keep** before changing anything: read the words back, open the
      pictures. The live screenshots (`existing/<store>/screenshots/`) are the current set: hand them to the
-     screenshots work as the starting point. Copies of the store's pictures left in the config would replace the
-     originals on the next plan: swap in the originals or the new set first.
+     screenshots work as the starting point. The import lists the slots holding the store's own copies in
+     `stores.<store>.keep`, so a plan leaves them alone: take a slot out once its pictures are the new set.
    - **Before any plan,** `listing.py diff --existing existing/` shows the user what the new listing changes, field
      by field (unchanged, changed before → after, only live, only ours).
    - **No live listing and no config:** if the project has `fastlane/metadata`, Triple-T's `play/` folder or Expo's

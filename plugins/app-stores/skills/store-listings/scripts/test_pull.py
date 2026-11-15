@@ -178,10 +178,10 @@ class AppleKeys(PullCase):
                 self.assertNotIn("Authorization", headers)  # the key goes only to App Store Connect
         self.assertIn("Nothing was sent to the store", text)
         base = os.path.join(self.tmp, "existing", "apple")
-        for rel in ("listing.json", "README.md", "screenshots/en-US/APP_IPHONE_67/01.png",
-                    "screenshots/en-US/APP_IPHONE_67/03.png", "screenshots/en-US/APP_IPAD_PRO_3GEN_129/02.png",
-                    "screenshots/de-DE/APP_IPHONE_67/02.png", "screenshots/en-US/APP_APPLE_TV/01.png",
-                    "previews/en-US/IPHONE_67/01.mp4"):
+        for rel in ("listing.json", "README.md", "screenshots/en-US/APP_IPHONE_61/01.png",
+                    "screenshots/en-US/APP_IPHONE_61/03.png", "screenshots/en-US/APP_IPAD_PRO_3GEN_129/02.png",
+                    "screenshots/de-DE/APP_IPHONE_61/02.png", "screenshots/en-US/APP_APPLE_TV/01.png",
+                    "previews/en-US/IPHONE_61/01.mp4"):
             self.assertTrue(os.path.isfile(os.path.join(base, rel)), rel)
         self.assertFalse([n for n in os.listdir(os.path.join(self.tmp, "existing")) if n.startswith(".")])
 
@@ -199,13 +199,13 @@ class AppleKeys(PullCase):
         ios = A["platforms"]["IOS"]
         self.assertEqual((ios["version"], ios["state"]), ("1.3", "READY_FOR_DISTRIBUTION"))  # what's live
         self.assertEqual(ios["localizations"]["en-US"]["keywords"], "recipes, meal plan,grocery")
-        shots = ios["screenshots"]["en-US"]["APP_IPHONE_67"]
-        self.assertEqual([s["fileName"] for s in shots], ["01_APP_IPHONE_67_week.png", "02_APP_IPHONE_67_recipe.png",
-                                                          "03_APP_IPHONE_67_grocery-list.png"])
-        self.assertEqual((shots[0]["width"], shots[0]["height"]), (1290, 2796))
+        shots = ios["screenshots"]["en-US"]["APP_IPHONE_61"]
+        self.assertEqual([s["fileName"] for s in shots], ["01_APP_IPHONE_61_week.png", "02_APP_IPHONE_61_recipe.png",
+                                                          "03_APP_IPHONE_61_grocery-list.png"])
+        self.assertEqual((shots[0]["width"], shots[0]["height"]), (1206, 2622))
         self.assertEqual(shots[0]["md5"], "synthetic-upload-checksum-1")
         self.assertNotEqual(shots[0]["downloadedMd5"], shots[0]["md5"])  # the store's copy, not the upload
-        self.assertEqual(ios["previews"]["en-US"]["IPHONE_67"][0]["posterFrame"], "00:00:05:00")
+        self.assertEqual(ios["previews"]["en-US"]["IPHONE_61"][0]["posterFrame"], "00:00:05:00")
         self.assertIn("TV_OS", A["platforms"])
         self.assertEqual(A["review"], {"notes": "Sign in with the demo account; the pantry fills itself after a day.",
                                        "demoAccountRequired": True})
@@ -222,7 +222,7 @@ class AppleKeys(PullCase):
         with open(os.path.join(self.tmp, "existing", "apple", "README.md"), encoding="utf-8") as f:
             text = f.read()
         self.assertIn("Read-only: nothing was sent", text)
-        self.assertIn("IOS en-US APP_IPHONE_67: 3", text)
+        self.assertIn("IOS en-US APP_IPHONE_61: 3", text)
         self.assertIn("locales: en-US, de-DE", text)
         self.assertIn("listing.py import --from live", text)
 
@@ -260,7 +260,7 @@ class AppleKeys(PullCase):
 
     def test_pulling_again_replaces_the_last_pull(self):
         self.push("pull", "apple", "--id", "com.example.samplerecipes")
-        stale = os.path.join(self.tmp, "existing", "apple", "screenshots", "en-US", "APP_IPHONE_67", "09.png")
+        stale = os.path.join(self.tmp, "existing", "apple", "screenshots", "en-US", "APP_IPHONE_61", "09.png")
         with open(stale, "wb") as f:
             f.write(b"old")
         code, _ = self.push("pull", "apple", "--id", "com.example.samplerecipes")
@@ -418,7 +418,7 @@ class ImportLive(PullCase):
         self.assertEqual(d["app"]["name"], "Sample Recipes")
         self.assertEqual(d["app"]["ids"]["apple"], {"bundleId": "com.example.samplerecipes", "appId": "1234567890"})
         self.assertEqual(d["app"]["ids"]["google"]["package"], "com.example.samplerecipes")
-        self.assertEqual(d["app"]["copyright"], "2026 Example Studio")
+        self.assertEqual(d["app"]["copyright"], "© 2026 Example Studio")  # as it's live: it round-trips
         self.assertEqual(d["app"]["urls"]["privacy"], "https://example.com/privacy")
         self.assertEqual(d["app"]["contact"]["email"], "support@example.com")
         self.assertIsNone(d["app"]["contact"]["phone"])  # Play's "" is nothing
@@ -442,7 +442,7 @@ class ImportLive(PullCase):
         self.assertEqual(sorted(A["locales"]), ["de-DE", "en-US"])
         self.assertEqual(d["stores"]["google"]["defaultLanguage"], "en-US")
         self.assertIn("What's live (as pulled):", out)
-        self.assertIn("IOS en-US APP_IPHONE_67: 3", out)
+        self.assertIn("IOS en-US APP_IPHONE_61: 3", out)
         self.assertIn("listing.py diff", out)
         with open(self.config, encoding="utf-8") as f:
             text = f.read()
@@ -469,7 +469,12 @@ class ImportLive(PullCase):
         self.assertEqual(d["stores"]["google"]["slots"]["tablet10"], "android-tablet")
         self.assertEqual(d["stores"]["google"]["graphics"]["icon"], "graphics/icon.png")
         self.assertIn("App Store Connect's own copies", out)  # a plan would replace the store's with them
-        self.assertIn("the store has no TV_OS de-DE listing", out)
+        self.assertIn("TV_OS has only en-US on the store", out)
+        self.assertEqual(d["stores"]["apple"]["platforms"]["TV_OS"]["locales"], ["en-US"])
+        self.assertNotIn("locales", d["stores"]["apple"]["platforms"]["IOS"])
+        # The store's re-encoded copies, and de-DE's 2 iPhone shots against en-US's 3: left as the store has them
+        self.assertEqual(d["stores"]["apple"]["keep"], ["APP_IPHONE_61", "APP_IPAD_PRO_3GEN_129", "APP_APPLE_TV"])
+        self.assertEqual(d["stores"]["google"]["keep"], ["phone", "tablet7", "tablet10", "icon", "featureGraphic"])
 
     def test_whats_empty_on_the_store_stays_empty(self):
         self.pull_both()
@@ -535,15 +540,8 @@ class Diff(ImportLive):
     def test_an_imported_config_matches_whats_live(self):
         self.pull_both()
         self.imp()
-        apple = [(e["locale"], e["platform"], e["field"], e["status"]) for e in self.entries("apple")
-                 if e["status"] != "unchanged" and e["kind"] != "pictures"]
-        # What a plan would still change: the copyright's © (Apple adds it), and the de-DE listing Apple TV hasn't
-        # (the config's App Store locales are every platform's), as the import's notes say.
-        self.assertEqual(set((l, p, f, s) for l, p, f, s in apple), {
-            ("de-DE", "TV_OS", "listing", "only-ours"), (None, "IOS", "copyright", "changed"),
-            (None, "TV_OS", "copyright", "changed")})
-        google = [e for e in self.entries("google") if e["status"] != "unchanged" and e["kind"] == "words"]
-        self.assertEqual(google, [])
+        for store in ("apple", "google"):
+            self.assertEqual([e for e in self.entries(store) if e["status"] != "unchanged"], [], store)
         out = self.diff()
         self.assertIn("= name", out)
         self.assertIn("Nothing was sent", out)
@@ -565,14 +563,16 @@ class Diff(ImportLive):
         self.assertEqual(self.find(entries, "promotionalText", "en-US", "IOS")["status"], "only-live")
         self.assertEqual(self.find(entries, "promotionalText", "de-DE", "IOS")["status"], "only-ours")
         self.assertEqual(self.find(entries, "keywords", "en-US", "IOS")["status"], "unchanged")  # spaces don't count
-        pics = self.find(entries, "APP_IPHONE_67", "en-US", "IOS")
-        self.assertEqual((pics["kind"], pics["live"], pics["ours"]), ("pictures", 3, 3))
+        pics = self.find(entries, "APP_IPHONE_61", "de-DE", "IOS")
+        self.assertEqual((pics["kind"], pics["status"], pics["kept"]), ("pictures", "unchanged", True))
         out = self.diff()
         self.assertIn("~ subtitle: 'Recipes and meal plans' → 'Plan meals in minutes'", out)
         self.assertIn("- IOS promotionalText: only live", out)
         self.assertIn("+ IOS promotionalText: only ours", out)
         self.assertRegex(out, r"Summary: \d+ changed")
-        self.assertIn("+ TV_OS listing: only ours: the store has no de-DE listing there", out)
+        self.assertIn("= IOS APP_IPHONE_61: 2 live, kept as the store has it (stores.apple.keep", out)
+        kit.edit_config(self.config, lambda d: d["stores"]["apple"]["platforms"]["TV_OS"].pop("locales"))
+        self.assertIn("+ TV_OS listing: only ours: the store has no de-DE listing there", self.diff())
 
     def test_long_texts_show_where_they_part(self):
         self.pull_both()
@@ -600,6 +600,138 @@ class Diff(ImportLive):
         code, out, err = self.listing("diff", "--config", self.config, "--existing", "existing")
         self.assertEqual(code, 3)
         self.assertIn("push.py pull", err)
+
+
+class PlatformLocalesAndKeep(unittest.TestCase):
+    """The config's ``stores.apple.platforms.<P>.locales`` and ``stores.<store>.keep``, on the sample project."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="platform-locales-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.config = kit.make_sample(self.tmp)
+
+    def built(self):
+        code, out, err = kit.run(["build", "--config", self.config, "--out", os.path.join(self.tmp, "out")])
+        self.assertEqual(code, 0, out + err)
+        with open(os.path.join(self.tmp, "out", "listing.json"), encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_a_platform_gets_only_its_locales(self):
+        kit.edit_config(self.config, lambda d: d["stores"]["apple"]["platforms"]["IOS"].update({"locales": ["en-US"]}))
+        ios = self.built()["apple"]["platforms"]["IOS"]
+        self.assertEqual(list(ios["localizations"]), ["en-US"])
+        self.assertEqual(list(ios["screenshots"]), ["en-US"])
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "out", "apple", "IOS", "metadata", "de-DE")))
+
+    def test_a_platforms_locales_must_be_the_stores(self):
+        kit.edit_config(self.config, lambda d: d["stores"]["apple"]["platforms"]["IOS"].update(
+            {"locales": ["de-DE", "fr-FR"]}))
+        code, report = kit.check_json(self.config)
+        found = kit.findings(report, "config.locales")
+        self.assertTrue(any("fr-FR isn't one of the App Store's locales" in f["message"] for f in found), found)
+        self.assertTrue(any("primary locale" in f["message"] for f in found), found)
+
+    def test_kept_slots_are_marked_and_an_unknown_one_warns(self):
+        kit.edit_config(self.config, lambda d: (d["stores"]["apple"].update({"keep": ["APP_IPHONE_61", "NOPE"]}),
+                                                d["stores"]["google"].update({"keep": ["phone"]})))
+        code, report = kit.check_json(self.config)
+        self.assertEqual([f["severity"] for f in kit.findings(report, "config.keep")], ["warning"])
+        built = self.built()
+        iphone = built["apple"]["platforms"]["IOS"]["screenshots"]["en-US"]["APP_IPHONE_61"]
+        self.assertTrue(all(e.get("keep") for e in iphone))
+        self.assertFalse(any(e.get("keep") for e in built["apple"]["platforms"]["IOS"]["screenshots"]["en-US"]
+                             ["APP_IPAD_PRO_3GEN_129"]))
+        self.assertTrue(all(e.get("keep") for e in built["google"]["images"]["en-US"]["phoneScreenshots"]))
+
+
+class RoundTrip(ImportLive):
+    """pull -> import --from live -> build -> plan, against the same store, plans nothing.
+
+    Pictures: the store's files are re-encoded copies (Apple's always; Play's when its sha256 differs), and the
+    config's fallback can't say "de-DE has 2 shots where en-US has 3". The import lists those slots in
+    ``stores.<store>.keep``, which the build marks and the plan leaves as the store has them; an original that
+    every language has the same way (the Play-only case below) is compared, and is unchanged.
+    """
+
+    ASC = "GET api.appstoreconnect.apple.com"
+
+    def same_store_for_plan(self):
+        """The fixture's store with what a plan reads: a version in preparation per platform that App Store
+        Connect filled from the live one (as it does), and the app information in preparation likewise."""
+        r = self.net.routes
+        versions = r[self.ASC + "/v1/apps/1234567890/appStoreVersions?limit=200"]["body"]["data"]
+        live = dict((v["id"], v) for v in versions)
+        prep = [v for v in versions if v["id"] == "ver-ios-14"][0]
+        prep["attributes"]["copyright"] = live["ver-ios-13"]["attributes"]["copyright"]
+        tv = json.loads(json.dumps(live["ver-tv-13"]))
+        tv["id"] = "ver-tv-14"
+        tv["attributes"].update({"versionString": "1.4", "appVersionState": "PREPARE_FOR_SUBMISSION",
+                                 "appStoreState": "PREPARE_FOR_SUBMISSION", "createdDate": "2026-11-01T00:00:00Z"})
+        versions.append(tv)
+        for platform in ("IOS", "TV_OS"):
+            r[self.ASC + "/v1/apps/1234567890/appStoreVersions?filter[platform]=%s&limit=200" % platform] = {
+                "status": 200, "body": {"data": [v for v in versions if v["attributes"]["platform"] == platform]}}
+        for key in list(r):
+            for old, new in (("info-live", "info-next"), ("ver-ios-13", "ver-ios-14"), ("ver-tv-13", "ver-tv-14")):
+                if old in key:
+                    r[key.replace(old, new)] = json.loads(json.dumps(r[key]).replace(old, new))
+
+    def plan(self, store, *extra):
+        code, text = self.push("plan", store, "--plan", "plan-%s.json" % store, *extra)
+        self.assertEqual(code, 0, text)
+        with open(os.path.join(self.tmp, "plan-%s.json" % store), encoding="utf-8") as f:
+            return json.load(f), text
+
+    def alt_text(self):
+        kit.edit_config(self.config, lambda d: d["locales"]["en-US"].setdefault("altText", {}).update(
+            {"featureGraphic": "A phone showing a week of planned meals"}))
+
+    def build(self):
+        code, out, err = self.listing("build", "--config", self.config, "--out", "out")
+        self.assertEqual(code, 0, out + err)
+        return out
+
+    def test_pull_import_build_plan_plans_nothing(self):
+        self.same_store_for_plan()
+        self.pull_both()
+        self.imp()
+        self.alt_text()  # Play Console only: no pull reads it, and the check needs it
+        out = self.build()
+        self.assertIn("apple.copyright.symbol", out)  # a warning: the live © is kept so the copyright round-trips
+        with open(os.path.join(self.tmp, "out", "listing.json"), encoding="utf-8") as f:
+            built = json.load(f)
+        self.assertEqual(list(built["apple"]["platforms"]["TV_OS"]["localizations"]), ["en-US"])
+        self.assertTrue(all(e.get("keep") for e in built["apple"]["platforms"]["IOS"]["screenshots"]["en-US"]
+                            ["APP_IPHONE_61"]))
+        apple, text = self.plan("apple", "--age-rating")
+        self.assertEqual(apple["actions"], [], text)
+        self.assertIn("IOS en-US APP_IPHONE_61: kept as the store has it (stores.apple.keep)", apple["unchanged"])
+        self.assertIn("categories, as they are", apple["unchanged"])
+        self.assertIn("age rating answers, as they are", apple["unchanged"])
+        self.assertIn("TV_OS en-US listing's words, as they are", apple["unchanged"])
+        self.assertFalse([u for u in apple["unchanged"] if "TV_OS de-DE" in u])
+        google, text = self.plan("google")
+        self.assertEqual(google["actions"], [], text)
+        self.assertIn("de-DE listing, as it is", google["unchanged"])
+        self.assertIn("en-US icon: kept as Play has it (stores.google.keep)", google["unchanged"])
+        self.assertEqual(self.net.unknown, [])
+
+    def test_originals_every_language_has_alike_are_compared_and_unchanged(self):
+        key = "GET androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.samplerecipes/" \
+              "edits/edit-pull-1/listings"
+        listings = self.net.routes[key]["body"]["listings"]
+        listings[:] = [l for l in listings if l["language"] == "en-US"]
+        code, text = self.push("pull", "google", "--id", "com.example.samplerecipes")
+        self.assertEqual(code, 0, text)
+        self.imp()
+        self.assertNotIn("keep", self.data()["stores"]["google"])
+        self.alt_text()  # with the privacy URL, Play Console's only: the listing API has neither
+        kit.edit_config(self.config, lambda d: d["app"]["urls"].update({"privacy": "https://example.com/privacy"}))
+        self.build()
+        google, text = self.plan("google")
+        self.assertEqual(google["actions"], [], text)
+        self.assertIn("en-US phoneScreenshots: 3 pictures, as they are", google["unchanged"])
+        self.assertIn("en-US featureGraphic: 1 picture, as it is", google["unchanged"])
 
 
 if __name__ == "__main__":

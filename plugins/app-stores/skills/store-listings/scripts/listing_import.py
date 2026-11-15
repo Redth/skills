@@ -1217,10 +1217,12 @@ def _live_apple(m, folder, doc):
                        "(locales.<loc>.apple.platforms.<P>): %s" % ", ".join(overridden))
     _live_apple_empties(m, plats, order, infos, apple_primary, overriding_first)
     for _, P in plats:
-        text, changed = _copyright(_blank(P.get("copyright")))
-        if text and m.set(["app", "copyright"], text) and changed:
-            m.notes.append("the copyright's leading sign was dropped: Apple adds it")
+        text = _blank(P.get("copyright"))
         if text:
+            # As it's live, sign and all (the fastlane import drops a leading sign; this one round-trips)
+            if m.set(["app", "copyright"], text.strip()) and _copyright(text)[1]:
+                m.notes.append("the copyright is kept as it's live, with its leading sign (the check warns: App Store "
+                               "Connect adds one itself; drop it if you choose, and a plan sends the change)")
             break
     cats = app.get("categories") or {}
     for which in ("primary", "secondary"):
@@ -1249,6 +1251,11 @@ def _live_apple(m, folder, doc):
                            "weren't imported: %s" % ", ".join(sorted(skipped)))
     review = A.get("review") or {}
     m.set(["stores", "apple", "review", "notes"], _blank(review.get("notes")))
+    differ = [p for p, P in plats if isinstance(P.get("review"), dict)
+              and _blank(P["review"].get("notes")) != _blank(review.get("notes"))]
+    if differ:
+        m.notes.append("App Review's notes differ on %s: the config has one set for every platform, so a plan would "
+                       "send stores.apple.review.notes there too" % ", ".join(differ))
     if review.get("demoAccountRequired"):
         a = m.apple()
         if a["review"].get("demoAccount") is None:
@@ -1257,6 +1264,7 @@ def _live_apple(m, folder, doc):
             m.not_copied.append("the demo account (App Review needs a sign-in): set %s" % ", ".join(DEMO_ENV.values()))
     m.not_copied.append("App Review's contact (personal: never pulled): set %s" % ", ".join(REVIEW_ENV.values()))
     _live_apple_pictures(m, folder, plats, apple_primary)
+    _live_platform_locales(m, plats)
     if doc.get("notPublic"):
         m.notes.append("pulled from the public lookup: %s aren't public, so the config doesn't have them yet (pull "
                        "with the key, or write them)" % ", ".join(doc["notPublic"]))
@@ -1277,7 +1285,6 @@ def _live_apple_empties(m, plats, order, infos, primary, overriding_first):
         for i, (platform, P) in enumerate(plats):
             words = (P.get("localizations") or {}).get(code)
             if words is None:
-                missing.append("%s %s" % (platform, loc))
                 continue
             own = i > 0 or overriding_first
             if not own and loc == primary:
@@ -1293,10 +1300,23 @@ def _live_apple_empties(m, plats, order, infos, primary, overriding_first):
     if emptied:
         m.notes.append("empty on the store, so set to \"\" (not left to fall back to another locale's words): %s"
                        % ", ".join(emptied))
-    if missing:
-        m.notes.append("the store has no %s listing: the config gives every App Store locale to every platform, so "
-                       "a plan would add %s (with the locale's words): leave the locale out of stores.apple.locales "
-                       "if that's not wanted" % (", ".join(missing), "it" if len(missing) == 1 else "them"))
+
+
+def _live_platform_locales(m, plats):
+    """``stores.apple.platforms.<P>.locales``: the App Store locales a platform has on the store, where that's
+    fewer than the store's (App Store Connect keeps a version's listing per platform)."""
+    import listing
+    store_locs = listing.Listing(m.path, m.data).store_locale_codes("apple")
+    for platform, P in plats:
+        have = [_bcp47(c, "apple") for c in (P.get("localizations") or {})]
+        if not have or set(store_locs) <= set(have):
+            continue
+        listed = [l for l in store_locs if l in have]
+        if not listed:
+            continue
+        if m.set(["stores", "apple", "platforms", platform, "locales"], listed):
+            m.notes.append("%s has only %s on the store: stores.apple.platforms.%s.locales says so, so a plan doesn't "
+                           "add the others there" % (platform, ", ".join(listed), platform))
 
 
 def _live_apple_pictures(m, folder, plats, primary):
@@ -1307,6 +1327,8 @@ def _live_apple_pictures(m, folder, plats, primary):
     pictures, names = [], {}
     reference = collections.Counter()
     copies = 0
+    copied_slots = set()
+    counts = collections.OrderedDict()  # (platform, slot) -> {locale: pictures}
     for platform, P in plats:
         for code, by_slot in (P.get("screenshots") or {}).items():
             loc = _bcp47(code, "apple")
@@ -1329,9 +1351,22 @@ def _live_apple_pictures(m, folder, plats, primary):
                         continue
                     pictures.append((src, loc, key, slot))
                     names[src] = item.get("fileName") or os.path.basename(src)
+                    counts.setdefault((platform, key), collections.Counter())[loc] += 1
                     if item.get("md5") and item.get("downloadedMd5") and item["md5"] != item["downloadedMd5"]:
                         copies += 1
+                        copied_slots.add(key)
     _import_apple_screenshots(m, pictures, names, primary)
+    keep = []
+    for (platform, key), per_loc in counts.items():
+        locs = [_bcp47(c, "apple") for c in ((dict(plats).get(platform) or {}).get("localizations") or {})] or list(per_loc)
+        uneven = any(per_loc.get(l, 0) != per_loc.get(primary, 0) for l in locs)
+        if (key in copied_slots or uneven) and key not in keep:
+            keep.append(key)
+    if keep and m.set(["stores", "apple", "keep"], keep):
+        m.notes.append("stores.apple.keep lists %s: their pictures are App Store Connect's own copies (re-encoded, "
+                       "not the uploads) or differ by locale in a way the config's fallback can't say, so push.py "
+                       "plan leaves those slots as the store has them. Take a slot out of keep once its pictures are "
+                       "the originals or the new set" % ", ".join(keep))
     for platform, P in plats:
         if not isinstance((m.apple().get("platforms") or {}).get(platform), dict):
             kind = PLATFORM_KIND[platform]
@@ -1346,12 +1381,10 @@ def _live_apple_pictures(m, folder, plats, primary):
                            "1 picture is" if sum(reference.values()) == 1 else "%d pictures are" % sum(reference.values()),
                            _shown(folder), ", ".join("%s %d" % kv for kv in reference.items())))
     if copies:
-        m.notes.append("%d screenshot%s copied in %s App Store Connect's own cop%s, not the file%s uploaded: if %s "
-                       "stay, push.py plan replaces the store's with %s. Put the originals or the new set in their "
-                       "place before planning, or leave a screen out of stores.apple.platforms.<P>.screens to keep "
-                       "that slot as the store has it" % (
+        m.notes.append("%d screenshot%s copied in %s App Store Connect's own cop%s, not the file%s uploaded "
+                       "(their slots are in stores.apple.keep)" % (
                            copies, "" if copies == 1 else "s", "is" if copies == 1 else "are", "y" if copies == 1 else "ies",
-                           "" if copies == 1 else "s", "it" if copies == 1 else "they", "it" if copies == 1 else "them"))
+                           "" if copies == 1 else "s"))
 
 
 def _live_files(folder, items, copies):
@@ -1412,15 +1445,37 @@ def _live_google(m, folder, doc):
             found = _live_files(folder, types.get(name), copies)
             if found:
                 graphics[loc][name] = found[0]
-    copies = len(copies)
     _google_images(m, images, graphics, preferred)
+    default = m.get(["stores", "google", "defaultLanguage"]) or preferred or m.primary
+    keep = []
+    for t, (slot, _, _) in SUPPLY_SCREENSHOTS.items():
+        n = dict((l, len(images[l].get(t) or [])) for l in images)
+        if not any(n.values()):
+            continue
+        if any(f in copies for l in images for f in images[l].get(t) or []) or \
+                any(v != n.get(default, 0) for v in n.values()):
+            keep.append(slot)
+    for name in SUPPLY_GRAPHICS:
+        have = [graphics[l].get(name) for l in graphics]
+        if not any(have):
+            continue
+        ref = graphics.get(default, {}).get(name) or next(h for h in have if h)
+        if any(h is None or h in copies or not filecmp.cmp(h, ref, shallow=False) for h in have):
+            keep.append(name)
+    copies = len(copies)
+    if keep and m.set(["stores", "google", "keep"], keep):
+        m.notes.append("stores.google.keep lists %s: their pictures are Play's own copies, or differ by language in a "
+                       "way the config's fallback can't say (one set of graphics for every language), so push.py "
+                       "plan leaves them as Play has them. Take a slot out of keep to send its pictures"
+                       % ", ".join(keep))
     m.notes.append("Play Console only, so not pulled: the category (stores.google.category tells the check whether "
-                   "it's a game), tags, content rating, target audience and the feature graphic's alt text")
+                   "it's a game), tags, content rating, target audience and the feature graphic's alt text (the check needs that: copy it from "
+                   "Play Console into locales.<loc>.altText.featureGraphic), and the privacy policy URL (Play keeps it "
+                   "in App content: app.urls.privacy, if the App Store's didn't give it)")
     if copies:
-        m.notes.append("%d Play picture%s copied in %s Play's own cop%s, not the file%s uploaded: if they stay, "
-                       "push.py plan replaces Play's with them. Put the originals or the new set in their place "
-                       "before planning" % (copies, "" if copies == 1 else "s", "is" if copies == 1 else "are",
-                                            "y" if copies == 1 else "ies", "" if copies == 1 else "s"))
+        m.notes.append("%d Play picture%s copied in %s Play's own cop%s, not the file%s uploaded (their slots are in "
+                       "stores.google.keep)" % (copies, "" if copies == 1 else "s", "is" if copies == 1 else "are",
+                                                "y" if copies == 1 else "ies", "" if copies == 1 else "s"))
 
 
 # ---------------------------------------------------------------------------------------------------------

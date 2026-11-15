@@ -269,6 +269,17 @@ class Listing:
             codes.insert(0, first)
         return codes
 
+    def platform_locale_codes(self, platform):
+        """The App Store locales an Apple platform gets: ``stores.apple.platforms.<P>.locales`` (else every one of
+        the store's), the store's primary first."""
+        listed = ((self.store("apple").get("platforms") or {}).get(platform) or {}).get("locales")
+        codes = self.store_locale_codes("apple")
+        return [c for c in codes if c in listed] if isinstance(listed, list) else codes
+
+    def keep(self, store):
+        """The slots whose pictures stay as the store has them (``stores.<store>.keep``)."""
+        return set(k for k in (self.store(store).get("keep") or []) if isinstance(k, str))
+
     def fallback_order(self, loc, store=None):
         """The locales a field is looked for in: the locale, the store's primary, then the config's primary."""
         out = []
@@ -684,6 +695,30 @@ def validate_config(listing, report):
                 "one of its locales (set stores.%s.%s)" % (listing.store_primary(store), STORE_NAMES[store], store,
                                                             ", ".join(listed), store, key)))
     if listing.enabled("apple"):
+        store_locs = listing.store_locale_codes("apple")
+        for p in listing.apple_platforms():
+            listed = (listing.store("apple")["platforms"][p] or {}).get("locales")
+            for i, loc in enumerate(listed if isinstance(listed, list) else []):
+                if loc not in store_locs:
+                    report.add(CONFIG_STORE, config_finding(
+                        "config.locales", "stores.apple.platforms.%s.locales[%d]" % (p, i),
+                        "%s isn't one of the App Store's locales (%s)" % (loc, ", ".join(store_locs))))
+            if isinstance(listed, list) and listing.store_primary("apple") not in listed:
+                report.add(CONFIG_STORE, config_finding(
+                    "config.locales", "stores.apple.platforms.%s.locales" % p,
+                    "doesn't have %s, the App Store's primary locale: a platform's listing always has it"
+                    % listing.store_primary("apple")))
+    for store in STORES:
+        if not listing.enabled(store):
+            continue
+        known = set(rules.load(store, RULES_DIR).slots)
+        for i, slot in enumerate(listing.store(store).get("keep") or []):
+            if slot not in known:
+                report.add(CONFIG_STORE, config_finding(
+                    "config.keep", "stores.%s.keep[%d]" % (store, i),
+                    "%s isn't one of %s's slots (%s…)" % (slot, STORE_NAMES[store], ", ".join(sorted(known)[:4])),
+                    "warning"))
+    if listing.enabled("apple"):
         shipped = listing.apple_platforms()
         for loc in locs:
             for p in listing.platform_overrides(loc):
@@ -773,6 +808,11 @@ class StoreCheck:
 
     # -- pictures --------------------------------------------------------------------------------------
 
+    def platform_locales(self, platform):
+        """This check's locales an Apple platform gets (``stores.apple.platforms.<P>.locales``)."""
+        wanted = self.listing.platform_locale_codes(platform)
+        return [l for l in self.locales if l in wanted]
+
     def platform_slots(self, platform):
         """Apple's slots for a platform, in the rules file's order."""
         return [(k, v) for k, v in self.slots.items() if v.get("platform") == platform]
@@ -781,7 +821,7 @@ class StoreCheck:
         """Put each Apple picture in the first slot of its platform whose sizes fit it."""
         for platform in self.listing.apple_platforms():
             slots = self.platform_slots(platform)
-            for loc in self.locales:
+            for loc in self.platform_locales(platform):
                 by_slot = collections.OrderedDict()
                 unassigned = []
                 for screen in self.listing.platform_screens(platform):
@@ -983,6 +1023,7 @@ class StoreCheck:
         platforms)]``. One entry, ``platforms`` None, unless the field is an Apple version field whose value
         differs between the shipped platforms: then one entry per distinct value, labelled with its platforms."""
         plats = self.listing.apple_platforms() if self.store == "apple" and field in APPLE_PLATFORM_PATHS else []
+        plats = [p for p in plats if loc in self.listing.platform_locale_codes(p)]
         if not plats:
             value, src = self.listing.resolve(loc, field, self.store)
             return [(value, src, field, None)]
@@ -1156,7 +1197,7 @@ class StoreCheck:
         plats = self.listing.apple_platforms() if self.store == "apple" else [None]
         out = []
         for p in plats:
-            for loc in self.locales:
+            for loc in (self.platform_locales(p) if p else self.locales):
                 if self.own_pictures(p, loc):
                     out.append((p, loc))
         return out
@@ -1686,7 +1727,10 @@ def build_apple(listing, check, out):
         meta = os.path.join(base, "metadata")
         locs = collections.OrderedDict()
         shots = collections.OrderedDict()
-        for loc, code in by_code.items():
+        plat_codes = collections.OrderedDict((l, c) for l, c in by_code.items()
+                                             if l in listing.platform_locale_codes(platform))
+        kept = listing.keep("apple")
+        for loc, code in plat_codes.items():
             # The version's words are this platform's: its override, else the locale's (decision: per platform)
             words = collections.OrderedDict(
                 (f, listing.resolve(loc, "apple." + f, "apple", platform)[0]) for f in APPLE_PLATFORM_FIELDS)
@@ -1715,6 +1759,8 @@ def build_apple(listing, check, out):
                                                                                      _picture_ext(pic)))
                     _copy(pic.path, dst)
                     entries.append(_file_entry(out, dst))
+                    if slot in kept or display in kept:
+                        entries[-1]["keep"] = True  # stores.apple.keep: the store's stay; push.py never sends these
                 if entries:
                     per_slot[display] = entries
             shots[code] = per_slot
@@ -1746,7 +1792,7 @@ def build_apple(listing, check, out):
             entry = _file_entry(out, dst)
             entry["posterFrame"] = item.get("posterFrame")
             entry["mime"] = VIDEO_MIME.get(os.path.splitext(dst)[1].lower(), "application/octet-stream")
-            for code in by_code.values():
+            for code in plat_codes.values():
                 previews.setdefault(code, collections.OrderedDict()).setdefault(ptype, []).append(entry)
         platforms[platform] = collections.OrderedDict([
             ("localizations", locs), ("screenshots", shots), ("previews", previews)])
@@ -1809,6 +1855,8 @@ def build_google(listing, check, out):
                     dst = os.path.join(meta, code, "images", image_type, "%02d_%s%s" % (i, pic.shot, _picture_ext(pic)))
                 _copy(pic.path, dst)
                 entries.append(_file_entry(out, dst))
+                if slot in listing.keep("google"):
+                    entries[-1]["keep"] = True  # stores.google.keep: Play's stay; push.py never sends these
             if entries:
                 per_type[image_type] = entries
         images[code] = per_type
