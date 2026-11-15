@@ -67,11 +67,19 @@ class HttpError(Exception):
             return None
 
 
+# A caller's guard on redirects: ``callable(url) -> bool``. A GET's redirect is followed only to a URL it accepts
+# (``None``: any); a refused redirect comes back as the reply (its 3xx status), never followed.
+REDIRECT_ALLOWED = None
+
+
 class _NoRedirectForWrites(urllib.request.HTTPRedirectHandler):
-    """Follow redirects for GET and HEAD only; another method's redirect comes back as the reply."""
+    """Follow redirects for GET and HEAD only, and only where ``REDIRECT_ALLOWED`` accepts the new URL; another
+    method's redirect, or a refused one, comes back as the reply."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         if req.get_method() not in ("GET", "HEAD"):
+            return None
+        if REDIRECT_ALLOWED is not None and not REDIRECT_ALLOWED(newurl):
             return None
         return urllib.request.HTTPRedirectHandler.redirect_request(self, req, fp, code, msg, headers, newurl)
 

@@ -1,9 +1,11 @@
 ---
 name: store-listings
 description: >
-  Use this skill to set up our App Store / Google Play listing, update the store description, subtitle,
+  Use this skill to set up our App Store / Google Play listing, start from the listing that's live now (read it
+  from the stores, even without API keys), update the store description, subtitle,
   keywords, promotional text or what's new, check our store listing against the App Store and Play rules
-  before we submit, preview how our store pages will look, see what would change on the App Store or Play,
+  before we submit, preview how our store pages will look, see what would change on the App Store or Play
+  compared with what's live,
   send the new listing to the App Store or Google Play, import our fastlane / supply / Gradle Play Publisher /
   Expo store.config.json metadata, help answer App Privacy, Play Data safety, the age rating or content
   rating, or say what Steam or itch.io need for our store page. Any app, any stack (iPhone, iPad, Apple TV,
@@ -26,6 +28,9 @@ get a checklist with the answers drafted.
   answers of every store the app is on. Schema: `schema/store-listing.schema.json`.
 - **Store rules as dated, sourced data** (`rules/<store>.json`): every limit, size, count and banned word has
   the store page it came from, the date it was checked and a status. An unverified rule only warns.
+- **Start from what's live:** `push.py pull` reads the listing the stores have now (words, categories, every
+  screenshot) into `existing/`, read-only; `listing.py import --from live` makes it the draft and `listing.py diff`
+  shows what a new listing would change.
 - **Look first, then send:** `push.py plan` reads the store and writes what would change; `push.py apply` does
   exactly that plan and refuses if the store changed since.
 
@@ -39,6 +44,7 @@ get a checklist with the answers drafted.
 
 ## When to use
 
+- An app already on the stores: start from its live listing (pull it, import it, decide what to keep).
 - Setting up a listing for a new app, or importing one a project already has (fastlane, Triple-T, Expo).
 - Changing the words: description, subtitle, keywords, promotional text, What's New, Play's title and short
   description, in any locale.
@@ -51,7 +57,7 @@ get a checklist with the answers drafted.
 |---|---|---|
 | `store-listing.json` | the user's project (`--config`, default `./store-listing.json`) | Paths inside are relative to it. Every field: [references/config.md](references/config.md) |
 | Screenshots | `<screenshots.folder>/<locale>/<screen>/<shot>.png` | Any tool's PNGs or JPEGs at the store's exact pixel sizes |
-| Apple API key | `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY` | Only for `push.py`. The key: a `.p8` path, its text, or base64. Role: App Manager or Admin |
+| Apple API key | `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY` | Only for `push.py`. The key: a `.p8` path, its text, or base64. Role: App Manager or Admin (`pull apple --public` needs none) |
 | Google service account | `GOOGLE_PLAY_SERVICE_ACCOUNT` | Only for `push.py`. JSON key path, text or base64. Play Console permission: Manage store presence |
 | App Review contact | `APPLE_REVIEW_FIRST_NAME`, `…_LAST_NAME`, `…_PHONE`, `…_EMAIL` | Named in the config, never written in it |
 
@@ -62,12 +68,27 @@ Prerequisites: Python 3.8+ (stdlib only), `openssl` (signing the stores' tokens)
 
 The scripts are in this skill's `scripts/` folder; run them with `python3`, from the user's project.
 
-1. **Read before acting.** Read the config (or there isn't one: step 0), the rules files' `checked` dates and
-   which rules are `unverified`. Ask which stores and platforms the app ships on if the config doesn't say.
-   - **No config yet:** if the project has `fastlane/metadata`, Triple-T's `play/` folder or Expo's
+1. **Start from what's live.** If the app is on the stores already, its live listing is the baseline: read it
+   before writing a word ([references/existing.md](references/existing.md)).
+   - **Pull it:** `push.py pull apple` and `push.py pull google` with the keys (`--id` or the config's `app.ids`
+     name the app). Without Apple's key, `push.py pull apple --public [--country us,de]` reads what the App Store
+     shows anyone. Say what that lacks: the subtitle, keywords and promotional text aren't public. Google has no
+     public API: it needs the key, or the user pastes the words. `pull` only reads (on Google it opens an edit and
+     deletes it).
+   - **Import it as the draft:** `listing.py import --from live existing/`. It never overwrites a value the config
+     already has, and prints a summary of what's live (locales, lengths, pictures per slot).
+   - **Look at it with the user and decide what to keep** before changing anything: read the words back, open the
+     pictures. The live screenshots (`existing/<store>/screenshots/`) are the current set: hand them to the
+     screenshots work as the starting point. The import lists the slots holding the store's own copies in
+     `stores.<store>.keep`, so a plan leaves them alone: take a slot out once its pictures are the new set.
+   - **Before any plan,** `listing.py diff --existing existing/` shows the user what the new listing changes, field
+     by field (unchanged, changed before → after, only live, only ours).
+   - **No live listing and no config:** if the project has `fastlane/metadata`, Triple-T's `play/` folder or Expo's
      `store.config.json`, run `listing.py import --from fastlane|supply|triple-t|expo <path>`
      ([references/importing.md](references/importing.md)). Otherwise write one from the user's answers and
      [references/config.md](references/config.md). Leave ids `null` until the user gives them; never invent them.
+   - Read the config, the rules files' `checked` dates and which rules are `unverified`. Ask which stores and
+     platforms the app ships on if the config doesn't say.
    - **Primary locale and locales:** each store has its own primary (it may not be `en-US`) and its own
      languages: `stores.apple.primaryLocale`, `stores.google.defaultLanguage` and `stores.<store>.locales`. Write
      to the store's primary locale; don't give a store a language it has no listing in unless the user wants one.
@@ -114,12 +135,15 @@ The short form; the reasons are in [references/agent-rules.md](references/agent-
    the output, a commit or the chat.
 8. Flag other people's names, marks and platforms in the words or pictures; the user decides.
 9. Say what's stale or unverified. A store page read on a date can have changed since.
+10. Start from what's live: pull, import and show it, decide with the user what to keep, and diff before planning.
 
 ## Validation
 
 - `listing.py check` exits 0 (warnings allowed, each read and either fixed or accepted by the user).
 - `out/listing.json` exists and is newer than the config and every picture it lists.
 - The preview PNGs were opened and looked at.
+- For an app already on the stores, the live listing was pulled and looked at before new words were written, and a
+  `diff` was shown before planning.
 - A plan was shown before any apply; `apply` reported every action, or stopped with the store's own error.
 - `--json` on `check` gives machine-readable findings (`rule_id`, `severity`, `where`, `message`, `source`,
   `status`) for scripted use.
@@ -136,6 +160,9 @@ The short form; the reasons are in [references/agent-rules.md](references/agent-
 | Apple: no version in preparation | most fields change only with one | `plan --new-version X.Y.Z` (ask first); promotional text changes any time |
 | 401/403 from a store | key, role or API not set up | [pitfalls.md](references/pitfalls.md#keys-and-permissions) names each cause |
 | Chrome not found | `preview --png` can't render | install Chrome/Chromium or set `CHROME`; the HTML preview still works |
+| `pull apple` without a key | App Store Connect can't be read | `pull apple --public`, saying what isn't public; or set the key |
+| `pull google --public` | Play has no public listing API | the key, or the user pastes the words |
+| `pull` exits 1: not downloaded | a picture didn't come (or was on another host) | the words were written; `existing/<store>/README.md` lists what's missing; pull again |
 
 ## References
 
@@ -148,6 +175,7 @@ The short form; the reasons are in [references/agent-rules.md](references/agent-
 | [words.md](references/words.md) | limits and how each counts, price words by field, other platforms, What's New |
 | [forms.md](references/forms.md) | App Privacy, Data safety, age and content ratings: the stores' definitions, quoted and dated |
 | [sending.md](references/sending.md) | plan and apply, retries, Play's one open edit, review in progress, stores with no API |
-| [importing.md](references/importing.md) | from fastlane `deliver`/`supply`, Triple-T, Expo |
+| [existing.md](references/existing.md) | starting from what's live: `pull` (keys or `--public`), `existing/`, import, `diff` |
+| [importing.md](references/importing.md) | from fastlane `deliver`/`supply`, Triple-T, Expo, and what `pull` wrote |
 | [pitfalls.md](references/pitfalls.md) | what went wrong before, and how to avoid it |
 | [agent-rules.md](references/agent-rules.md) | the agent's rules with their reasons |

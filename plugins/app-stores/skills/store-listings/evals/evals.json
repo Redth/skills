@@ -150,6 +150,63 @@
         "The agent tells the user to confirm each store's primary locale and to stop editing the old fastlane folders, since listing.py build now writes that layout",
         "No push.py apply is run, and nothing is committed"
       ]
+    },
+    {
+      "id": 11,
+      "prompt": "Sample Recipes (bundle id and package com.example.samplerecipes) has been on the App Store and Google Play for a year. Write us a better description and subtitle for the next version.",
+      "expected_output": "The agent starts from what's live: it pulls the current listing (push.py pull with the keys, or pull apple --public without them), imports it as the draft config, shows the user the current words and screenshots, and asks what to keep before proposing new words. Nothing is sent to a store.",
+      "files": [],
+      "expectations": [
+        "Before writing any new description or subtitle, the agent runs push.py pull for the stores (or says it is the first step and why), not writing from scratch",
+        "If the App Store Connect key isn't set, the agent uses push.py pull apple --public rather than stopping, and says the subtitle, keywords and promotional text aren't in the public data",
+        "The agent runs listing.py import --from live existing/ (or equivalent) so the live words become the draft config",
+        "The agent shows the user the current description and subtitle (or their summary from the pull) and asks what to keep or change before replacing them",
+        "The agent treats existing/<store>/screenshots/ as the current set and mentions it for the screenshots work, without redesigning screenshots itself",
+        "Proposed new words are offered as a proposal against the live ones (a diff or before/after), not silently written over them",
+        "push.py apply isn't run and nothing is sent to a store"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "We don't have App Store Connect API keys or a Play service account set up yet. Get what's on our store pages now for com.example.samplerecipes so we can start from it.",
+      "expected_output": "The agent runs push.py pull apple --public (no key needed), reports what it got and clearly what the public data lacks (subtitle, keywords, promotional text and the rest of notPublic), explains that Google Play has no public listing API (a key is needed, or the user pastes the words), imports the App Store words as a draft, and doesn't ask for or handle secrets in the chat.",
+      "files": [],
+      "expectations": [
+        "The agent runs push.py pull apple --public with the bundle id (optionally --country for other storefronts)",
+        "The agent says plainly that the subtitle, keywords and promotional text are not public and weren't read (and that a key would read them)",
+        "The agent explains Google Play needs the service account's key for pull google, or the user can paste the words; it doesn't scrape Play's web page or another site",
+        "The agent explains the public screenshots are the store page's smaller copies, a reference for the current set rather than files to send",
+        "The agent runs listing.py import --from live existing/ (or offers to) and reports the summary of what's live",
+        "The agent doesn't ask the user to paste a key, token or password into the chat; keys are set as environment variables",
+        "Only Apple's own hosts are reached (itunes.apple.com and its mzstatic.com image CDN); nothing is sent to a store"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "I've edited evals/files/live-import/store-listing.json by hand since we imported what's live (new subtitle, description and What's New). Bring in anything new from the pulled listing in evals/files/live-import/existing without losing my changes.",
+      "expected_output": "The agent re-runs listing.py import --from live into the same config, which merges and never overwrites a value the config has; it reports what was kept (the user's subtitle, description and What's New) and what was taken, and suggests listing.py diff to see where the config and the store still differ.",
+      "files": ["evals/files/live-import/store-listing.json", "evals/files/live-import/existing/apple/listing.json"],
+      "expectations": [
+        "The agent runs listing.py import --from live with --out pointing at the existing store-listing.json (merging), not deleting or recreating the config first",
+        "The user's subtitle ('Plan meals in minutes'), description and What's New are unchanged in the config afterwards",
+        "The agent reports the import's 'Kept what the config already had' entries rather than claiming the store's words replaced the user's",
+        "The agent runs or suggests listing.py diff --existing to show where the config still differs from what's live",
+        "Nothing is sent to a store"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "Our new listing is in evals/files/live-import/store-listing.json and what's live on the App Store was pulled into evals/files/live-import/existing. Send the App Store update.",
+      "expected_output": "Before any plan, the agent runs listing.py diff against existing/ and shows the user what the new listing changes: the en-US subtitle, the iPhone description and What's New on both platforms. It points out that Apple TV keeps its own (old) description, since that's TV_OS's override, and asks whether it should change too; then it checks, builds and plans, and stops before apply.",
+      "files": ["evals/files/live-import/store-listing.json", "evals/files/live-import/existing/apple/listing.json"],
+      "expectations": [
+        "The agent runs listing.py diff --config evals/files/live-import/store-listing.json --existing evals/files/live-import/existing (or equivalent) before running push.py plan",
+        "The agent shows the changed subtitle ('Recipes and meal plans' → 'Plan meals in minutes'), the changed description and the new What's New, with before and after",
+        "The agent points out that the Apple TV (TV_OS) description is unchanged because it's that platform's own words (locales.en-US.apple.platforms.TV_OS.description), and asks whether the new description should go there too",
+        "The agent doesn't claim a de-DE Apple TV listing or a copyright change: the diff shows neither (Apple TV has only en-US, stores.apple.platforms.TV_OS.locales)",
+        "The agent runs listing.py check and build (or says they come next) and push.py plan apple, and presents the plan",
+        "The agent does not run push.py apply: sending waits for the user's go-ahead after the plan"
+      ]
     }
   ]
 }

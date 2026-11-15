@@ -1,0 +1,166 @@
+{
+  "$comment": "Synthetic iTunes Lookup API answers for push.py pull --public's tests (the invented Sample Recipes app). The us and gb storefronts give the same words (no en-GB listing); fr has none. Pictures at *.mzstatic.com are drawn by the test at the size their URL names (WxHbb.jpg is drawn as a JPEG).",
+  "routes": {
+    "GET itunes.apple.com/lookup?bundleId=com.example.samplerecipes&country=us": {
+      "status": 200,
+      "body": {
+        "resultCount": 1,
+        "results": [
+          {
+            "kind": "software",
+            "wrapperType": "software",
+            "trackId": 1234567890,
+            "bundleId": "com.example.samplerecipes",
+            "trackName": "Sample Recipes: Meal Planner",
+            "description": "Plan a week of meals in minutes. Sample Recipes picks recipes you'll like and writes the grocery list for you.",
+            "releaseNotes": "Bug fixes and improvements.",
+            "version": "1.3",
+            "currentVersionReleaseDate": "2026-06-01T07:00:00Z",
+            "sellerName": "Example Studio",
+            "artistName": "Example Studio",
+            "sellerUrl": "https://example.com",
+            "trackViewUrl": "https://apps.apple.com/us/app/sample-recipes/id1234567890",
+            "primaryGenreId": 6023,
+            "primaryGenreName": "Food & Drink",
+            "genreIds": [
+              "6023",
+              "6012"
+            ],
+            "genres": [
+              "Food & Drink",
+              "Lifestyle"
+            ],
+            "contentAdvisoryRating": "4+",
+            "advisories": [],
+            "languageCodesISO2A": [
+              "EN",
+              "DE"
+            ],
+            "formattedPrice": "Free",
+            "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/icon/AppIcon.png/512x512bb.jpg",
+            "screenshotUrls": [
+              "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/p1/01_week.png/392x696bb.jpg",
+              "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/p2/02_recipe.png/392x696bb.jpg"
+            ],
+            "ipadScreenshotUrls": [
+              "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/t1/ipad-week.png/576x768bb.jpg"
+            ],
+            "appletvScreenshotUrls": []
+          }
+        ]
+      }
+    },
+    "GET itunes.apple.com/lookup?bundleId=com.example.samplerecipes&country=gb": {
+      "status": 200,
+      "body": {
+        "resultCount": 1,
+        "results": [
+          {
+            "kind": "software",
+            "wrapperType": "software",
+            "trackId": 1234567890,
+            "bundleId": "com.example.samplerecipes",
+            "trackName": "Sample Recipes: Meal Planner",
+            "description": "Plan a week of meals in minutes. Sample Recipes picks recipes you'll like and writes the grocery list for you.",
+            "releaseNotes": "Bug fixes and improvements.",
+            "version": "1.3",
+            "currentVersionReleaseDate": "2026-06-01T07:00:00Z",
+            "sellerName": "Example Studio",
+            "artistName": "Example Studio",
+            "sellerUrl": "https://example.com",
+            "trackViewUrl": "https://apps.apple.com/us/app/sample-recipes/id1234567890",
+            "primaryGenreId": 6023,
+            "primaryGenreName": "Food & Drink",
+            "genreIds": [
+              "6023",
+              "6012"
+            ],
+            "genres": [
+              "Food & Drink",
+              "Lifestyle"
+            ],
+            "contentAdvisoryRating": "4+",
+            "advisories": [],
+            "languageCodesISO2A": [
+              "EN",
+              "DE"
+            ],
+            "formattedPrice": "Free",
+            "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/icon/AppIcon.png/512x512bb.jpg",
+            "screenshotUrls": [
+              "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/p1/01_week.png/392x696bb.jpg",
+              "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/p2/02_recipe.png/392x696bb.jpg"
+            ],
+            "ipadScreenshotUrls": [
+              "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/t1/ipad-week.png/576x768bb.jpg"
+            ],
+            "appletvScreenshotUrls": []
+          }
+        ]
+      }
+    },
+    "GET itunes.apple.com/lookup?bundleId=com.example.samplerecipes&country=de": {
+      "status": 200,
+      "body": {
+        "resultCount": 1,
+        "results": [
+          {
+            "kind": "software",
+            "wrapperType": "software",
+            "trackId": 1234567890,
+            "bundleId": "com.example.samplerecipes",
+            "trackName": "Sample Recipes: Essensplaner",
+            "description": "Plane eine Woche voller Mahlzeiten in Minuten.",
+            "releaseNotes": "Fehlerbehebungen.",
+            "version": "1.3",
+            "currentVersionReleaseDate": "2026-06-01T07:00:00Z",
+            "sellerName": "Example Studio",
+            "artistName": "Example Studio",
+            "sellerUrl": "https://example.com",
+            "trackViewUrl": "https://apps.apple.com/us/app/sample-recipes/id1234567890",
+            "primaryGenreId": 6023,
+            "primaryGenreName": "Food & Drink",
+            "genreIds": [
+              "6023",
+              "6012"
+            ],
+            "genres": [
+              "Food & Drink",
+              "Lifestyle"
+            ],
+            "contentAdvisoryRating": "4+",
+            "advisories": [],
+            "languageCodesISO2A": [
+              "EN",
+              "DE"
+            ],
+            "formattedPrice": "Free",
+            "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/icon/AppIcon.png/512x512bb.jpg",
+            "screenshotUrls": [
+              "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/p1/01_week.png/392x696bb.jpg",
+              "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/p2/02_recipe.png/392x696bb.jpg"
+            ],
+            "ipadScreenshotUrls": [
+              "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/t1/ipad-week.png/576x768bb.jpg"
+            ],
+            "appletvScreenshotUrls": []
+          }
+        ]
+      }
+    },
+    "GET itunes.apple.com/lookup?bundleId=com.example.samplerecipes&country=fr": {
+      "status": 200,
+      "body": {
+        "resultCount": 0,
+        "results": []
+      }
+    },
+    "GET itunes.apple.com/lookup?bundleId=com.example.samplerecipes&country=fr&entity=macSoftware": {
+      "status": 200,
+      "body": {
+        "resultCount": 0,
+        "results": []
+      }
+    }
+  }
+}

@@ -1,7 +1,16 @@
 # Sending: plan and apply, and the stores with no API
 
-Only `push.py` reaches a network, only the stores' own API hosts (`api.appstoreconnect.apple.com` and the upload
-hosts Apple names, `oauth2.googleapis.com`, `androidpublisher.googleapis.com`), and only `push.py apply` writes.
+Only `push.py` reaches a network, only the stores' own hosts (`api.appstoreconnect.apple.com` and the upload
+hosts Apple names, `oauth2.googleapis.com`, `androidpublisher.googleapis.com`; for `pull`, also
+`itunes.apple.com`, Apple's `*.mzstatic.com` and Play's image hosts), and only `push.py apply` writes.
+
+## Pull: read what's live (read-only)
+
+`push.py pull apple|google` reads the live listing into `existing/<store>/` (words, categories, the age rating
+answers, App Review's notes, every screenshot and preview). Like `plan`, it never writes to a store. On Google it
+opens an edit to read and deletes it, so don't pull while another tool is sending. `pull apple --public` reads
+Apple's public lookup with no key. Detail, the hosts and the files: [existing.md](existing.md). Before planning a
+new listing, `listing.py diff --existing existing/` shows the user what it changes, from those files.
 
 ## Before sending
 

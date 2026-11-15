@@ -1,8 +1,11 @@
 # Importing an existing listing
 
-When a project already keeps its store words somewhere, start the config from them rather than retyping:
+When the app is already on the stores, start from what's live: `push.py pull` reads it, and
+`listing.py import --from live existing/` makes it the config's draft ([existing.md](existing.md)). When a project
+keeps its store words in files, start the config from them rather than retyping:
 
 ```sh
+python3 <skill>/scripts/listing.py import --from live      existing          --out store-listing.json
 python3 <skill>/scripts/listing.py import --from fastlane  fastlane          --out store-listing.json [--platform TV_OS]
 python3 <skill>/scripts/listing.py import --from supply    fastlane/metadata/android --out store-listing.json
 python3 <skill>/scripts/listing.py import --from triple-t  app/src/main/play --out store-listing.json
@@ -19,7 +22,13 @@ into the config's folder layout. Then read it, fill the gaps, and run `listing.p
 | fastlane `deliver` | Apple | `metadata/<locale>/{name,subtitle,description,keywords,promotional_text,release_notes,privacy_url,support_url,marketing_url,apple_tv_privacy_policy}.txt`; top-level `copyright.txt`, `primary_category.txt`, `secondary_category.txt` and sub-category files; `review_information/*.txt`; a `default/` folder as fallback; `screenshots/<locale>/` (slot from the pixel size); `app_previews/<locale>/` |
 | fastlane `supply` | Google | `metadata/android/<locale>/{title,short_description,full_description,video}.txt`, `changelogs/<versionCode>.txt`, `images/{icon,featureGraphic,tvBanner}.png`, `images/{phone,sevenInch,tenInch,tv,wear}Screenshots/` |
 | Triple-T (Gradle Play Publisher) | Google | `src/<sourceSet>/play/{contact-email,contact-phone,contact-website,default-language}.txt`, `listings/<locale>/{title,short-description,full-description,video-url}.txt`, `listings/<locale>/graphics/{icon,feature-graphic,phone-screenshots,tablet-screenshots,large-tablet-screenshots,tv-banner,tv-screenshots,wear-screenshots}/`, `release-notes/<locale>/<track>.txt` |
+| `live` (what `push.py pull` wrote) | Apple, Google | `existing/<store>/listing.json` (the store's shape, in `listing.json`'s vocabulary) and `existing/<store>/screenshots/<locale>/<slot>/<NN>.<ext>`: see [existing.md](existing.md) |
 | Expo `store.config.json` | Apple only | `apple.info.<locale>` (`title`, `subtitle`, `description`, `keywords[]`, `releaseNotes`, `promoText`, `marketingUrl`, `supportUrl`, `privacyPolicyUrl`, `privacyChoicesUrl`, `privacyPolicyText`), `apple.categories`, `apple.copyright`, `apple.advisory` (age rating), `apple.review`; no screenshots |
+
+**Files and the live listing.** A project with fastlane metadata *and* a live listing can have both drift apart.
+Import the one that's true first (usually what's live, since that's what shoppers see), then the other: the second
+import fills only what the first left unset, and its differing values are listed as kept. `listing.py diff` then
+shows where the config and the stores still differ.
 
 A project with both `fastlane/metadata/<locale>` and `fastlane/metadata/android/` has both stores: import each
 (`--from fastlane` for Apple, `--from supply` for Google) and merge into one config, or import one and copy the
