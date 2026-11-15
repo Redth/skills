@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "capture-plan.json: which devices capture which screens in which locales, and how each screen is reached (CONTRACT.md 10.2). Paths are relative to the plan's own folder. Settings (locales, appearance, clock, statusBar, seed, flatten) resolve plan, then the device, then the screen, then the screen's overrides for that device's id or platform (each later one wins). Uses only the subset appstores_lib/schema.py validates.",
+  "type": "object",
+  "required": ["version", "devices", "screens"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "$comment": { "type": "string" },
+    "version": { "const": 1 },
+    "out": { "$comment": "The captures' folder: <out>/<locale>/<device id>/<screen id>.png and <out>/capture-report.json. Default 'captures'.", "type": "string", "minLength": 1 },
+    "app": { "$ref": "#/$defs/app" },
+    "locales": { "$comment": "BCP 47 locales, in order. Default ['en-US'].", "$ref": "#/$defs/locales" },
+    "appearance": { "$ref": "#/$defs/appearance" },
+    "clock": { "$ref": "#/$defs/clock" },
+    "statusBar": { "$ref": "#/$defs/statusBar" },
+    "seed": { "$ref": "#/$defs/seed" },
+    "flatten": { "$ref": "#/$defs/flatten" },
+    "devices": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/device" } },
+    "screens": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/screen" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]*$", "maxLength": 64 },
+    "locale": { "type": "string", "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$" },
+    "locales": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/locale" } },
+    "platform": { "enum": ["ios", "ipados", "tvos", "watchos", "visionos", "android", "web", "macos", "windows", "linux"] },
+    "appearance": { "enum": ["light", "dark"] },
+    "clock": { "$comment": "The status bar's time: 'H:MM' or 'HH:MM' (24-hour), or an ISO date-time. Default '09:41'.", "type": "string", "pattern": "^([0-9]{1,2}:[0-9]{2}|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2})?.*)$" },
+    "statusBar": { "$comment": "clean: the plan's clock, full battery and signal, no notifications (simctl status_bar, Android's demo mode). as-is: left alone. Default clean.", "enum": ["clean", "as-is"] },
+    "seed": { "$comment": "Passed to the app as ScreenshotSeed (a launch argument, an intent extra, a query parameter).", "type": ["string", "integer"] },
+    "flatten": { "$comment": "The colour a picture with an alpha channel is flattened onto (#RRGGBB). Default #000000, as a device's masked corners are.", "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+    "app": {
+      "$comment": "The app on each platform. A device uses the entry for its platform, else its family's (ipados/tvos/watchos/visionos -> ios), merged with the device's own 'app'.",
+      "type": "object",
+      "properties": {
+        "$comment": { "type": "string" },
+        "ios": { "$ref": "#/$defs/appleApp" },
+        "ipados": { "$ref": "#/$defs/appleApp" },
+        "tvos": { "$ref": "#/$defs/appleApp" },
+        "watchos": { "$ref": "#/$defs/appleApp" },
+        "visionos": { "$ref": "#/$defs/appleApp" },
+        "macos": { "$ref": "#/$defs/appleApp" },
+        "android": { "$ref": "#/$defs/androidApp" },
+        "web": { "$ref": "#/$defs/webApp" },
+        "windows": { "type": "object" },
+        "linux": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "appleApp": {
+      "type": "object",
+      "properties": {
+        "$comment": { "type": "string" },
+        "bundleId": { "type": "string", "minLength": 1 },
+        "app": { "$comment": "A built .app to install (simulators) or open (macOS).", "type": "string", "minLength": 1 },
+        "processName": { "$comment": "macOS: the process name System Events knows it by (default: the .app's name).", "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "androidApp": {
+      "type": "object",
+      "properties": {
+        "$comment": { "type": "string" },
+        "package": { "type": "string", "minLength": 1 },
+        "activity": { "$comment": "The activity launch starts ('.MainActivity' or a full class name).", "type": "string", "minLength": 1 },
+        "apk": { "$comment": "An APK to install before the screens (adb install -r).", "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "webApp": {
+      "type": "object",
+      "properties": {
+        "$comment": { "type": "string" },
+        "url": { "$comment": "The app's address (on this machine: drivers reach nothing else). launch opens it; url steps resolve against it.", "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "device": {
+      "type": "object",
+      "required": ["id", "platform", "driver", "width", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "id": { "$ref": "#/$defs/id" },
+        "platform": { "$ref": "#/$defs/platform" },
+        "kind": { "$comment": "phone, tablet, desktop, tv, watch or xr: which store slot its pictures are for (check_captures.py --rules).", "enum": ["phone", "tablet", "desktop", "tv", "watch", "xr"] },
+        "driver": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "width": { "$comment": "The exact pixel size this device promises (from the store's rules). Any other size is failed, never resized.", "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "target": { "$comment": "The driver's own settings (simctl: deviceType, runtime, udid, display; adb: avd, serial, wmSize, density; chrome: scale, viewport, mobile; macos: scale).", "type": "object" },
+        "app": { "$comment": "Merged over the plan's app entry for this device's platform.", "type": "object" },
+        "locales": { "$ref": "#/$defs/locales" },
+        "appearance": { "$ref": "#/$defs/appearance" },
+        "clock": { "$ref": "#/$defs/clock" },
+        "statusBar": { "$ref": "#/$defs/statusBar" },
+        "seed": { "$ref": "#/$defs/seed" },
+        "flatten": { "$ref": "#/$defs/flatten" }
+      }
+    },
+    "screen": {
+      "type": "object",
+      "required": ["id", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "id": { "$ref": "#/$defs/id" },
+        "devices": { "$comment": "Only these devices (ids). Default: every device.", "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "platforms": { "$comment": "Only devices of these platforms.", "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/platform" } },
+        "locales": { "$comment": "Only these of the device's locales.", "$ref": "#/$defs/locales" },
+        "appearance": { "$ref": "#/$defs/appearance" },
+        "clock": { "$ref": "#/$defs/clock" },
+        "statusBar": { "$ref": "#/$defs/statusBar" },
+        "seed": { "$ref": "#/$defs/seed" },
+        "flatten": { "$ref": "#/$defs/flatten" },
+        "steps": { "$ref": "#/$defs/steps" },
+        "overrides": {
+          "$comment": "Per device id or platform: settings or steps that differ there ({\"android\": {\"steps\": [...]}}). A device id's entry wins over its platform's.",
+          "type": "object",
+          "patternProperties": {
+            "^[a-z0-9][a-z0-9_.-]*$": { "$ref": "#/$defs/screenOverride" }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "screenOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "steps": { "$ref": "#/$defs/steps" },
+        "locales": { "$ref": "#/$defs/locales" },
+        "appearance": { "$ref": "#/$defs/appearance" },
+        "clock": { "$ref": "#/$defs/clock" },
+        "statusBar": { "$ref": "#/$defs/statusBar" },
+        "seed": { "$ref": "#/$defs/seed" },
+        "flatten": { "$ref": "#/$defs/flatten" }
+      }
+    },
+    "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } },
+    "element": {
+      "$comment": "One of id (accessibility identifier / automation id / resource id / test id), text, label, xpath or css (web).",
+      "type": "object",
+      "properties": {
+        "$comment": { "type": "string" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "xpath": { "type": "string", "minLength": 1 },
+        "css": { "type": "string", "minLength": 1 },
+        "timeout": { "$comment": "Seconds to wait for it. Default 10.", "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "argValue": { "type": ["string", "number", "boolean"] },
+    "step": {
+      "$comment": "One kind a step: {\"launch\": {...}}, {\"tap\": {\"id\": \"search\"}}, ...",
+      "oneOf": [
+        { "type": "object", "required": ["launch"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "launch": { "type": "object", "additionalProperties": false, "properties": {
+            "$comment": { "type": "string" },
+            "args": { "$comment": "Launch arguments (iOS -Key value), intent extras (Android), query parameters (web).", "type": "object", "additionalProperties": { "$ref": "#/$defs/argValue" } },
+            "env": { "type": "object", "additionalProperties": { "type": "string" } },
+            "clean": { "$comment": "Reinstall or clear the app's data first.", "type": "boolean" }
+          } } } },
+        { "type": "object", "required": ["deepLink"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "deepLink": { "type": "string", "minLength": 1 } } },
+        { "type": "object", "required": ["url"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "url": { "type": "string", "minLength": 1 } } },
+        { "type": "object", "required": ["tap"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "tap": { "anyOf": [
+            { "$ref": "#/$defs/element" },
+            { "type": "object", "required": ["x", "y"], "additionalProperties": false, "properties": {
+              "x": { "type": "number" }, "y": { "type": "number" } } }
+          ] } } },
+        { "type": "object", "required": ["type"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "type": { "type": "object", "required": ["text"], "additionalProperties": false, "properties": {
+            "text": { "type": "string" },
+            "id": { "type": "string", "minLength": 1 },
+            "label": { "type": "string", "minLength": 1 },
+            "xpath": { "type": "string", "minLength": 1 },
+            "css": { "type": "string", "minLength": 1 },
+            "into": { "$comment": "The field to type into, found by its text (placeholder).", "type": "string", "minLength": 1 }
+          } } } },
+        { "type": "object", "required": ["wait"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "wait": { "anyOf": [
+            { "type": "number", "minimum": 0 },
+            { "type": "object", "required": ["ms"], "additionalProperties": false, "properties": {
+              "$comment": { "type": "string" }, "ms": { "type": "number", "minimum": 0 } } },
+            { "$ref": "#/$defs/element" }
+          ] } } },
+        { "type": "object", "required": ["scroll"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "scroll": { "type": "object", "additionalProperties": false, "properties": {
+            "to": { "$ref": "#/$defs/element" },
+            "direction": { "enum": ["up", "down", "left", "right"] },
+            "times": { "type": "integer", "minimum": 1, "maximum": 50 }
+          } } } },
+        { "type": "object", "required": ["back"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "back": { "anyOf": [ { "type": "boolean" }, { "type": "null" }, { "type": "object", "additionalProperties": false, "properties": {} } ] } } },
+        { "type": "object", "required": ["swipe"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "swipe": { "type": "object", "additionalProperties": false, "properties": {
+            "from": { "type": "array", "prefixItems": [ { "type": "number" }, { "type": "number" } ], "minItems": 2, "maxItems": 2 },
+            "to": { "type": "array", "prefixItems": [ { "type": "number" }, { "type": "number" } ], "minItems": 2, "maxItems": 2 },
+            "direction": { "enum": ["up", "down", "left", "right"] },
+            "ms": { "type": "number", "minimum": 0 }
+          } } } },
+        { "type": "object", "required": ["flow"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "flow": { "$comment": "A Maestro flow's path or a UI test's name (string), or the flow driver's own object.", "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "object" } ] } } },
+        { "type": "object", "required": ["script"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "script": { "anyOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            { "type": "object", "required": ["run"], "additionalProperties": false, "properties": {
+              "run": { "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "array", "minItems": 1, "items": { "type": "string" } } ] },
+              "timeout": { "type": "number", "minimum": 1 } } }
+          ] } } },
+        { "type": "object", "required": ["settle"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "settle": { "anyOf": [ { "type": "boolean" }, { "type": "null" }, { "type": "object", "additionalProperties": false, "properties": {
+            "timeout": { "type": "number", "minimum": 0 } } } ] } } }
+      ]
+    }
+  }
+}

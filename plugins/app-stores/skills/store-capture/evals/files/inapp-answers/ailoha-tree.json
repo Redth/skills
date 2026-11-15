@@ -1,0 +1,12 @@
+[
+  {
+    "id": "win-0",
+    "parentId": null,
+    "type": "Window",
+    "fullType": "Window",
+    "framework": "flutter",
+    "text": "Sample Recipes",
+    "state": {"displayed": true, "enabled": true, "selected": false, "focused": true, "opacity": 1.0},
+    "bounds": {"x": 0, "y": 0, "width": 402, "height": 874}
+  }
+]

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-14T11:20:40Z",
+  "plan": "capture-plan.json",
+  "shots": [
+    { "locale": "en-US", "device": "iphone-6.3", "screen": "plan", "status": "taken",
+      "path": "en-US/iphone-6.3/plan.png", "width": 1206, "height": 2622, "sha256": "…",
+      "driver": "simctl", "source": { "deviceType": "iPhone 17 Pro", "runtime": "iOS 27.2" }, "statusBar": "verified",
+      "fixes": [], "warnings": [] },
+    { "locale": "de-DE", "device": "iphone-6.3", "screen": "plan", "status": "taken",
+      "path": "de-DE/iphone-6.3/plan.png", "width": 1206, "height": 2622, "sha256": "…",
+      "driver": "simctl", "source": { "deviceType": "iPhone 17 Pro", "runtime": "iOS 27.2" }, "statusBar": "unverified",
+      "fixes": [], "warnings": ["the status bar override failed: the simulator was still rebooting after the language change (status_bar override returned an error)"] },
+    { "locale": "en-US", "device": "android-phone", "screen": "plan", "status": "taken",
+      "path": "en-US/android-phone/plan.png", "width": 1080, "height": 1920, "sha256": "…",
+      "driver": "adb", "source": { "avd": "appstores-android-phone", "api": 36 }, "statusBar": "overridden",
+      "fixes": [], "warnings": [] }
+  ]
+}

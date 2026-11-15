@@ -7,6 +7,20 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 ## [Unreleased]
 
 ### Added
+- `store-capture` 0.1.0 (#13): an app's real screens captured at exactly each store's sizes, on any stack.
+  `capture-plan.json` (schema `schema/capture-plan.schema.json`: devices each promising a width and height, screens
+  reached by steps, locales, appearance, clock, status bar, seed, per-device and per-screen overrides);
+  `capture.py` (a driver per device, `--dry-run`, a dedicated `appstores-<device id>` simulator or emulator by
+  default, everything changed put back, every picture checked: the wrong size `failed` and never resized, alpha
+  flattened and reported; `capture-report.json` marking each shot taken, missed with the previous picture kept,
+  failed or skipped); drivers for `simctl`, `adb`, `uiautomator`, `chrome`, `macos`, the DevFlow and Ailoha in-app
+  agents, `appium`, `xcuitest` and `maestro`; `import_captures.py` (fastlane snapshot and screengrab, xcresult,
+  Maestro, Flutter, Detox, Playwright, a folder, with a mapping); `check_captures.py`; `video.py` (record, encode
+  to each store's preview spec with ffmpeg: constant frame rate, H.264 or ProRes, the exact size, a silent stereo
+  track when there's none; check with ffprobe). The references choose a technique per app (a decision table), show
+  how to add a screenshot mode on SwiftUI, UIKit, Compose, .NET MAUI, Flutter, React Native and the web, cover each
+  driver, game engines, desktop, clean state and which simulator or emulator renders which store size natively
+  (read 2026-11-14).
 - `store-screenshots` 0.1.0 (#12): designed store screenshots from an app's real captures, one design for every
   store, size and locale. A brief and a storyboard agreed with the user before rendering; `store-screenshots.json`
   (theme, targets at each store's exact sizes, shots with their layouts and captions, per-store overrides,

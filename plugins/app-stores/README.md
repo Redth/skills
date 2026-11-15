@@ -20,7 +20,7 @@ Stores and forms with no API get a checklist with the answers drafted. Any app, 
 |---|---|---|---|
 | [`store-listings`](./skills/store-listings/) | 0.1.0 | the config and its importers (fastlane, Triple-T, Expo); the words and their checks; building each store's output; page previews; plan and apply for Apple and Google; forms with no API as drafted answers; checklists for Steam and itch.io | [#11](https://github.com/Redth/skills/issues/11) |
 | [`store-screenshots`](./skills/store-screenshots/) | 0.1.0 | the user's examples, two to four rendered directions, one iterated into an approved baseline that later updates are checked against; the brief and a storyboard agreed before rendering; layouts (full-bleed, band, framed, cut off, tilt, pair, callout, hero, gameplay) and drawn device frames; eight starting styles; every size and locale from one design through headless Chrome; mocks of Apple's search row, the product page and Play's listing; screenshot checks per store | [#12](https://github.com/Redth/skills/issues/12) |
-| `store-capture` | proposed | screenshots and previews from any stack: `simctl`, `adb` and headless Chrome drivers, importers for fastlane snapshot and screengrab, Maestro, Playwright and others | [#13](https://github.com/Redth/skills/issues/13) |
+| [`store-capture`](./skills/store-capture/) | 0.1.0 | the app's real screens at exactly each store's sizes, on any stack, by the technique that fits: a screenshot mode (launch argument or deep link, sketched per stack), the DevFlow (.NET MAUI) or Ailoha in-app agents, Appium, XCUITest, UI Automator, Maestro, macOS Accessibility, `simctl`, `adb`, headless Chrome; importers for fastlane snapshot and screengrab, xcresult, Maestro, Flutter, Detox and Playwright; dedicated simulators and emulators, a clean status bar, demo data, one locale at a time, everything put back; a report of what was taken, missed (the old picture kept, and said so) or failed (never resized); preview videos recorded, encoded to spec with ffmpeg and checked | [#13](https://github.com/Redth/skills/issues/13) |
 | `store-signing` | to follow | signing, notarising and uploading builds to TestFlight, Play, Amazon, Steam and itch.io | [#14](https://github.com/Redth/skills/issues/14) |
 | `game-achievements` | to follow, if it earns its place | Game Center and Play Games achievements from one list | [#15](https://github.com/Redth/skills/issues/15) |
 
@@ -53,6 +53,12 @@ checks and sends them. Each works alone: `store-listings` takes PNGs from any to
 > Make this release's screenshots match the ones we did last time.
 >
 > Our German captions don't fit: fix them.
+>
+> Take our App Store and Play screenshots on every size, in English and German.
+>
+> Our MAUI app has DevFlow: capture the store screens with it.
+>
+> Record an App Store preview video from the simulator.
 
 The usual flow, which the skill walks an agent through:
 
@@ -81,12 +87,28 @@ python3 <skill>/scripts/sheet.py --compare design/baseline --png         # every
 
 The rendered folder is `store-listing.json`'s screenshots folder: `listing.py check` takes it from there.
 
+And for the captures themselves (`store-capture`), once the agent has chosen a technique for the app:
+
+```sh
+python3 <skill>/scripts/capture.py --dry-run          # each device's preparation and every step, run nothing
+python3 <skill>/scripts/capture.py                    # capture-plan.json → captures/<locale>/<device>/<screen>.png
+python3 <skill>/scripts/check_captures.py --rules apple,google   # sizes, bit depth, alpha, colour, per store
+python3 <skill>/scripts/import_captures.py --from fastlane-snapshot fastlane/screenshots --plan capture-plan.json
+python3 <skill>/scripts/video.py encode raw.mov --slot APP_IPHONE_67 --out preview-iphone.mp4   # then: video.py check
+```
+
+`store-screenshots` designs from that folder; `store-listings` can send it as it is.
+
 ### Prerequisites
 
 - **Python 3.8+** (stdlib only), on macOS or Linux.
 - **`openssl`**, to sign the stores' API tokens (only `push.py` needs it).
 - **Google Chrome or Chromium**, for `preview --png` (set `CHROME` to point at it; the HTML preview works
   without it) and for `store-screenshots`' rendering and sheets (required there).
+- For `store-capture`, the tools of the technique chosen: Xcode (`simctl`, `xcuitest`), the Android SDK's
+  platform-tools and emulator (`adb`, `uiautomator`), the DevFlow (`dotnet tool install -g Microsoft.Maui.Cli
+  --prerelease`) or Ailoha (`npm install -g @ailoha/cli`) CLI, an Appium 2/3 server and drivers, the Maestro CLI,
+  Chrome; `ffmpeg` and `ffprobe` for video. Each is detected, never bundled.
 - To send: an **App Store Connect API key** (App Manager or Admin) in `ASC_KEY_ID`, `ASC_ISSUER_ID` and
   `ASC_PRIVATE_KEY`, and/or a **Google Play service account** with Manage store presence in
   `GOOGLE_PLAY_SERVICE_ACCOUNT`. Keys may be a path, the text, or base64.
@@ -102,6 +124,9 @@ The rendered folder is `store-listing.json`'s screenshots folder: `listing.py ch
   masks the contact's phone number. Nothing is sent anywhere else: no telemetry, no account.
 - The agent never sends without your go-ahead, never claims a console form was changed, and stops at a
   checklist for stores with no API.
+- **`store-capture` talks only to this machine:** simulators, emulators, devices over adb, a local Appium server,
+  in-app agents on loopback ports, the app on `localhost`. It creates its own simulators and emulators
+  (`appstores-<device id>`) and touches yours only when the plan names them, and puts back everything it changes.
 - **Device art:** `store-screenshots` draws its own generic frames and never ships, fetches or modifies a maker's
   device art; your own Apple bezels are used only as they are, on Apple's set.
 

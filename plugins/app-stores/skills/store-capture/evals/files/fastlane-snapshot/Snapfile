@@ -1,0 +1,16 @@
+# Sample Recipes: fastlane snapshot
+devices([
+  "iPhone 17 Pro Max",
+  "iPhone 11",
+  "iPad Pro 13-inch (M5)"
+])
+
+languages([
+  "en-US",
+  "de-DE"
+])
+
+scheme("SampleRecipesUITests")
+output_directory("./fastlane/screenshots")
+clear_previous_screenshots(true)
+override_status_bar(true)

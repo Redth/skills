@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "out": "captures",
+  "app": { "android": { "package": "com.example.samplerecipes", "activity": ".MainActivity", "apk": "build/app-debug.apk" } },
+  "locales": ["en-US"],
+  "seed": "demo",
+  "devices": [
+    { "id": "android-phone", "platform": "android", "kind": "phone", "driver": "adb", "width": 1080, "height": 2400,
+      "target": { "avd": "appstores-android-phone", "profile": "medium_phone",
+                  "systemImage": "system-images;android-36;google_apis;arm64-v8a" } }
+  ],
+  "screens": [
+    { "id": "plan", "steps": [ { "launch": { "args": { "ScreenshotScreen": "plan" } } }, { "settle": true } ] },
+    { "id": "shopping", "steps": [ { "launch": { "args": { "ScreenshotScreen": "shopping" } } }, { "settle": true } ] }
+  ]
+}

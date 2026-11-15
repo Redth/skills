@@ -1,0 +1,10 @@
+<Shell xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+       xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+       xmlns:pages="clr-namespace:SampleRecipes.Pages"
+       x:Class="SampleRecipes.AppShell">
+  <TabBar>
+    <ShellContent Title="Plan" Route="plan" AutomationId="tab-plan" ContentTemplate="{DataTemplate pages:PlanPage}" />
+    <ShellContent Title="Recipes" Route="recipes" AutomationId="tab-recipes" ContentTemplate="{DataTemplate pages:RecipesPage}" />
+    <ShellContent Title="Shopping" Route="shopping" AutomationId="tab-shopping" ContentTemplate="{DataTemplate pages:ShoppingPage}" />
+  </TabBar>
+</Shell>
