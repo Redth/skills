@@ -97,3 +97,9 @@ jobs:
           path: plugins/app-stores/skills/store-screenshots
           fail-on-warning: "false"
           validate-references: "true"
+      - name: Lint app-stores' store-capture SKILL.md
+        uses: Flash-Brew-Digital/validate-skill@v1
+        with:
+          path: plugins/app-stores/skills/store-capture
+          fail-on-warning: "false"
+          validate-references: "true"

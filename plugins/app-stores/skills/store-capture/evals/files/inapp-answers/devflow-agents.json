@@ -1,0 +1,15 @@
+[
+  {
+    "id": "7ff0e6fd13d9",
+    "project": "SampleRecipes.csproj",
+    "tfm": "net10.0-ios",
+    "platform": "iOS",
+    "appName": "Sample Recipes",
+    "framework": "maui",
+    "uiFramework": "maui-controls",
+    "port": 10224,
+    "version": "0.1.0",
+    "processId": 41017,
+    "connectedAt": "2026-11-14T10:02:11Z"
+  }
+]

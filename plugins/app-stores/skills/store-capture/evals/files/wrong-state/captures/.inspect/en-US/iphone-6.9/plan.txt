@@ -1,0 +1,7 @@
+[
+ {"id": "page_plan", "type": "ContentPage", "automationId": "plan-page", "children": [
+  {"id": "el-2", "type": "Label", "automationId": "plan-title", "text": "This week"},
+  {"id": "el-3", "type": "CollectionView", "automationId": "plan-days", "children": []},
+  {"id": "el-4", "type": "Label", "automationId": "plan-empty", "text": "Nothing planned yet. Add your first dinner!"}
+ ]}
+]

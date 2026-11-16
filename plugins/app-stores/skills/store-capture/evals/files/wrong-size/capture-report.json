@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-14T10:02:11Z",
+  "plan": "capture-plan.json",
+  "shots": [
+    { "locale": "en-US", "device": "iphone-6.5", "screen": "plan", "status": "failed",
+      "reason": "wrong size: 828x1792, the plan promises 1242x2688 (never resized)", "width": 828, "height": 1792,
+      "driver": "simctl", "source": { "deviceType": "iPhone 11", "runtime": "iOS 27.2" }, "statusBar": "overridden",
+      "fixes": [], "warnings": [] },
+    { "locale": "en-US", "device": "iphone-6.5", "screen": "recipe", "status": "failed",
+      "reason": "wrong size: 828x1792, the plan promises 1242x2688 (never resized)", "width": 828, "height": 1792,
+      "driver": "simctl", "source": { "deviceType": "iPhone 11", "runtime": "iOS 27.2" }, "statusBar": "overridden",
+      "fixes": [], "warnings": [] }
+  ]
+}

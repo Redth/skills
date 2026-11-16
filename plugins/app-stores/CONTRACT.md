@@ -792,6 +792,191 @@ that already has a listing; the files live in the user's project beside the conf
   numbers and who it suits).
 - `copy` rules are checked on captions (`maxWords`, `maxLines`, `case`) as warnings.
 
+## 10. `store-capture`
+
+Captures an app's screens (and preview videos) at exactly the sizes the stores want, on any stack, by whichever
+technique fits the app. Proposal issue #13. Its output is what `store-screenshots` reads as captures and what
+`store-listings` reads as screenshots when they go up as they are.
+
+### 10.1 Layout
+
+```
+skills/store-capture/
+  SKILL.md  VERSION
+  references/   staging.md (agreeing with the user which screens and how each is staged: sign-in, data, skips,
+                permissions, flags, clock, network, state and verify, confirming on one screen, reuse),
+                choosing.md (which technique for which app: a decision table), screenshot-mode.md (adding a
+                launch-argument / deep-link screenshot mode to an app, per stack), devflow.md, ailoha.md, appium.md,
+                ui-automation.md (XCUITest, UI Automator, Maestro, macOS Accessibility), simctl.md, adb.md, web.md,
+                desktop.md, engines.md (Unity, Godot, Unreal), importing.md, video.md, clean-state.md (status bar,
+                demo data, clock, locale, appearance), sizes.md (which device renders which store size natively),
+                pitfalls.md, config.md (every field of the plan)
+  schema/capture-plan.schema.json
+  scripts/
+    appstores_lib/   (copied)
+    capture.py       plan → drivers → folder + report
+    drivers/         one module per driver (§10.3)
+    import_captures.py  check_captures.py  video.py  test_*.py
+  evals/  evals.json  trigger-evals.json  files/
+```
+
+### 10.2 The capture plan: `capture-plan.json`
+
+```json
+{
+  "$schema": "./capture-plan.schema.json",
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "build/SampleRecipes.app" },
+           "android": { "package": "com.example.samplerecipes", "activity": ".MainActivity", "apk": "build/app.apk" },
+           "web": { "url": "http://localhost:8080" } },
+  "locales": ["en-US", "de-DE"],
+  "appearance": "light",
+  "clock": "09:41",
+  "statusBar": "clean",
+  "seed": "demo",
+  "staging": {
+    "account": { "kind": "demo", "env": ["SAMPLE_DEMO_USER", "SAMPLE_DEMO_PASSWORD"] },
+    "seed": { "kind": "command", "run": "./store/seed-demo.sh" },
+    "launch": { "args": { "DemoUser": "${SAMPLE_DEMO_USER}" }, "env": { "DemoUser": "${SAMPLE_DEMO_USER}" } },
+    "skip": [ { "what": "onboarding", "how": "the screenshot mode marks it seen" } ],
+    "permissions": { "ios": ["photos"], "android": ["android.permission.POST_NOTIFICATIONS"] },
+    "clock": { "now": "2026-11-14T09:41", "how": "ScreenshotNow" },
+    "network": { "kind": "offline" },
+    "confirmed": { "screen": "plan", "device": "iphone-6.9", "on": "2026-11-14" }
+  },
+  "devices": [
+    { "id": "iphone-6.9", "platform": "ios", "driver": "simctl", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max", "runtime": "latest" } },
+    { "id": "android-phone", "platform": "android", "driver": "adb", "width": 1080, "height": 1920,
+      "target": { "avd": "Medium_Phone", "wmSize": "1080x1920", "density": 420 } },
+    { "id": "maui-iphone", "platform": "ios", "driver": "devflow", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max" } }
+  ],
+  "screens": [
+    { "id": "plan", "state": "this week's plan, five invented recipes",
+      "steps": [ { "launch": { "args": { "ScreenshotScreen": "plan" } } }, { "wait": { "text": "This week" } } ],
+      "verify": { "text": "Lemon Pasta" } },
+    { "id": "recipe", "steps": [ { "deepLink": "samplerecipes://recipe/demo" }, { "wait": { "id": "recipe-title" } } ] },
+    { "id": "search", "devices": ["iphone-6.9"],
+      "steps": [ { "launch": {} }, { "tap": { "id": "search" } }, { "type": { "text": "pasta" } },
+                 { "wait": { "ms": 800 } } ] },
+    { "id": "flow-made", "steps": [ { "flow": "flows/onboarding.yaml" } ] }
+  ]
+}
+```
+
+- **Devices** promise an exact `width`×`height` (from the store's rules); a capture that comes out any other size is
+  `failed`, never resized. `driver` picks the technique; `target` is the driver's own settings.
+- **Screens** are reached by **steps**, run in order, then a screenshot. Step kinds: `launch` (`args`, `env`,
+  `clean`: reinstall/clear data first), `deepLink` (a URL), `url` (web), `tap`, `type` (`text`, optional target),
+  `wait` (`ms`, or an element to appear, with `timeout`), `scroll` (`to` an element or `direction`), `back`,
+  `swipe`, `flow` (a Maestro flow or a UI test name, run by the driver that understands it), `script` (a command
+  the user provides, run as is, with `APPSTORES_DEVICE`, `APPSTORES_LOCALE`, `APPSTORES_SCREEN`,
+  `APPSTORES_PLATFORM`, `APPSTORES_APP_ID` and the host's `APPSTORES_UDID` or `ANDROID_SERIAL`/`APPSTORES_SERIAL`),
+  `appFile` (a file copied into the app's own data: the simulator's data container, Android's data folder through
+  `run-as`), `settle` (wait for no animation: two identical frames, optionally ignoring rectangles). Elements are found by
+  `id` (accessibility identifier / automation id / resource id / test id), `text`, `label` or `xpath`; each driver
+  says which it supports and reports `skipped` for steps it can't do.
+- `locales`, `appearance` (`light` | `dark`), `clock`, `statusBar` (`clean` | `as-is`) and `seed` (passed to the
+  app as `ScreenshotSeed` in launch args / extras) are set per device by the driver before the screens and reset
+  after.
+- Any field may be overridden per device or per screen (`devices[].locales`, `screens[].devices`, …).
+- **Staging** (`staging`, agreed with the user before the plan runs): `account` (`kind`: `none`, `guest`, `bypass`,
+  `demo`; a demo account only by the names of its environment variables, `env`, never values and never a real
+  person's account), `seed` (`kind`: `command` run before each screen, `file` copied into the app's data as an
+  `appFile` step, `launch`, `backend`, `none`; `when`: `each-screen` or `once`), `launch` (`args` and `env` added
+  to every `launch` step; `${NAME}` takes one of `account.env`, from the environment, masked in logs and reports),
+  `skip`, `permissions` (by platform: granted before launch, revoked after), `flags`, `clock` (the app's own
+  "now"), `network`, `confirmed` (`{screen, device, on}`: until set, `capture.py` captures one screen at a time),
+  `doc` (the readable copy, default `staging.md`, written by `capture.py --write-staging`; a run warns when it no
+  longer matches). A screen's `"staging": false` leaves it out.
+- **Per screen**: `state` (what it must show, in plain words) and `verify` (an element, or a list, that must be on
+  screen before the shot; otherwise the shot is `missed`, "wrong state"). Overrides may change both.
+
+### 10.3 Drivers
+
+| Driver | Platforms | How it reaches screens | Needs |
+|---|---|---|---|
+| `simctl` | iOS, iPadOS, tvOS, watchOS, visionOS simulators | `launch` args/env, `deepLink` (`simctl openurl`); taps only through another driver | Xcode |
+| `adb` | Android phones, tablets, TV, Wear, Fire (emulators or devices) | `launch` extras, `deepLink` (`am start -d`), `tap`/`type`/`swipe`/`back` via `input` and `uiautomator dump` lookups | Android SDK platform-tools (and emulator) |
+| `devflow` | .NET MAUI apps with the DevFlow agent (dotnet/maui-labs) | the agent's visual tree, actions and screenshots over its local HTTP API / CLI | the agent package in a debug build; its CLI |
+| `ailoha` | MAUI, native Android, Swift, Flutter, React Native/Expo, WinUI, WPF apps with the Ailoha agent | the agent's UI tree, actions and screenshots via the `ailoha` CLI (or its local HTTP API) | the agent package; `@ailoha/cli` |
+| `appium` | iOS (XCUITest driver), Android (UiAutomator2), Mac, Windows; MAUI, RN, Flutter, native | W3C WebDriver JSON over HTTP to a local Appium server (stdlib; no client library) | Appium 2/3 server and drivers |
+| `xcuitest` | iOS/iPadOS/tvOS/macOS native and anything XCUITest drives | `flow`: runs `xcodebuild test -only-testing:` the user's screenshot tests, then exports attachments with `xcresulttool` | Xcode, a UI test target |
+| `uiautomator` | Android | the device's own `uiautomator dump` + `input` (the `adb` driver's element finding, usable on its own) | platform-tools |
+| `maestro` | iOS, Android, web | `flow`: `maestro test` a flow that calls `takeScreenshot`; or steps translated to a generated flow | Maestro CLI |
+| `macos` | Mac apps | `launch`, Accessibility via `osascript` (System Events: click by name, keystrokes), `screencapture -l <window id>` with the shadow off | macOS, Accessibility permission |
+| `chrome` | web apps, PWAs | headless Chrome (shared client): `url`, `tap`/`type`/`wait` by selector via `Runtime.evaluate` | Chrome |
+| `import` | anything that already made screenshots | reads another tool's folder with a mapping (`import_captures.py`) | — |
+
+Each driver is a module in `scripts/drivers/` with `prepare(device, plan)`, `run_screen(device, screen, locale)
+-> Shot`, `reset(device)` (always called, in `finally`) and `capabilities()` (the step kinds and element finders it
+supports). Drivers run external commands only through `drivers/base.py`'s `run()` (logs the command, a timeout,
+a fake for tests) and talk HTTP only to `localhost`/`127.0.0.1` through `web.py`. `base.run_screen` checks the
+screen's `verify` after its steps (`Shot.state_check`: `passed`, `failed`, `unchecked`, `none`) and, with
+`--inspect`, saves its UI tree (`inspect_tree`).
+
+**In-app agents are pinned**: `devflow` and `ailoha` list the agents, read each one's status (device id, package,
+process), and use only the one that is the plan's app on the dedicated device (the simulator's UDID, directly or
+through the process's path; on Android the process `pidof` reports on the serial), passing `--agent-port` (and on
+Android `--device <serial>` and `ANDROID_SERIAL`) on every command; found again after each launch; none or several
+is an error, never a guess. The app is changed only through the CLI (DevFlow's lease), one command at a time,
+retried when another client's command turned it away; a reply of `success: false` fails the step. Status bars:
+`verified` only when confirmed (iOS: `status_bar list`; Android: the bar's pixels moved with demo mode's clock),
+else `unverified`.
+
+**Network**: drivers talk only to the local machine (simulators, emulators, devices over adb, a local Appium
+server, the in-app agents on loopback ports). Nothing reaches the internet.
+
+### 10.4 Output
+
+`<out>/<locale>/<device id>/<screen id>.png` — 8-bit RGB (no alpha, no `tRNS`), sRGB, not interlaced, exactly the
+device's size — and `<out>/capture-report.json`:
+
+```json
+{ "version": 1, "startedAt": "…", "plan": "capture-plan.json",
+  "shots": [ { "locale": "en-US", "device": "iphone-6.9", "screen": "plan", "status": "taken",
+               "path": "en-US/iphone-6.9/plan.png", "width": 1320, "height": 2868, "sha256": "…",
+               "driver": "simctl", "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2" },
+               "statusBar": "verified" | "overridden" | "unverified" | "none", "fixes": [], "warnings": [],
+               "state": "…", "stateCheck": "passed" | "failed" | "unchecked" },
+             { "…": "status missed: not reached (kept: previous|none, reason); failed: wrong size etc.; skipped: a step or device the driver can't do" } ] }
+```
+
+Adapters write into a temp folder and move files into place at the end. `fixes` lists what was changed
+(`alpha-flattened`, `converted-to-srgb`, `16-bit-to-8-bit`), never a resize; an alpha channel that's all opaque is
+flattened without a per-shot mention and counted once in the report's `notes`. `check_captures.py` reads PNG headers
+against the plan (and, with `--rules`, the stores' accepted sizes; a required App Store display type no device fills
+is a note) and lists what's wrong.
+
+### 10.5 Rules every driver keeps
+
+One state for every device of a kind, in one pass, same seed and clock; lay out at the target size (pick the device,
+`wm size`, viewport) and never scale; a clean status bar where there is one, recorded as verified or not; wait for
+the screen to settle (no toasts, spinners, keyboards unless asked); reset everything changed (status bar, demo mode,
+`wm size`, locale, appearance, permissions) in `finally`; never touch the person's own simulators or devices unless
+the plan names them (create and own dedicated ones by default: `appstores-<device id>`); report honestly.
+
+### 10.6 Commands
+
+- `capture.py [--plan capture-plan.json] [--devices …] [--screens …] [--locales …] [--keep-going] [--cleanup]
+  [--dry-run] [--inspect]`: `--dry-run` prints each device's preparation and each step as the driver would run it,
+  running nothing; `--inspect` saves each screen's UI tree to `<out>/.inspect/`. Exit 3 when a staged plan isn't
+  confirmed and the run has more than one screen, or a staging account's variable isn't set.
+- `capture.py --write-staging` (writes `staging.md`); `capture.py --current [folder]` (lists the current store
+  screenshots: `existing/<store>/screenshots/`, `store-screenshots.json`'s shots, `design/current.json`, a folder).
+- `import_captures.py --from fastlane-snapshot|fastlane-screengrab|xcresult|maestro|flutter|detox|playwright|folder
+  <path> [--map mapping.json] [--out captures]`.
+- `check_captures.py [--plan …] [--rules <store>,…] [--json]`.
+- `video.py record|encode|check …`: record (`simctl io recordVideo`, `adb shell screenrecord`, Chrome's screencast),
+  encode to each store's preview spec with ffmpeg (constant frame rate, H.264, a silent audio track when there's
+  none, the exact size), and check with ffprobe against the rules' `video` rules. ffmpeg/ffprobe are detected,
+  never bundled.
+
+Exit codes as the other skills': 0, 1 (a shot failed or missed with nothing kept), 2 (refused: another capture is
+writing to the same folder), 3 (usage/env).
+
 ## 9. Versioning
 
 Each skill's `VERSION` starts at `0.1.0`. The repository's `CHANGELOG.md` gets an `app-stores` entry per PR. The

@@ -1,0 +1,26 @@
+[
+  {
+    "testIdentifier": "SampleRecipesUITests/StoreShots/testAllScreens()",
+    "testIdentifierURL": "test://com.apple.xcode/SampleRecipes/SampleRecipesUITests/StoreShots/testAllScreens",
+    "attachments": [
+      {
+        "exportedFileName": "1D0C8A4E-2F6B-4C1A-9E3D-5B7A8C9D0E1F.png",
+        "suggestedHumanReadableName": "plan_0_1D0C8A4E-2F6B-4C1A-9E3D-5B7A8C9D0E1F.png",
+        "isAssociatedWithFailure": false,
+        "timestamp": 1794650531.5,
+        "configurationName": "German",
+        "deviceName": "appstores-iphone-6.9",
+        "deviceId": "00000000-0000-0000-0000-0000000000A1"
+      },
+      {
+        "exportedFileName": "2E1D9B5F-3A7C-4D2B-8F4E-6C8B9D0E1F2A.png",
+        "suggestedHumanReadableName": "recipe_1_2E1D9B5F-3A7C-4D2B-8F4E-6C8B9D0E1F2A.png",
+        "isAssociatedWithFailure": false,
+        "timestamp": 1794650534.25,
+        "configurationName": "German",
+        "deviceName": "appstores-iphone-6.9",
+        "deviceId": "00000000-0000-0000-0000-0000000000A1"
+      }
+    ]
+  }
+]

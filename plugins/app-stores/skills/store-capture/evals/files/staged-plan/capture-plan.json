@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "build/SampleRecipes.app" },
+           "android": { "package": "com.example.samplerecipes", "activity": ".MainActivity", "apk": "build/app-Signed.apk" } },
+  "locales": ["en-US", "de-DE"],
+  "clock": "09:41",
+  "statusBar": "clean",
+  "staging": {
+    "account": { "kind": "bypass", "how": "the Debug build's SampleRecipesFakeSession" },
+    "seed": { "kind": "file", "file": "store/demo/recipes.db",
+              "into": { "ios": "Library/Caches/recipes/recipes.db", "android": "cache/recipes/recipes.db" },
+              "how": "made by store/seed-tool from the UI tests' demo week (invented recipes), dates shifted to this week" },
+    "launch": { "args": { "SampleRecipesFakeSession": "demo", "SampleRecipesApi": "http://127.0.0.1:9" },
+                "env": { "SampleRecipesFakeSession": "demo", "SampleRecipesApi": "http://127.0.0.1:9" } },
+    "skip": [ { "what": "onboarding", "how": "the fake session marks it seen" },
+              { "what": "rating prompt", "how": "the Debug build never asks" } ],
+    "permissions": { "android": ["android.permission.POST_NOTIFICATIONS"] },
+    "clock": { "now": "the real time", "how": "no screenshot mode: the screens chosen show no clock times" },
+    "network": { "kind": "offline", "how": "the API override is a closed port; pages read the cache" },
+    "confirmed": { "screen": "plan", "device": "iphone-6.9", "on": "2026-10-02" }
+  },
+  "devices": [
+    { "id": "iphone-6.9", "platform": "ios", "kind": "phone", "driver": "devflow", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max" } },
+    { "id": "android-phone", "platform": "android", "kind": "phone", "driver": "adb", "width": 1080, "height": 1920,
+      "target": { "systemImage": "system-images;android-36;google_apis;arm64-v8a", "profile": "medium_phone",
+                  "wmSize": "1080x1920", "density": 420 } }
+  ],
+  "screens": [
+    { "id": "plan", "state": "this week's plan, five invented dinners, Tuesday open",
+      "steps": [ { "launch": {} }, { "wait": { "id": "plan-title", "timeout": 60 } }, { "settle": true } ],
+      "verify": { "text": "Lemon Pasta" } },
+    { "id": "recipe", "state": "Lemon Pasta open at its steps",
+      "steps": [ { "launch": {} }, { "tap": { "id": "plan-day-tuesday" } }, { "wait": { "id": "recipe-title" } } ],
+      "verify": { "id": "recipe-steps" } },
+    { "id": "shopping", "state": "the week's shopping list, twelve items, three ticked",
+      "steps": [ { "launch": {} }, { "tap": { "id": "tab-shopping" } }, { "wait": { "id": "shopping-list" } } ],
+      "verify": { "text": "Parmesan" } }
+  ]
+}

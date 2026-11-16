@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "build/SampleRecipes.app" } },
+  "locales": ["en-US"],
+  "seed": "demo",
+  "devices": [
+    { "id": "iphone-6.5", "platform": "ios", "kind": "phone", "driver": "simctl", "width": 1242, "height": 2688,
+      "target": { "deviceType": "iPhone 11", "runtime": "latest" } }
+  ],
+  "screens": [
+    { "id": "plan", "steps": [ { "launch": { "args": { "ScreenshotScreen": "plan" } } }, { "settle": true } ] },
+    { "id": "recipe", "steps": [ { "launch": { "args": { "ScreenshotScreen": "recipe" } } }, { "settle": true } ] }
+  ]
+}

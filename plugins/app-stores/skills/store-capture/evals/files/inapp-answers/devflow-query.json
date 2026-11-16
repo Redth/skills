@@ -1,0 +1,16 @@
+[
+  {
+    "id": "el-17",
+    "parentId": "page_search",
+    "type": "SearchBar",
+    "fullType": "Microsoft.Maui.Controls.SearchBar",
+    "framework": "maui",
+    "automationId": "search",
+    "text": "Search recipes",
+    "value": "",
+    "role": "searchbox",
+    "traits": ["interactive", "focusable"],
+    "state": {"displayed": true, "enabled": true, "selected": false, "focused": false, "opacity": 1.0},
+    "bounds": {"x": 16, "y": 120, "width": 370, "height": 44}
+  }
+]

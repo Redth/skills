@@ -1,0 +1,1035 @@
+#!/usr/bin/env python3
+"""capture.py: capture an app's screens at exactly the sizes the stores want, by the plan's drivers.
+
+    capture.py [--plan capture-plan.json] [--devices iphone-6.9,android-phone] [--screens plan,recipe]
+               [--locales en-US,de-DE] [--keep-going] [--cleanup] [--dry-run] [--inspect]
+    capture.py --write-staging [--plan …]       write staging.md (the plan's staging, readable) beside the plan
+    capture.py --current [FOLDER]               list the current store screenshots to start the screen list from
+
+For each device in the plan (CONTRACT.md 10.2) its driver prepares it (finds or creates and boots a dedicated
+simulator, starts an emulator, opens a browser), then for each locale and each screen runs the screen's steps and
+takes a screenshot, and always resets the device after (status bar, demo mode, display size, appearance, locale),
+even when something failed. Each picture is checked: exactly the device's ``width`` x ``height`` (any other size is
+``failed``, never resized), 8-bit RGB with no alpha, sRGB, not interlaced. One with an alpha channel (or 16 bits, a
+colour profile other than sRGB, interlacing) is drawn again through headless Chrome onto the plan's ``flatten``
+colour and the change listed in its ``fixes``.
+
+Pictures are written into a temporary folder inside ``<out>`` and moved into place at the end:
+``<out>/<locale>/<device id>/<screen id>.png``, with ``<out>/capture-report.json`` saying what was taken, missed
+(``kept: previous`` when an older picture stays), failed or skipped, and why. A partial run (``--devices``, …)
+keeps the report's entries for what it didn't run.
+
+**Staging** (the plan's ``staging``, agreed with the user first: ``references/staging.md``): its ``launch`` args and
+env go into every ``launch`` step (the step's own win; ``${NAME}`` takes a variable ``staging.account.env``
+names, from the environment, never logged); its ``seed`` runs before each screen (a ``command`` as a ``script``
+step, a ``file`` as an ``appFile`` step); its ``permissions`` are granted before launch; the account's variables
+must be set. A plan with ``staging`` captures more than one screen only once ``staging.confirmed`` says the user
+saw one. Each screen's ``verify`` must be on screen before the shot, or the shot is ``missed`` ("wrong state").
+
+``--dry-run`` prints each device's preparation and every step as its driver would run it, and runs nothing.
+``--inspect`` also saves each screen's UI tree (after its steps, or where they stopped) to
+``<out>/.inspect/<locale>/<device>/<screen>.txt``, for writing steps.
+``--cleanup`` deletes the simulators and emulators this skill created (``appstores-<device id>``) when done.
+Without ``--keep-going`` the run stops at the first shot that's missed or failed (the rest are reported as not
+attempted).
+
+Exit codes: 0 done; 1 a shot failed, or was missed or skipped with no previous picture kept; 2 refused (another
+capture is writing to the same folder); 3 usage or environment (no plan, an invalid plan, a missing tool).
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import datetime
+import os
+import re
+import shutil
+import sys
+import tempfile
+import traceback
+
+SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPTS_DIR)
+
+from appstores_lib import chrome  # noqa: E402
+from appstores_lib import jsonio  # noqa: E402
+from appstores_lib import png  # noqa: E402
+from appstores_lib import schema  # noqa: E402
+import drivers  # noqa: E402
+from drivers import base  # noqa: E402
+
+SKILL_DIR = os.path.dirname(SCRIPTS_DIR)
+SCHEMA_PATH = os.path.join(SKILL_DIR, "schema", "capture-plan.schema.json")
+REPORT_NAME = "capture-report.json"
+LOCK_NAME = ".capture.lock"
+STAGING_DOC = "staging.md"
+INSPECT_DIR = ".inspect"
+VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+CREDENTIAL_KEY = re.compile(r"(?i)(password|passwd|passphrase|secret)")
+
+EXIT_OK = 0
+EXIT_ERRORS = 1
+EXIT_REFUSED = 2
+EXIT_USAGE = 3
+
+# Settings a device and a screen may override (CONTRACT.md 10.2), and their defaults.
+SETTINGS = ("appearance", "clock", "statusBar", "seed", "flatten")
+DEFAULTS = {"locales": ["en-US"], "appearance": "light", "clock": "09:41", "statusBar": "clean", "seed": None,
+            "flatten": "#000000", "out": "captures"}
+# A platform with no app entry of its own uses its family's.
+FAMILY = {"ipados": "ios", "tvos": "ios", "watchos": "ios", "visionos": "ios"}
+
+
+class UsageError(Exception):
+    """The plan can't be used: missing, not JSON, against the schema, or naming things that don't exist."""
+
+
+class Refused(Exception):
+    """The run won't start (another capture holds the output folder)."""
+
+
+def log(message):
+    """Progress, to stderr."""
+    print(message, file=sys.stderr)
+
+
+def _csv(value):
+    if not value:
+        return None
+    return [v.strip() for v in value.split(",") if v.strip()]
+
+
+def now():
+    """The current UTC time (a hook for tests)."""
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def _stamp(when):
+    return when.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# -- the plan -------------------------------------------------------------------------------------------------
+
+def load_schema():
+    """The plan's JSON schema."""
+    return jsonio.load(SCHEMA_PATH)
+
+
+def load_plan(path):
+    """Read and validate a plan; return it. Raises ``UsageError`` naming every problem."""
+    if not os.path.isfile(path):
+        raise UsageError("no plan at %s (pass --plan, or write capture-plan.json: see the skill's SKILL.md)" % path)
+    try:
+        plan = jsonio.load(path)
+    except jsonio.JsonError as e:
+        raise UsageError(str(e)) from None
+    problems = schema.validate(plan, load_schema())
+    if not problems and isinstance(plan, dict):
+        problems = check_plan(plan)
+    if problems:
+        raise UsageError("%s isn't a usable capture plan:\n  %s" % (path, "\n  ".join(problems)))
+    return plan
+
+
+def check_plan(plan):
+    """What the schema can't say: unique ids, screens naming devices that exist. Returns messages."""
+    problems = []
+    seen = set()
+    for d in plan["devices"]:
+        if d["id"] in seen:
+            problems.append("/devices: the id %s is used twice" % d["id"])
+        seen.add(d["id"])
+    screens = set()
+    platforms = set(d["platform"] for d in plan["devices"])
+    for i, s in enumerate(plan["screens"]):
+        if s["id"] in screens:
+            problems.append("/screens: the id %s is used twice" % s["id"])
+        screens.add(s["id"])
+        for name in s.get("devices") or []:
+            if name not in seen:
+                problems.append("/screens/%d/devices: no device %s" % (i, name))
+        for name in s.get("overrides") or {}:
+            if name not in seen and name not in platforms:
+                problems.append("/screens/%d/overrides: %s is neither a device id nor a device's platform" % (i, name))
+    problems.extend(check_staging(plan))
+    return problems
+
+
+def staging_vars(plan):
+    """The environment variables ``staging.account.env`` names (a demo account's, never a value in the plan)."""
+    return list(((plan.get("staging") or {}).get("account") or {}).get("env") or [])
+
+
+def _launch_values(plan):
+    """Every ``launch`` step's args and env values in the plan (and staging's), as ``(where, key, value)``."""
+    st = plan.get("staging") or {}
+    for key in ("args", "env"):
+        for k, v in ((st.get("launch") or {}).get(key) or {}).items():
+            yield "/staging/launch/%s" % key, k, v
+    for i, screen in enumerate(plan["screens"]):
+        layers = [("/screens/%d" % i, screen.get("steps") or [])]
+        for name, o in (screen.get("overrides") or {}).items():
+            layers.append(("/screens/%d/overrides/%s" % (i, name), o.get("steps") or []))
+        for where, steps in layers:
+            for j, step in enumerate(steps):
+                if isinstance(step, dict) and isinstance(step.get("launch"), dict):
+                    for key in ("args", "env"):
+                        for k, v in (step["launch"].get(key) or {}).items():
+                            yield "%s/steps/%d/launch/%s" % (where, j, key), k, v
+
+
+def check_staging(plan):
+    """What the schema can't say about ``staging``: a demo account names its variables, ``${NAME}`` names only
+    those, a seed has what its kind needs, ``confirmed`` names a screen of the plan. Returns messages."""
+    problems = []
+    st = plan.get("staging")
+    names = set(staging_vars(plan))
+    if st is not None:
+        account = st.get("account") or {}
+        if account.get("kind") == "demo" and not names:
+            problems.append("/staging/account: a demo account is named by its environment variables (env: "
+                            "[\"DEMO_USER\", \"DEMO_PASSWORD\"]), never written into the plan")
+        seed = st.get("seed") or {}
+        if seed.get("kind") == "command" and not seed.get("run"):
+            problems.append("/staging/seed: a command seed needs run")
+        if seed.get("kind") == "file" and not (seed.get("file") and seed.get("into")):
+            problems.append("/staging/seed: a file seed needs file and into")
+        confirmed = st.get("confirmed") or {}
+        if confirmed.get("screen") and confirmed["screen"] not in [s["id"] for s in plan["screens"]]:
+            problems.append("/staging/confirmed: no screen %s" % confirmed["screen"])
+    for where, key, value in _launch_values(plan):
+        for name in VAR.findall(str(value)):
+            if name not in names:
+                problems.append("%s/%s: ${%s} isn't one of staging.account.env's variables" % (where, key, name))
+    return problems
+
+
+def credential_warnings(plan):
+    """Launch values that look like a password written into the plan (they belong in a variable)."""
+    out = []
+    for where, key, value in _launch_values(plan):
+        if CREDENTIAL_KEY.search(key) and isinstance(value, str) and value and not VAR.search(value):
+            out.append("%s/%s looks like a password written into the plan: name it in staging.account.env and "
+                       "write ${NAME} (and only ever a demo account's)" % (where, key))
+    return out
+
+
+def app_for(plan, device):
+    """The app entry a device uses: the plan's for its platform (or its family's), merged with the device's."""
+    apps = plan.get("app") or {}
+    platform = device["platform"]
+    entry = apps.get(platform)
+    if entry is None and platform in FAMILY:
+        entry = apps.get(FAMILY[platform])
+    merged = dict(entry or {})
+    merged.update(device.get("app") or {})
+    merged.pop("$comment", None)
+    return merged
+
+
+def resolve_device(plan, device):
+    """A device as a driver gets it: its own fields, each setting from the device or else the plan (or the
+    default), its ``app`` entry and ``target`` (``{}`` when absent)."""
+    out = copy.deepcopy(device)
+    out.pop("$comment", None)
+    out["locales"] = list(device.get("locales") or plan.get("locales") or DEFAULTS["locales"])
+    for key in SETTINGS:
+        value = device.get(key)
+        out[key] = value if value is not None else plan.get(key, DEFAULTS[key])
+    out["app"] = app_for(plan, device)
+    out["target"] = dict(device.get("target") or {})
+    perms = (plan.get("staging") or {}).get("permissions") or {}
+    platform = device["platform"]
+    out["permissions"] = list(perms.get(platform) or perms.get(FAMILY.get(platform, platform)) or [])
+    return out
+
+
+def screens_for(plan, device):
+    """The screens a resolved device captures, each resolved for it: its settings (the device's, then the
+    screen's, then its overrides' for the device's platform, then for its id), its ``steps`` (an override's
+    replace the screen's) and its ``locales`` (those of the device's it's limited to)."""
+    out = []
+    for screen in plan["screens"]:
+        if screen.get("devices") and device["id"] not in screen["devices"]:
+            continue
+        if screen.get("platforms") and device["platform"] not in screen["platforms"]:
+            continue
+        layers = [screen]
+        overrides = screen.get("overrides") or {}
+        for key in (device["platform"], device["id"]):
+            if key in overrides:
+                layers.append(overrides[key])
+        resolved = {"id": screen["id"], "steps": copy.deepcopy(screen.get("steps") or []),
+                    "staging": screen.get("staging", True)}
+        for key in SETTINGS:
+            resolved[key] = device.get(key)
+        wanted = None
+        for layer in layers:
+            for key in SETTINGS:
+                if layer.get(key) is not None:
+                    resolved[key] = layer[key]
+            for key in ("state", "verify"):
+                if layer.get(key) is not None:
+                    resolved[key] = copy.deepcopy(layer[key])
+            if layer is not screen and "steps" in layer:
+                resolved["steps"] = copy.deepcopy(layer["steps"])
+            if layer.get("locales"):
+                wanted = layer["locales"]
+        resolved["locales"] = [l for l in device["locales"] if wanted is None or l in wanted]
+        out.append(resolved)
+    return out
+
+
+def out_dir(plan, plan_path):
+    """The captures' folder, absolute."""
+    rel = plan.get("out") or DEFAULTS["out"]
+    return rel if os.path.isabs(rel) else os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(plan_path)), rel))
+
+
+# -- staging --------------------------------------------------------------------------------------------------
+
+def staging_doc_path(plan, plan_path):
+    """Where the plan's ``staging.md`` goes (``staging.doc``, beside the plan)."""
+    rel = (plan.get("staging") or {}).get("doc") or STAGING_DOC
+    return rel if os.path.isabs(rel) else os.path.join(os.path.dirname(os.path.abspath(plan_path)), rel)
+
+
+def _describe_steps(steps):
+    return " → ".join(base.describe_step(st) for st in steps or []) or "(no steps)"
+
+
+def _verify_words(verify):
+    checks = verify if isinstance(verify, list) else [verify] if verify else []
+    out = []
+    for c in checks:
+        q = base.element_query(c) if isinstance(c, dict) else None
+        if q:
+            out.append("%s `%s`" % q)
+    return ", ".join(out)
+
+
+def staging_markdown(plan, plan_name="capture-plan.json"):
+    """The plan's staging as a page a person reads (``staging.md``): how the app is signed in, seeded and set up,
+    what's skipped, and per screen what it shows, how it's reached and what's checked. Generated from the plan
+    (``capture.py --write-staging``); the plan is what's edited."""
+    st = plan.get("staging") or {}
+    lines = ["# Staging for the store captures", "",
+             "Generated from `%s` by `capture.py --write-staging`: edit the plan's `staging` and screens, then "
+             "write this again. Agreed with the user before the first capture; reused on every later one." %
+             plan_name, ""]
+    confirmed = st.get("confirmed") or {}
+    if confirmed:
+        lines += ["**Confirmed** on `%s`%s%s." % (confirmed.get("screen"),
+                                                  (" (%s)" % confirmed["device"]) if confirmed.get("device") else "",
+                                                  (", %s" % confirmed["on"]) if confirmed.get("on") else ""), ""]
+    else:
+        lines += ["**Not confirmed yet:** capture one screen, show it to the user, then set `staging.confirmed`.",
+                  ""]
+
+    def section(title, rows):
+        rows = [r for r in rows if r]
+        if rows:
+            lines.extend(["## " + title, ""] + rows + [""])
+
+    account = st.get("account") or {}
+    section("Signing in", [
+        "- %s" % {"none": "No sign-in needed.", "guest": "Guest mode.", "bypass": "A debug sign-in bypass.",
+                  "demo": "A demo account (invented, never a real person's)."}.get(account.get("kind"), "")
+        if account.get("kind") else "",
+        "- Its variables (set in the environment, never written here): %s" % ", ".join(
+            "`%s`" % n for n in account.get("env") or []) if account.get("env") else "",
+        "- How: %s" % account["how"] if account.get("how") else ""])
+    seed = st.get("seed") or {}
+    run = seed.get("run")
+    section("Data", [
+        "- Kind: %s" % seed["kind"] if seed.get("kind") else "",
+        "- Command: `%s`" % (" ".join(run) if isinstance(run, list) else run) if run else "",
+        "- File: `%s` into the app's data at %s" % (seed.get("file"), ", ".join(
+            "`%s` (%s)" % (v, k) for k, v in sorted(seed["into"].items())) if isinstance(seed.get("into"), dict)
+            else "`%s`" % seed.get("into")) if seed.get("file") else "",
+        "- When: %s" % ("before every screen" if seed.get("when", "each-screen") == "each-screen"
+                        else "once, before a device's first screen") if seed.get("kind") in ("command", "file")
+        else "",
+        "- How: %s" % seed["how"] if seed.get("how") else ""])
+    launch = st.get("launch") or {}
+    section("Every launch gets", ["- `%s` = `%s` (%s)" % (k, v, kind) for kind in ("args", "env")
+                                  for k, v in sorted((launch.get(kind) or {}).items())])
+    skips = []
+    for item in st.get("skip") or []:
+        if isinstance(item, dict):
+            skips.append("- %s: %s" % (item.get("what"), item.get("how") or "skipped"))
+        else:
+            skips.append("- %s" % item)
+    section("Skipped", skips)
+    perms = st.get("permissions") or {}
+    section("Permissions granted before launch", ["- %s: %s" % (k, ", ".join(v)) for k, v in sorted(perms.items())])
+    flags = []
+    for f in st.get("flags") or []:
+        if isinstance(f, dict):
+            flags.append("- `%s`%s%s" % (f.get("name"), (" = `%s`" % f["value"]) if "value" in f else "",
+                                         (": %s" % f["how"]) if f.get("how") else ""))
+        else:
+            flags.append("- %s" % f)
+    section("Feature flags", flags)
+    clock = st.get("clock") or {}
+    section("Date and time", [
+        "- The status bar: %s" % plan.get("clock", DEFAULTS["clock"]),
+        "- The app's now: %s" % clock["now"] if clock.get("now") else "",
+        "- How: %s" % clock["how"] if clock.get("how") else ""])
+    network = st.get("network") or {}
+    section("Network", ["- %s" % network["kind"] if network.get("kind") else "",
+                        "- How: %s" % network["how"] if network.get("how") else ""])
+    lines += ["## Screens", "", "| Screen | Shows | Reached by | Checked |", "|---|---|---|---|"]
+    for screen in plan["screens"]:
+        reached = _describe_steps(screen.get("steps"))
+        for name, o in sorted((screen.get("overrides") or {}).items()):
+            if o.get("steps") is not None:
+                reached += "; on %s: %s" % (name, _describe_steps(o["steps"]))
+        lines.append("| `%s` | %s | %s | %s |" % (
+            screen["id"], (screen.get("state") or "").replace("|", "\\|"), reached.replace("|", "\\|"),
+            _verify_words(screen.get("verify")) or "(nothing: look at it)"))
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def write_staging(plan_path):
+    """Write the plan's ``staging.md``; return its path."""
+    plan = load_plan(plan_path)
+    path = staging_doc_path(plan, plan_path)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(staging_markdown(plan, os.path.basename(plan_path)))
+    return path
+
+
+PICTURES = (".png", ".jpg", ".jpeg", ".webp")
+
+
+def current_screenshots(plan_dir, folder=None):
+    """What the current store set already shows, to start the screen list from: ``[(group, rel, note)]`` for
+    every picture under ``folder`` (or ``existing/<store>/screenshots/`` from ``store-listings``' pull) and every
+    shot ``store-screenshots.json`` or ``design/current.json`` lists, in order."""
+    out = []
+    roots = []
+    if folder:
+        roots.append((folder, folder if os.path.isabs(folder) else os.path.join(plan_dir, folder)))
+    else:
+        existing = os.path.join(plan_dir, "existing")
+        if os.path.isdir(existing):
+            for store in sorted(os.listdir(existing)):
+                shots = os.path.join(existing, store, "screenshots")
+                if os.path.isdir(shots):
+                    roots.append(("existing/%s/screenshots" % store, shots))
+    for group, root in roots:
+        for dirpath, dirs, files in os.walk(root):
+            dirs.sort()
+            for name in sorted(files):
+                if not name.lower().endswith(PICTURES):
+                    continue
+                full = os.path.join(dirpath, name)
+                try:
+                    meta = png.info(full)
+                    size = "%dx%d" % (meta.width, meta.height)
+                except (png.ImageError, OSError):
+                    size = "?"
+                out.append((group, os.path.relpath(full, root), size))
+    for name in ("store-screenshots.json", os.path.join("design", "current.json")):
+        path = os.path.join(plan_dir, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            data = jsonio.load(path)
+        except (jsonio.JsonError, OSError):
+            out.append((name, "(unreadable)", ""))
+            continue
+        shots = data.get("shots") if isinstance(data, dict) else data if isinstance(data, list) else None
+        for i, shot in enumerate(shots or [], 1):
+            if isinstance(shot, dict):
+                out.append((name, "%d. %s" % (i, shot.get("id") or "?"), "capture: %s" % (
+                    shot.get("capture") or shot.get("screen") or "?")))
+    return out
+
+
+# -- checking a picture ---------------------------------------------------------------------------------------
+
+_BROWSER = [None]
+
+
+def _browser():
+    if _BROWSER[0] is None:
+        _BROWSER[0] = chrome.Chrome()
+        _BROWSER[0].start()
+    return _BROWSER[0]
+
+
+def close_browser():
+    """Stop the Chrome flattening used, if it started one."""
+    if _BROWSER[0] is not None:
+        _BROWSER[0].close()
+        _BROWSER[0] = None
+
+
+def flatten_with_chrome(src, dest, width, height, colour):
+    """Draw ``src`` at 1:1 onto an opaque ``colour`` page of exactly ``width`` x ``height`` CSS px at scale 1 in
+    headless Chrome and write ``dest``: 8-bit RGB, sRGB (Chrome converts a tagged profile), not interlaced, every
+    opaque pixel unchanged. Raises ``chrome.ChromeNotFound`` / ``chrome.ChromeError``."""
+    folder = os.path.dirname(os.path.abspath(dest))
+    os.makedirs(folder, exist_ok=True)
+    page = os.path.join(folder, ".flatten-%s.html" % os.getpid())
+    with open(page, "w", encoding="utf-8") as f:
+        f.write('<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;'
+                'background:%s}img{display:block;width:%dpx;height:%dpx}</style></head><body>'
+                '<img src="%s"></body></html>' % (colour, width, height, chrome.to_url(os.path.abspath(src))))
+    try:
+        _browser().render(page, width, height, dest, scale=1)
+    finally:
+        os.unlink(page)
+
+
+FLATTEN = flatten_with_chrome   # callable(src, dest, width, height, colour): tests replace it
+
+
+def picture_fixes(meta):
+    """What a picture needs before it's a capture (CONTRACT.md 10.4), as fix names; empty when it's fine."""
+    fixes = []
+    if meta.format != "png":
+        fixes.append("converted-to-png")
+    if meta.has_alpha:
+        fixes.append("alpha-flattened")
+    if meta.bit_depth == 16:
+        fixes.append("16-bit-to-8-bit")
+    if meta.format == "png" and meta.color_type in (0, 3, 4) or meta.format == "jpeg" and meta.color_type != 3:
+        fixes.append("converted-to-rgb")
+    if not meta.srgb:
+        fixes.append("converted-to-srgb")
+    if meta.interlaced:
+        fixes.append("de-interlaced")
+    return fixes
+
+
+def verify_picture(src, dest, width, height, colour="#000000"):
+    """Check the picture a driver wrote and put the capture at ``dest``.
+
+    Returns ``(status, fixes, reason)``: ``("taken", fixes, None)`` with ``dest`` written (copied, or drawn
+    again by ``FLATTEN`` when it needed fixes), or ``("failed", [], reason)`` for a picture that isn't one, isn't
+    exactly ``width`` x ``height`` (never resized) or couldn't be fixed.
+    """
+    if not src or not os.path.isfile(src):
+        return "failed", [], "the driver said it took a picture, but there's no file"
+    try:
+        meta = png.info(src)
+    except (png.ImageError, OSError) as e:
+        return "failed", [], "not a picture: %s" % e
+    if (meta.width, meta.height) != (width, height):
+        hint = " (the other way round: rotated?)" if (meta.height, meta.width) == (width, height) else \
+            " (never resized: pick the device, display size or viewport that renders %dx%d)" % (width, height)
+        return "failed", [], "came out %dx%d, not %dx%d%s" % (meta.width, meta.height, width, height, hint)
+    fixes = picture_fixes(meta)
+    os.makedirs(os.path.dirname(os.path.abspath(dest)), exist_ok=True)
+    if not fixes:
+        shutil.copyfile(src, dest)
+        return "taken", [], None
+    try:
+        FLATTEN(src, dest, width, height, colour)
+    except chrome.ChromeNotFound as e:
+        return "failed", [], "needs %s, which takes Chrome: %s" % (", ".join(fixes), e)
+    except (chrome.ChromeError, OSError) as e:
+        return "failed", [], "couldn't fix it (%s): %s" % (", ".join(fixes), e)
+    try:
+        after = png.info(dest)
+    except (png.ImageError, OSError) as e:
+        return "failed", [], "fixing it (%s) made no picture: %s" % (", ".join(fixes), e)
+    left = picture_fixes(after)
+    if (after.width, after.height) != (width, height) or left:
+        if os.path.exists(dest):
+            os.unlink(dest)
+        return "failed", [], "fixing it (%s) left %s" % (", ".join(fixes), ", ".join(left) or "the wrong size")
+    return "taken", fixes, None
+
+
+# -- running --------------------------------------------------------------------------------------------------
+
+def _pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def take_lock(out):
+    """Claim ``<out>`` for this run (``.capture.lock`` with this process's id); raise ``Refused`` when a live
+    capture holds it. Returns the lock's path."""
+    os.makedirs(out, exist_ok=True)
+    path = os.path.join(out, LOCK_NAME)
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                pid = int(f.read().strip() or 0)
+        except (OSError, ValueError):
+            pid = 0
+        if pid and pid != os.getpid() and _pid_alive(pid):
+            raise Refused("another capture (process %d) is writing to %s: wait for it, or remove %s if it's gone"
+                          % (pid, out, path))
+    with open(path, "w") as f:
+        f.write(str(os.getpid()))
+    return path
+
+
+def _entry(locale, device, screen_id, driver_name):
+    return {"locale": locale, "device": device["id"], "screen": screen_id, "driver": driver_name}
+
+
+def _rel(locale, device_id, screen_id):
+    return "/".join((locale, device_id, screen_id + ".png"))
+
+
+class Run(object):
+    """One capture run: the plan, the filters and options, and what it found. ``execute()`` does it."""
+
+    def __init__(self, plan_path, devices=None, screens=None, locales=None, keep_going=False, cleanup=False,
+                 dry_run=False, inspect=False):
+        """Load the plan and check the filters name things it has (``UsageError`` otherwise), and that a staged
+        plan has been confirmed with the user before it captures more than one screen."""
+        self.plan_path = os.path.abspath(plan_path)
+        self.plan = load_plan(plan_path)
+        self.plan_dir = os.path.dirname(self.plan_path)
+        self.out = out_dir(self.plan, plan_path)
+        self.keep_going = keep_going
+        self.cleanup = cleanup
+        self.dry_run = dry_run
+        self.inspect = inspect
+        self.quiet_alpha = 0
+        self.notes = []
+        ids = [d["id"] for d in self.plan["devices"]]
+        screen_ids = [s["id"] for s in self.plan["screens"]]
+        all_locales = set(self.plan.get("locales") or DEFAULTS["locales"])
+        for d in self.plan["devices"]:
+            all_locales.update(d.get("locales") or [])
+        for name, wanted, have in (("device", devices, ids), ("screen", screens, screen_ids),
+                                   ("locale", locales, sorted(all_locales))):
+            for w in wanted or []:
+                if w not in have:
+                    raise UsageError("the plan has no %s %s (it has %s)" % (name, w, ", ".join(have)))
+        self.only_devices = devices
+        self.only_screens = screens
+        self.only_locales = locales
+        staging = self.plan.get("staging")
+        wanted = screens or screen_ids
+        if staging is not None and not staging.get("confirmed") and not dry_run and len(wanted) > 1:
+            raise UsageError("the staging isn't confirmed with the user yet: capture one screen first (--screens %s), "
+                             "show it, and when they agree set staging.confirmed ({\"screen\": \"%s\"}); then run "
+                             "the rest" % (wanted[0], wanted[0]))
+        self.entries = []
+        self.device_notes = []
+        self.environment_problem = False
+        self.stopped = None
+        self.moves = []
+
+    # Which shots this run makes, for one device.
+
+    def jobs(self, device):
+        """``(locale, screen)`` pairs for a resolved device, locale by locale (so a device switches locale least)."""
+        screens = [s for s in screens_for(self.plan, device)
+                   if not self.only_screens or s["id"] in self.only_screens]
+        pairs = []
+        for locale in device["locales"]:
+            if self.only_locales and locale not in self.only_locales:
+                continue
+            for s in screens:
+                if locale in s["locales"]:
+                    pairs.append((locale, s))
+        return pairs
+
+    def devices(self):
+        """The resolved devices this run captures."""
+        return [resolve_device(self.plan, d) for d in self.plan["devices"]
+                if not self.only_devices or d["id"] in self.only_devices]
+
+    def kept(self, locale, device_id, screen_id):
+        """``previous`` when an older picture of this shot stays in ``<out>``, else ``none``."""
+        return "previous" if os.path.isfile(os.path.join(self.out, locale, device_id, screen_id + ".png")) else "none"
+
+    def not_taken(self, locale, device, screen_id, driver_name, status, reason, source=None, warnings=None,
+                  status_bar="none", state=None, state_check=None):
+        """Record a shot that wasn't taken, keeping any previous picture."""
+        e = _entry(locale, device, screen_id, driver_name)
+        reason = base.mask(reason)
+        e.update({"status": status, "reason": reason, "kept": self.kept(locale, device["id"], screen_id),
+                  "source": source or {}, "statusBar": status_bar, "fixes": [],
+                  "warnings": [base.mask(w) for w in warnings or []]})
+        if state:
+            e["state"] = state
+        if state_check and state_check != "none":
+            e["stateCheck"] = state_check
+        self.entries.append(e)
+        log("%-7s %s/%s/%s: %s%s" % (status, locale, device["id"], screen_id, reason,
+                                     " (kept: previous)" if e["kept"] == "previous" else ""))
+        return e
+
+    def execute(self):
+        """Run every device; return the report (``None`` under ``--dry-run``)."""
+        started = now()
+        tmp = None
+        lock = None
+        if self.dry_run:
+            base.DRY_RUN = True
+            base.LOG = lambda line: print(line)
+        saved_secrets = list(base.SECRETS)
+        try:
+            self.check_staging_run()
+            if not self.dry_run:
+                lock = take_lock(self.out)
+                tmp = tempfile.mkdtemp(prefix=".capture-", dir=self.out)
+            for device in self.devices():
+                self.capture_device(device, tmp)
+            if self.dry_run:
+                return None
+            for src, dest in self.moves:
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                os.replace(src, dest)
+            if self.inspect:
+                self.keep_trees(tmp)
+            if self.quiet_alpha:
+                self.notes.append("%d picture%s came with an alpha channel whose every pixel is opaque (simulators and "
+                                  "emulators write one): flattened, nothing that shows changed; each lists "
+                                  "alpha-flattened in its fixes" % (self.quiet_alpha, "" if self.quiet_alpha == 1 else "s"))
+            report = self.report(started)
+            jsonio.dump(report, os.path.join(self.out, REPORT_NAME))
+            return report
+        finally:
+            base.SECRETS[:] = saved_secrets
+            close_browser()
+            if self.dry_run:
+                base.DRY_RUN = False
+                base.LOG = base._stderr_log
+            if tmp:
+                shutil.rmtree(tmp, ignore_errors=True)
+            if lock and os.path.exists(lock):
+                os.unlink(lock)
+
+    def check_staging_run(self):
+        """Before anything runs: the staging account's variables are set (their values masked in every log and
+        report), ``staging.md`` matches the plan, nothing looks like a password written into it."""
+        staging = self.plan.get("staging")
+        say = print if self.dry_run else log
+        for w in credential_warnings(self.plan):
+            say("warning: %s" % w)
+        if staging is None:
+            say("warning: the plan has no staging section: agree with the user how the app is signed in, seeded and "
+                "set up for each screen (references/staging.md), and record it")
+            return
+        missing = [n for n in staging_vars(self.plan) if not os.environ.get(n)]
+        if missing and not self.dry_run:
+            raise UsageError("the staging account needs %s set in the environment (a demo account's, never a real "
+                             "person's): set %s and run again" % (", ".join(missing),
+                                                                  "it" if len(missing) == 1 else "them"))
+        for n in staging_vars(self.plan):
+            if os.environ.get(n):
+                base.SECRETS.append(os.environ[n])
+        doc = staging_doc_path(self.plan, self.plan_path)
+        want = staging_markdown(self.plan, os.path.basename(self.plan_path))
+        try:
+            with open(doc, encoding="utf-8") as f:
+                have = f.read()
+        except OSError:
+            have = None
+        if have != want:
+            say("warning: %s is %s: capture.py --write-staging" % (os.path.basename(doc),
+                                                                  "missing" if have is None else "out of date"))
+
+    def staged(self, device, screen, first):
+        """A screen with the plan's staging put in: the seed before its steps (each screen, or ``once`` before a
+        device's first), the staging's launch args and env under every ``launch`` step's own, ``${NAME}`` taken
+        from the environment (left as it is under ``--dry-run``). ``"staging": false`` on a screen leaves it out."""
+        st = self.plan.get("staging") or {}
+        out = dict(screen)
+        steps = copy.deepcopy(screen.get("steps") or [])
+        if not st or screen.get("staging") is False:
+            return out
+        pre = []
+        seed = st.get("seed") or {}
+        if seed.get("kind") in ("command", "file") and (seed.get("when", "each-screen") == "each-screen" or first):
+            if seed["kind"] == "command":
+                pre.append({"script": {"run": seed["run"], "timeout": seed.get("timeout") or 300}})
+            else:
+                pre.append({"appFile": {"file": seed["file"], "into": seed["into"]}})
+        launch = st.get("launch") or {}
+        for step in steps:
+            if isinstance(step, dict) and "launch" in step:
+                value = dict(step["launch"] or {})
+                for key in ("args", "env"):
+                    merged = dict(launch.get(key) or {})
+                    merged.update(value.get(key) or {})
+                    if merged:
+                        value[key] = dict((k, self.expand(v)) for k, v in merged.items())
+                step["launch"] = value
+        out["steps"] = pre + steps
+        return out
+
+    def expand(self, value):
+        """``${NAME}`` in a launch value, from the environment (only names ``staging.account.env`` lists)."""
+        if self.dry_run or not isinstance(value, str):
+            return value
+        return VAR.sub(lambda m: os.environ.get(m.group(1), ""), value)
+
+    def keep_trees(self, tmp):
+        """Move the UI trees ``--inspect`` saved into ``<out>/.inspect``."""
+        src_root = os.path.join(tmp, "work")
+        dest_root = os.path.join(self.out, INSPECT_DIR)
+        for dirpath, _, files in os.walk(src_root):
+            if os.sep + "inspect" not in dirpath + os.sep:
+                continue
+            for name in files:
+                src = os.path.join(dirpath, name)
+                rel = os.path.relpath(src, src_root).split(os.sep)
+                rel = rel[rel.index("inspect") + 1:]
+                dest = os.path.join(dest_root, *rel)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                os.replace(src, dest)
+                log("tree    %s" % os.path.relpath(dest, self.out))
+
+    def capture_device(self, device, tmp):
+        """Prepare one device, take its shots, and always reset it."""
+        jobs = self.jobs(device)
+        name = device["driver"]
+        header = "device %s (%s, %s, %dx%d)" % (device["id"], name, device["platform"], device["width"],
+                                                 device["height"])
+        (print if self.dry_run else log)(header)
+        if not jobs:
+            log("  nothing to capture on %s" % device["id"])
+            return
+        if self.stopped:
+            for locale, s in jobs:
+                self.not_taken(locale, device, s["id"], name, "missed", self.stopped)
+            return
+        try:
+            cls = drivers.get(name)
+        except drivers.UnknownDriver as e:
+            for locale, s in jobs:
+                self.not_taken(locale, device, s["id"], name, "skipped", str(e))
+            return
+        work = os.path.join(tmp, "work", device["id"]) if tmp else os.path.join(self.out, ".capture-dry-run")
+        if tmp:
+            os.makedirs(work, exist_ok=True)
+        driver = cls(base.Options(plan_dir=self.plan_dir, workdir=work, cleanup=self.cleanup, inspect=self.inspect))
+        note = {"id": device["id"], "driver": name, "source": {}, "warnings": []}
+        self.device_notes.append(note)
+        if driver.PLATFORMS and device["platform"] not in driver.PLATFORMS:
+            for locale, s in jobs:
+                self.not_taken(locale, device, s["id"], name, "skipped", "the %s driver doesn't capture %s devices"
+                               % (name, device["platform"]))
+            return
+        prepared = False
+        try:
+            try:
+                (print if self.dry_run else log)("  prepare")
+                driver.prepare(device, self.plan)
+                prepared = True
+                note["source"] = driver.source(device)
+            except base.ToolMissing as e:
+                self.environment_problem = True
+                reason = "couldn't prepare %s: %s" % (device["id"], e)
+            except base.DriverError as e:
+                reason = "couldn't prepare %s: %s" % (device["id"], e)
+            except Exception as e:  # a driver's bug: report it and still reset
+                traceback.print_exc()
+                reason = "the %s driver failed preparing %s: %s" % (name, device["id"], e)
+            if not prepared:
+                for locale, s in jobs:
+                    self.not_taken(locale, device, s["id"], name, "missed", reason)
+                if not self.keep_going:
+                    self.stopped = "not attempted: the run stopped after %s couldn't be prepared (pass --keep-going " \
+                                   "to go on)" % device["id"]
+                return
+            for n, (locale, s) in enumerate(jobs):
+                if self.stopped:
+                    self.not_taken(locale, device, s["id"], name, "missed", self.stopped)
+                    continue
+                (print if self.dry_run else log)("  screen %s (%s)" % (s["id"], locale))
+                self.shoot(driver, device, self.staged(device, s, n == 0), locale, tmp)
+        finally:
+            (print if self.dry_run else log)("  reset")
+            try:
+                warnings = driver.reset(device) or []
+            except Exception as e:
+                warnings = ["reset failed: %s (check the device by hand)" % e]
+            for w in warnings:
+                log("  warning: %s" % w)
+            note["warnings"].extend(warnings)
+            note["warnings"].extend(getattr(driver, "warnings", []) or [])
+
+    def shoot(self, driver, device, screen, locale, tmp):
+        """Take one shot and record it."""
+        name = device["driver"]
+        try:
+            shot = driver.run_screen(device, screen, locale)
+        except base.ToolMissing as e:
+            self.environment_problem = True
+            shot = base.Shot(status="missed", reason=str(e))
+        except base.DriverError as e:
+            shot = base.Shot(status="missed", reason=str(e))
+        except Exception as e:  # a driver's bug: report it, go on to reset
+            traceback.print_exc()
+            shot = base.Shot(status="missed", reason="the %s driver failed: %s" % (name, e))
+        rel = _rel(locale, device["id"], screen["id"])
+        if self.dry_run:
+            print("  -> %s %s" % ("would save" if shot.status == "taken" else shot.status,
+                                  rel if shot.status == "taken" else (shot.reason or "")))
+            return
+        state_check = getattr(shot, "state_check", "none")
+        if screen.get("verify") and state_check == "none" and shot.status == "taken":
+            state_check = "unchecked"
+            shot.warnings.append("verify not checked: the %s driver runs the screen its own way; look at the "
+                                 "picture for it" % name)
+        if shot.status != "taken":
+            self.not_taken(locale, device, screen["id"], name, shot.status, shot.reason or "not reached",
+                           shot.source, shot.warnings, shot.status_bar, screen.get("state"), state_check)
+            if shot.status in ("missed", "failed"):
+                self.stop_after(rel)
+            return
+        dest = os.path.join(tmp, "out", locale, device["id"], screen["id"] + ".png")
+        status, fixes, reason = verify_picture(shot.path, dest, device["width"], device["height"],
+                                               screen.get("flatten") or device.get("flatten") or "#000000")
+        if status != "taken":
+            self.not_taken(locale, device, screen["id"], name, "failed", reason, shot.source, shot.warnings,
+                           shot.status_bar, screen.get("state"), state_check)
+            self.stop_after(rel)
+            return
+        warnings = [base.mask(w) for w in shot.warnings]
+        shown = list(shot.fixes) + fixes
+        if "alpha-flattened" in fixes:
+            if see_through(shot.path):
+                warnings.append("the picture had see-through pixels, drawn onto %s: look at its corners and "
+                                "background" % (screen.get("flatten") or device.get("flatten") or "#000000"))
+            else:
+                self.quiet_alpha += 1
+                shown.remove("alpha-flattened")
+        e = _entry(locale, device, screen["id"], name)
+        e.update({"status": "taken", "path": rel, "width": device["width"], "height": device["height"],
+                  "sha256": png.sha256(dest), "source": shot.source, "statusBar": shot.status_bar,
+                  "fixes": list(shot.fixes) + fixes, "warnings": warnings})
+        if screen.get("state"):
+            e["state"] = screen["state"]
+        if state_check != "none":
+            e["stateCheck"] = state_check
+        self.entries.append(e)
+        self.moves.append((dest, os.path.join(self.out, locale, device["id"], screen["id"] + ".png")))
+        log("taken   %s%s" % (rel, (" (%s)" % ", ".join(shown)) if shown else ""))
+
+    def stop_after(self, rel):
+        """Without ``--keep-going``, the rest of the run isn't attempted after a missed or failed shot."""
+        if not self.keep_going and not self.stopped:
+            self.stopped = "not attempted: the run stopped after %s (pass --keep-going to go on)" % rel
+
+    def report(self, started):
+        """The report: this run's shots, plus the previous report's for shots this run didn't make."""
+        keys = set((e["locale"], e["device"], e["screen"]) for e in self.entries)
+        previous = []
+        old_path = os.path.join(self.out, REPORT_NAME)
+        if os.path.isfile(old_path):
+            try:
+                old = jsonio.load(old_path)
+                previous = [e for e in (old.get("shots") or [])
+                            if isinstance(e, dict) and (e.get("locale"), e.get("device"), e.get("screen")) not in keys]
+            except (jsonio.JsonError, OSError, AttributeError):
+                previous = []
+        out = {"version": 1, "startedAt": _stamp(started), "finishedAt": _stamp(now()),
+               "plan": os.path.basename(self.plan_path), "devices": self.device_notes,
+               "shots": previous + self.entries}
+        if self.notes:
+            out["notes"] = list(self.notes)
+        return out
+
+    def exit_code(self):
+        """0, 1 (a failure, or a miss/skip with nothing kept) or 3 (a tool was missing)."""
+        if self.environment_problem:
+            return EXIT_USAGE
+        for e in self.entries:
+            if e["status"] == "failed":
+                return EXIT_ERRORS
+            if e["status"] in ("missed", "skipped") and e.get("kept") != "previous":
+                return EXIT_ERRORS
+        return EXIT_OK
+
+
+def see_through(path):
+    """True when a picture has pixels that aren't opaque (``False`` for an alpha channel that's all opaque, or a
+    picture this can't read)."""
+    try:
+        return png.has_transparency(path)
+    except (png.ImageError, OSError, ValueError):
+        return True
+
+
+def summary(entries):
+    """One line: how many taken, missed, failed, skipped."""
+    counts = {}
+    for e in entries:
+        counts[e["status"]] = counts.get(e["status"], 0) + 1
+    return ", ".join("%d %s" % (counts.get(k, 0), k) for k in ("taken", "missed", "failed", "skipped"))
+
+
+def parser():
+    p = argparse.ArgumentParser(prog="capture.py", description="Capture an app's screens at the stores' exact sizes.")
+    p.add_argument("--plan", default="capture-plan.json", help="the capture plan (default capture-plan.json)")
+    p.add_argument("--devices", help="only these devices (comma-separated ids)")
+    p.add_argument("--screens", help="only these screens (comma-separated ids)")
+    p.add_argument("--locales", help="only these locales (comma-separated)")
+    p.add_argument("--keep-going", action="store_true", help="go on after a shot is missed or fails")
+    p.add_argument("--cleanup", action="store_true",
+                   help="delete the simulators and emulators this skill created (appstores-<device id>) when done")
+    p.add_argument("--dry-run", action="store_true", help="print what each driver would run; run nothing")
+    p.add_argument("--inspect", action="store_true",
+                   help="also save each screen's UI tree to <out>/.inspect/<locale>/<device>/<screen>.txt")
+    p.add_argument("--write-staging", action="store_true",
+                   help="write staging.md (the plan's staging and screens, readable) beside the plan, and stop")
+    p.add_argument("--current", nargs="?", const="", metavar="FOLDER",
+                   help="list the current store screenshots (existing/<store>/screenshots/, store-screenshots.json, "
+                        "design/current.json, or FOLDER) to start the screen list from, and stop")
+    return p
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
+    if args.current is not None:
+        plan_dir = os.path.dirname(os.path.abspath(args.plan))
+        found = current_screenshots(plan_dir, args.current or None)
+        if not found:
+            print("no current screenshots found (existing/<store>/screenshots/, store-screenshots.json, "
+                  "design/current.json%s)" % (", " + args.current if args.current else ""))
+            return EXIT_OK
+        group = None
+        for g, rel, note in found:
+            if g != group:
+                print(g)
+                group = g
+            print("  %s  %s" % (rel, note))
+        print("map each to the app screen it shows; those screens, in this order, start the plan's screens")
+        return EXIT_OK
+    try:
+        if args.write_staging:
+            print(write_staging(args.plan))
+            return EXIT_OK
+        run = Run(args.plan, _csv(args.devices), _csv(args.screens), _csv(args.locales), args.keep_going,
+                  args.cleanup, args.dry_run, args.inspect)
+        report = run.execute()
+    except UsageError as e:
+        print("error: %s" % e, file=sys.stderr)
+        return EXIT_USAGE
+    except Refused as e:
+        print("refused: %s" % e, file=sys.stderr)
+        return EXIT_REFUSED
+    if report is None:
+        return EXIT_OK
+    print("%s: %s" % (os.path.join(run.out, REPORT_NAME), summary(run.entries)))
+    for n in run.notes:
+        print("note: %s" % n)
+    return run.exit_code()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

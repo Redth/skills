@@ -1,0 +1,17 @@
+{
+  "$comment": "Sample Recipes' current store design (store-screenshots): the shots in order and the capture each uses.",
+  "version": 1,
+  "targets": {
+    "iphone": { "store": "apple", "width": 1320, "height": 2868, "capture": "iphone-6.9" },
+    "iphone-medium": { "store": "apple", "width": 1206, "height": 2622, "capture": "iphone-6.9" },
+    "android-phone": { "store": "google", "width": 1080, "height": 1920, "capture": "android-phone" }
+  },
+  "shots": [
+    { "id": "plan", "capture": "plan", "layout": "hero", "caption": "cap.plan" },
+    { "id": "recipe", "capture": "recipe", "layout": "framed-bleed", "caption": "cap.recipe" },
+    { "id": "shop", "capture": "shopping", "layout": "framed", "caption": "cap.shop" },
+    { "id": "search", "capture": "search", "layout": "framed", "caption": "cap.search" }
+  ],
+  "strings": { "en-US": { "cap.plan": "Plan your week", "cap.recipe": "Cook step by step",
+                          "cap.shop": "One list for the shop", "cap.search": "Find a dinner fast" } }
+}
