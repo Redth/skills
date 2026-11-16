@@ -1,0 +1,144 @@
+/* The store-listings page previews: honest approximations of each store's page, not the stores' own
+   rendering. Sizes are in CSS px, which stand for iOS points and Android dp. */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Roboto, "Segoe UI", Arial, sans-serif;
+  background: #fff;
+  color: #000;
+  -webkit-font-smoothing: antialiased;
+}
+.notice {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #5c4b00;
+  background: #fff4c2;
+  border-bottom: 1px solid #e8d77a;
+}
+.section-label {
+  margin: 20px 16px 8px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a8a8e;
+}
+.placeholder-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #8e8e93, #3a3a3c);
+}
+.missing {
+  margin: 0 16px;
+  padding: 12px;
+  font-size: 13px;
+  color: #8a1c1c;
+  background: #fde8e8;
+  border-radius: 8px;
+}
+
+/* ---- App Store ---------------------------------------------------------------------------------- */
+.as { color: #000; padding-bottom: 24px; }
+.as .search-bar {
+  margin: 12px 16px 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #eeeef0;
+  color: #8a8a8e;
+  font-size: 17px;
+}
+.as .result { padding: 12px 16px 16px; border-bottom: 1px solid #e5e5ea; }
+.as .result-head { display: flex; align-items: center; gap: 12px; }
+.as .icon-64 { width: 64px; height: 64px; border-radius: 14px; flex: none; object-fit: cover;
+  box-shadow: 0 0 0 0.5px rgba(0,0,0,0.12); }
+.as .result-text { flex: 1; min-width: 0; }
+.as .name-1 { font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.as .subtitle-1 { font-size: 13px; color: #8a8a8e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 2px; }
+.as .get { flex: none; padding: 6px 20px; border-radius: 16px; background: #eeeef3; color: #007aff;
+  font-weight: 700; font-size: 15px; }
+.as .search-shots { display: flex; gap: 8px; margin-top: 12px; }
+.as .search-shots img { display: block; width: calc((100% - 16px) / 3); border-radius: 12px;
+  box-shadow: 0 0 0 0.5px rgba(0,0,0,0.15); }
+.as .search-shots.landscape img { width: 100%; }
+
+.as .product { padding: 16px 16px 0; }
+.as .product-head { display: flex; gap: 16px; }
+.as .icon-118 { width: 118px; height: 118px; border-radius: 26px; flex: none; object-fit: cover;
+  box-shadow: 0 0 0 0.5px rgba(0,0,0,0.12); }
+.as .product-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.as .name-2 { font-size: 22px; font-weight: 700; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden; }
+.as .subtitle-2 { font-size: 15px; color: #8a8a8e; margin-top: 4px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.as .product-text .get { align-self: flex-start; margin-top: auto; background: #007aff; color: #fff; }
+.as .facts { display: flex; justify-content: space-between; margin: 16px 0 0; padding: 10px 0;
+  border-top: 1px solid #e5e5ea; border-bottom: 1px solid #e5e5ea; font-size: 11px; color: #8a8a8e;
+  text-align: center; }
+.as .carousel { display: flex; gap: 10px; overflow: hidden; padding: 16px 16px 4px; }
+.as .carousel img { flex: none; height: 480px; border-radius: 18px; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.15); }
+.as .carousel.landscape img { height: 200px; border-radius: 10px; }
+.as .device-note { margin: 0 16px; font-size: 12px; color: #8a8a8e; }
+/* The description and What's New show their first lines whole, the rest behind "more", as the stores do:
+   never a word cut short with an ellipsis glued on. */
+.as .description { margin: 12px 16px 0; font-size: 15px; line-height: 1.4; white-space: pre-wrap;
+  max-height: calc(1.4em * 3); overflow: hidden; }
+.as .more { margin: 2px 16px 0; text-align: right; color: #007aff; font-size: 15px; }
+.as .whats-new { margin: 0 16px; font-size: 15px; line-height: 1.4; white-space: pre-wrap;
+  max-height: calc(1.4em * 3); overflow: hidden; }
+.as h2 { margin: 20px 16px 6px; font-size: 22px; }
+
+/* Wide (Mac, Apple TV, Vision Pro): the same parts, side by side */
+@media (min-width: 900px) {
+  .as .result { max-width: 560px; }
+  .as .carousel img { height: 360px; }
+  .as .carousel.landscape img { height: 300px; }
+}
+
+/* ---- Google Play ------------------------------------------------------------------------------- */
+.gp { padding-bottom: 24px; color: #1f1f1f; font-family: Roboto, "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif; }
+.gp .feature { display: block; width: 100%; aspect-ratio: 1024 / 500; object-fit: cover; }
+.gp .feature-missing { width: 100%; aspect-ratio: 1024 / 500; display: flex; align-items: center;
+  justify-content: center; background: #e8eaed; color: #8a1c1c; font-size: 13px; }
+.gp .head { display: flex; gap: 16px; padding: 16px; align-items: center; }
+.gp .icon { width: 72px; height: 72px; border-radius: 20%; flex: none; object-fit: cover;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.gp .title { font-size: 22px; font-weight: 500; line-height: 1.25; }
+.gp .dev { font-size: 14px; color: #01875f; margin-top: 2px; }
+.gp .install { margin: 0 16px; padding: 10px; border-radius: 8px; background: #01875f; color: #fff;
+  text-align: center; font-weight: 500; font-size: 14px; }
+.gp .shots { display: flex; gap: 8px; overflow: hidden; padding: 16px; }
+.gp .shots img { flex: none; height: 220px; border-radius: 8px; box-shadow: 0 0 0 1px rgba(0,0,0,0.08); }
+.gp h2 { margin: 8px 16px 6px; font-size: 18px; font-weight: 500; }
+.gp .short { margin: 0 16px; font-size: 14px; line-height: 1.45; color: #444746; }
+.gp .full { margin: 8px 16px 0; font-size: 14px; line-height: 20px; color: #444746; white-space: pre-wrap;
+  max-height: 80px; overflow: hidden; }
+.gp .shots.tablet img { height: 160px; }
+.gp .tablet-label { margin: 8px 16px 0; font-size: 12px; color: #5f6368; }
+
+@media (min-width: 900px) {
+  .gp .page { max-width: 1100px; margin: 0 auto; }
+  .gp .feature, .gp .feature-missing { max-height: 360px; }
+  .gp .head { padding: 24px 24px 12px; }
+  .gp .icon { width: 96px; height: 96px; }
+  .gp .title { font-size: 40px; }
+  .gp .install { display: inline-block; margin: 0 24px; padding: 10px 40px; }
+  .gp .shots { padding: 24px; }
+  .gp .shots img { height: 300px; }
+  .gp .shots.tablet img { height: 200px; }
+  .gp h2, .gp .short, .gp .full { margin-left: 24px; margin-right: 24px; }
+}
+
+/* ---- Index ------------------------------------------------------------------------------------- */
+.index { padding: 24px; max-width: 1100px; margin: 0 auto; }
+.index h1 { font-size: 24px; }
+.index ul { padding-left: 20px; line-height: 1.8; }
+.index .thumbs { display: flex; flex-wrap: wrap; gap: 16px; }
+.index .thumbs figure { margin: 0; }
+.index .thumbs img { height: 420px; border: 1px solid #ddd; }
+.index .thumbs figcaption { font-size: 12px; color: #555; }

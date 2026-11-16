@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "store": "apple",
+  "source": "App Store Connect",
+  "pulledBy": "push.py pull",
+  "pulledAt": "2026-11-14T09:00:00Z",
+  "apple": {
+    "appId": "1234567890",
+    "bundleId": "com.example.samplerecipes",
+    "primaryLocale": "en-US",
+    "app": {
+      "state": "READY_FOR_DISTRIBUTION",
+      "categories": {
+        "primary": "FOOD_AND_DRINK",
+        "primarySubcategories": [],
+        "secondary": "LIFESTYLE",
+        "secondarySubcategories": []
+      },
+      "ageRating": {
+        "alcoholTobaccoOrDrugUseOrReferences": "INFREQUENT_OR_MILD",
+        "gamblingAndContests": false,
+        "kidsAgeBand": null,
+        "userGeneratedContent": false,
+        "violenceCartoonOrFantasy": "NONE"
+      },
+      "localizations": {
+        "en-US": {
+          "name": "Sample Recipes",
+          "subtitle": "Recipes and meal plans",
+          "privacyPolicyUrl": "https://example.com/privacy",
+          "privacyChoicesUrl": null,
+          "privacyPolicyText": "Sample Recipes keeps your meal plans on this device. Example Studio collects no personal data."
+        },
+        "de-DE": {
+          "name": "Sample Recipes",
+          "subtitle": "Rezepte und Essenspläne",
+          "privacyPolicyUrl": "https://example.com/privacy",
+          "privacyChoicesUrl": null,
+          "privacyPolicyText": null
+        }
+      }
+    },
+    "platforms": {
+      "IOS": {
+        "version": "1.3",
+        "state": "READY_FOR_DISTRIBUTION",
+        "copyright": "© 2026 Example Studio",
+        "localizations": {
+          "en-US": {
+            "description": "Plan a week of meals in minutes. Sample Recipes picks recipes you'll like and writes the grocery list for you.",
+            "keywords": "recipes, meal plan,grocery",
+            "promotionalText": "New: a pantry that knows what you have.",
+            "whatsNew": "Bug fixes and improvements.",
+            "marketingUrl": "https://example.com",
+            "supportUrl": "https://example.com/support"
+          },
+          "de-DE": {
+            "description": "Plane eine Woche voller Mahlzeiten in Minuten.",
+            "keywords": "rezepte,essensplan,einkauf",
+            "promotionalText": null,
+            "whatsNew": "Fehlerbehebungen.",
+            "marketingUrl": "https://example.com",
+            "supportUrl": "https://example.com/support"
+          }
+        },
+        "screenshots": {},
+        "previews": {},
+        "review": {
+          "notes": "Sign in with the demo account; the pantry fills itself after a day.",
+          "demoAccountRequired": true
+        }
+      },
+      "TV_OS": {
+        "version": "1.3",
+        "state": "READY_FOR_DISTRIBUTION",
+        "copyright": "© 2026 Example Studio",
+        "localizations": {
+          "en-US": {
+            "description": "Plan a week of meals in minutes. Sample Recipes picks recipes you'll like and writes the grocery list for you. On Apple TV, the Siri Remote does it all.",
+            "keywords": "recipes, meal plan,grocery",
+            "promotionalText": "New: a pantry that knows what you have.",
+            "whatsNew": "Bug fixes and improvements.",
+            "marketingUrl": "https://example.com",
+            "supportUrl": "https://example.com/support"
+          }
+        },
+        "screenshots": {},
+        "previews": {},
+        "review": {
+          "notes": "Sign in with the demo account; the pantry fills itself after a day.",
+          "demoAccountRequired": true
+        }
+      }
+    },
+    "review": {
+      "notes": "Sign in with the demo account; the pantry fills itself after a day.",
+      "demoAccountRequired": true
+    }
+  },
+  "failed": [],
+  "notes": [
+    "App Store Connect also has app information in PREPARE_FOR_SUBMISSION: the pull read the READY_FOR_DISTRIBUTION one (what's live)",
+    "IOS also has version 1.4 in preparation: its words may differ from what's live (the pull read version 1.3, on sale)",
+    "(eval fixture: the pictures were left out of this copy)"
+  ]
+}

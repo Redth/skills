@@ -85,3 +85,9 @@ jobs:
           path: skills/skill-reflect
           fail-on-warning: "false"
           validate-references: "true"
+      - name: Lint app-stores' store-listings SKILL.md
+        uses: Flash-Brew-Digital/validate-skill@v1
+        with:
+          path: plugins/app-stores/skills/store-listings
+          fail-on-warning: "false"
+          validate-references: "true"

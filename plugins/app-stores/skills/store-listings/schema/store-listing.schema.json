@@ -1,0 +1,427 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "store-listing.json: one app's store presence, from one file to every store it's on. Paths inside are relative to the config's own folder. null means 'not set' (fall back); \"\" means 'set to empty'. Secrets never go here: only the names of environment variables that hold them. Uses only the subset appstores_lib/schema.py validates. Every field is described in references/config.md.",
+  "type": "object",
+  "required": ["version", "app", "primaryLocale", "locales", "stores"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "$comment": { "type": "string" },
+    "version": { "$comment": "The config format's version.", "const": 1 },
+    "app": { "$ref": "#/$defs/app" },
+    "primaryLocale": { "$comment": "The locale every other falls back to, field by field. Must be a key of 'locales'.", "$ref": "#/$defs/locale" },
+    "locales": {
+      "$comment": "The words, per BCP 47 locale (en-US, pt-BR, zh-Hans, es-419).",
+      "type": "object",
+      "properties": { "$comment": { "type": "string" } },
+      "patternProperties": { "^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$": { "$ref": "#/$defs/localeWords" } },
+      "additionalProperties": false
+    },
+    "screenshots": { "$ref": "#/$defs/screenshots" },
+    "screens": {
+      "$comment": "The user's own device names (also the folder names under screenshots/<locale>/). Apple's slot is decided by each picture's pixel size; Google's by stores.google.slots.",
+      "type": "object",
+      "properties": { "$comment": { "type": "string" } },
+      "patternProperties": { "^[a-z0-9][a-z0-9_-]*$": { "$ref": "#/$defs/screen" } },
+      "additionalProperties": false
+    },
+    "stores": { "$ref": "#/$defs/stores" },
+    "forms": {
+      "$comment": "Drafted answers for forms with no API (App Privacy, Play's content rating, target audience, ads...). Free-form; printed by the checklist.",
+      "type": "object"
+    },
+    "rules": { "$ref": "#/$defs/rules" }
+  },
+  "$defs": {
+    "locale": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$" },
+    "text": { "type": ["string", "null"] },
+    "url": { "anyOf": [ { "type": "null" }, { "type": "string", "format": "uri", "pattern": "^https?://" } ] },
+    "path": { "$comment": "A file path relative to the config's folder.", "anyOf": [ { "type": "null" }, { "type": "string", "minLength": 1, "pattern": "^[^/\\\\]" } ] },
+    "envName": { "$comment": "The NAME of an environment variable, never its value.", "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" },
+    "store": { "enum": ["apple", "google", "amazon", "steam", "itch"] },
+    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+
+    "app": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "name": { "$comment": "The app's name; a store's own name/title overrides it per locale.", "type": "string", "minLength": 1 },
+        "ids": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "apple": {
+              "type": "object",
+              "required": ["bundleId"],
+              "additionalProperties": false,
+              "properties": {
+                "bundleId": { "$comment": "Finds the app in App Store Connect; the record must already exist.", "type": "string", "pattern": "^[A-Za-z0-9.-]+$" },
+                "appId": { "$comment": "The numeric Apple ID; optional, checked against the bundle id.", "anyOf": [ { "type": "null" }, { "type": "string", "pattern": "^[0-9]+$" } ] }
+              }
+            },
+            "google": {
+              "type": "object",
+              "required": ["package"],
+              "additionalProperties": false,
+              "properties": {
+                "package": { "$comment": "The Play package name.", "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+$" }
+              }
+            }
+          }
+        },
+        "copyright": { "$comment": "'YEAR Holder'; Apple adds the copyright symbol.", "$ref": "#/$defs/text" },
+        "contact": {
+          "$comment": "Play's public contact details (email required by Play); not App Review's contact.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "email": { "anyOf": [ { "type": "null" }, { "type": "string", "format": "email" } ] },
+            "phone": { "anyOf": [ { "type": "null" }, { "type": "string", "pattern": "^\\+?[0-9 ().-]{5,}$" } ] },
+            "website": { "$ref": "#/$defs/url" }
+          }
+        },
+        "urls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "marketing": { "$ref": "#/$defs/url" },
+            "support": { "$comment": "Must lead to real contact details.", "$ref": "#/$defs/url" },
+            "privacy": { "$comment": "Required by both stores.", "$ref": "#/$defs/url" },
+            "privacyChoices": { "$comment": "Apple's optional privacy-choices page.", "$ref": "#/$defs/url" }
+          }
+        }
+      }
+    },
+
+    "localeWords": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "description": { "$comment": "The shared description; each store's own description falls back to it.", "$ref": "#/$defs/text" },
+        "apple": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "name": { "$comment": "null: app.name.", "$ref": "#/$defs/text" },
+            "subtitle": { "$ref": "#/$defs/text" },
+            "keywords": {
+              "$comment": "A list; sent joined with commas and no spaces (100 bytes in all).",
+              "anyOf": [ { "type": "null" }, { "type": "array", "items": { "type": "string" } } ]
+            },
+            "promotionalText": { "$ref": "#/$defs/text" },
+            "whatsNew": { "$comment": "Not on a first version; required on every later one.", "$ref": "#/$defs/text" },
+            "description": { "$comment": "null: the locale's shared description.", "$ref": "#/$defs/text" },
+            "platforms": {
+              "$comment": "Words for one Apple platform where it differs (App Store Connect keeps a version's words per platform). null fields fall back to this locale's apple words, then the store's primary locale's, then the config's.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "$comment": { "type": "string" },
+                "IOS": { "$ref": "#/$defs/applePlatformWords" },
+                "MAC_OS": { "$ref": "#/$defs/applePlatformWords" },
+                "TV_OS": { "$ref": "#/$defs/applePlatformWords" },
+                "VISION_OS": { "$ref": "#/$defs/applePlatformWords" }
+              }
+            }
+          }
+        },
+        "google": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "title": { "$ref": "#/$defs/text" },
+            "shortDescription": { "$ref": "#/$defs/text" },
+            "fullDescription": { "$comment": "null: the locale's shared description.", "$ref": "#/$defs/text" },
+            "video": { "$comment": "One YouTube video URL; \"\" to remove it.", "anyOf": [ { "type": "null" }, { "const": "" }, { "type": "string", "format": "uri", "pattern": "^https?://" } ] },
+            "releaseNotes": { "$comment": "Go with a release, not the listing.", "$ref": "#/$defs/text" }
+          }
+        },
+        "altText": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "featureGraphic": { "$comment": "Play's alt text for the feature graphic (up to 140 characters; Play Console only).", "$ref": "#/$defs/text" }
+          }
+        }
+      }
+    },
+
+    "applePlatformWords": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "description": { "$ref": "#/$defs/text" },
+            "keywords": { "anyOf": [ { "type": "null" }, { "type": "array", "items": { "type": "string" } } ] },
+            "promotionalText": { "$ref": "#/$defs/text" },
+            "whatsNew": { "$ref": "#/$defs/text" },
+            "marketingUrl": { "$comment": "null: app.urls.marketing.", "$ref": "#/$defs/url" },
+            "supportUrl": { "$comment": "null: app.urls.support.", "$ref": "#/$defs/url" }
+          }
+        }
+      ]
+    },
+    "storeLocales": {
+      "$comment": "The config's locales this store gets; null or absent: every one. The store's primary must be one of them.",
+      "anyOf": [ { "type": "null" }, { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/locale" } } ]
+    },
+    "keep": {
+      "$comment": "Slots whose pictures stay as the store has them: checked and previewed, never sent by push.py (Apple: display types such as APP_IPHONE_67; Play: phone, tablet7, tablet10, tv, wear, icon, featureGraphic, tvBanner). listing.py import --from live sets it for slots holding the store's re-encoded copies, or pictures per locale the config's fallback can't reproduce.",
+      "anyOf": [ { "type": "null" }, { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } } ]
+    },
+
+    "screenshots": {
+      "type": "object",
+      "required": ["folder", "shots"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "folder": { "$comment": "Files at <folder>/<locale>/<screen>/<shot id>.png or .jpg.", "type": "string", "minLength": 1 },
+        "shots": {
+          "$comment": "In the order the stores show them.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "additionalProperties": false,
+            "properties": {
+              "$comment": { "type": "string" },
+              "id": { "$ref": "#/$defs/name" },
+              "screens": { "$comment": "null: every screen.", "anyOf": [ { "type": "null" }, { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/name" } } ] },
+              "stores": { "$comment": "null: every store.", "anyOf": [ { "type": "null" }, { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/store" } } ] }
+            }
+          }
+        }
+      }
+    },
+    "screen": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "kind": { "enum": ["phone", "tablet", "desktop", "tv", "watch", "xr"] }
+      }
+    },
+
+    "stores": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "apple": { "$ref": "#/$defs/apple" },
+        "google": { "$ref": "#/$defs/google" },
+        "amazon": { "$ref": "#/$defs/laterStore" },
+        "steam": { "$ref": "#/$defs/laterStore" },
+        "itch": { "$ref": "#/$defs/laterStore" }
+      }
+    },
+    "laterStore": {
+      "$comment": "To follow: only 'enabled' is read today.",
+      "type": "object",
+      "required": ["enabled"],
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+
+    "apple": {
+      "type": "object",
+      "required": ["enabled"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "primaryLocale": { "$comment": "The App Store's primary language (a locale of 'locales'); null: the config's primaryLocale. The App Store's words fall back to it before the config's.", "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/locale" } ] },
+        "locales": { "$ref": "#/$defs/storeLocales" },
+        "categories": {
+          "$comment": "App Store Connect's category ids (FOOD_AND_DRINK, GAMES...); the list is in rules/apple.json. Games take up to two subcategories (GAMES_PUZZLE...).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primary": { "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/categoryId" } ] },
+            "primarySubcategories": { "$ref": "#/$defs/categoryIds" },
+            "secondary": { "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/categoryId" } ] },
+            "secondarySubcategories": { "$ref": "#/$defs/categoryIds" }
+          }
+        },
+        "keep": { "$ref": "#/$defs/keep" },
+        "platforms": {
+          "$comment": "App Store Connect's platforms; null = not shipped there.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "IOS": { "$ref": "#/$defs/applePlatform" },
+            "MAC_OS": { "$ref": "#/$defs/applePlatform" },
+            "TV_OS": { "$ref": "#/$defs/applePlatform" },
+            "VISION_OS": { "$ref": "#/$defs/applePlatform" }
+          }
+        },
+        "ageRating": {
+          "$comment": "App Store Connect's own attribute names and values (the age rating declaration); the list is in rules/apple.json. Sent only with push.py plan apple --age-rating.",
+          "type": "object",
+          "properties": { "$comment": { "type": "string" } },
+          "patternProperties": { "^[a-z][A-Za-z0-9]*$": { "type": ["string", "boolean", "null"] } },
+          "additionalProperties": false
+        },
+        "review": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "notes": { "$comment": "Notes for App Review, up to 4,000 bytes.", "$ref": "#/$defs/text" },
+            "contact": {
+              "$comment": "Names of environment variables holding App Review's contact (the phone in international format, +country code).",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "firstNameEnv": { "$ref": "#/$defs/envName" },
+                "lastNameEnv": { "$ref": "#/$defs/envName" },
+                "phoneEnv": { "$ref": "#/$defs/envName" },
+                "emailEnv": { "$ref": "#/$defs/envName" }
+              }
+            },
+            "demoAccount": {
+              "$comment": "null, or names of environment variables holding a sign-in for App Review that doesn't expire.",
+              "anyOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "required": ["usernameEnv", "passwordEnv"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "usernameEnv": { "$ref": "#/$defs/envName" },
+                    "passwordEnv": { "$ref": "#/$defs/envName" }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "tvPrivacyText": { "$comment": "Required with TV_OS: a path to the privacy policy as plain text (Apple TV shows the text, not a link).", "$ref": "#/$defs/path" },
+        "auth": {
+          "$comment": "Other environment variable names for the API key, when several apps' keys sit side by side. Defaults: ASC_KEY_ID, ASC_ISSUER_ID, ASC_PRIVATE_KEY.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "keyIdEnv": { "$ref": "#/$defs/envName" },
+            "issuerIdEnv": { "$ref": "#/$defs/envName" },
+            "privateKeyEnv": { "$ref": "#/$defs/envName" }
+          }
+        }
+      }
+    },
+    "categoryId": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+    "categoryIds": { "type": "array", "maxItems": 2, "uniqueItems": true, "items": { "$ref": "#/$defs/categoryId" } },
+    "applePlatform": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["screens"],
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "screens": { "$comment": "The screens whose pictures this platform uses.", "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/name" } },
+            "locales": { "$comment": "The App Store locales this platform gets (each one of the store's); null or absent: every one. App Store Connect keeps a version's listing per platform, so one can have fewer languages.", "$ref": "#/$defs/storeLocales" },
+            "previews": {
+              "$comment": "App previews per screen, up to 3 each.",
+              "type": "object",
+              "patternProperties": {
+                "^[a-z0-9][a-z0-9_-]*$": {
+                  "type": "array",
+                  "maxItems": 3,
+                  "items": {
+                    "type": "object",
+                    "required": ["file"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "file": { "type": "string", "minLength": 1 },
+                      "posterFrame": { "$comment": "HH:MM:SS:FF; Apple's default is 5 seconds in.", "anyOf": [ { "type": "null" }, { "type": "string", "pattern": "^[0-9]{2}:[0-9]{2}:[0-9]{2}(:[0-9]{2})?$" } ] }
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+
+    "google": {
+      "type": "object",
+      "required": ["enabled"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "defaultLanguage": { "$comment": "Play's default listing language (a BCP 47 locale of 'locales'): Play's primary, which its words fall back to before the config's primaryLocale. null: the config's primaryLocale.", "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/locale" } ] },
+        "locales": { "$ref": "#/$defs/storeLocales" },
+        "category": { "$comment": "Optional: Play's category id (GAME_PUZZLE, FOOD_AND_DRINK...; the list is in rules/google.json). Play Console only, never sent: read to know whether the app is a game, and printed in the checklist.", "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/categoryId" } ] },
+        "slots": {
+          "$comment": "Which of the user's screens fills each Play screenshot slot; null = none.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "phone": { "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/name" } ] },
+            "tablet7": { "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/name" } ] },
+            "tablet10": { "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/name" } ] },
+            "tv": { "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/name" } ] },
+            "wear": { "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/name" } ] }
+          }
+        },
+        "keep": { "$ref": "#/$defs/keep" },
+        "graphics": {
+          "$comment": "The 512x512 icon, the 1024x500 feature graphic (required), the 1280x720 TV banner (with Android TV). Shared by every language unless a language folder has its own.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "icon": { "$ref": "#/$defs/path" },
+            "featureGraphic": { "$ref": "#/$defs/path" },
+            "tvBanner": { "$ref": "#/$defs/path" }
+          }
+        },
+        "dataSafetyCsv": { "$comment": "A path to the Data safety CSV exported from Play Console, or null.", "$ref": "#/$defs/path" },
+        "auth": {
+          "$comment": "Another environment variable name for the service account key. Default: GOOGLE_PLAY_SERVICE_ACCOUNT.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "serviceAccountEnv": { "$ref": "#/$defs/envName" }
+          }
+        }
+      }
+    },
+
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "extraForbiddenWords": { "$comment": "The user's own words to flag in every field.", "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "relax": {
+          "$comment": "Rules the user has decided don't apply, by id, each with a reason. check lists them so they stay visible.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^(apple|google|amazon|steam|itch)(\\.[a-z0-9_]+){2,}$" },
+              "reason": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

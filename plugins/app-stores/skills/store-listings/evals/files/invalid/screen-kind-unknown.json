@@ -1,0 +1,57 @@
+{
+  "$comment": "Invalid on purpose (schema eval): a screen's kind is one of phone, tablet, desktop, tv, watch, xr ('laptop' isn't).",
+  "version": 1,
+  "app": {
+    "name": "Sample Recipes",
+    "ids": {
+      "google": {
+        "package": "com.example.samplerecipes"
+      }
+    },
+    "contact": {
+      "email": "support@example.com",
+      "phone": null,
+      "website": "https://example.com"
+    },
+    "urls": {
+      "marketing": null,
+      "support": "https://example.com/support",
+      "privacy": "https://example.com/privacy",
+      "privacyChoices": null
+    }
+  },
+  "primaryLocale": "en-US",
+  "locales": {
+    "en-US": {
+      "description": "Plan a week of meals in minutes.",
+      "google": {
+        "title": "Sample Recipes",
+        "shortDescription": "Plan a week of meals in minutes."
+      }
+    }
+  },
+  "screens": {
+    "android-phone": {
+      "kind": "laptop"
+    }
+  },
+  "stores": {
+    "google": {
+      "enabled": true,
+      "defaultLanguage": "en-US",
+      "slots": {
+        "phone": "android-phone",
+        "tablet7": null,
+        "tablet10": null,
+        "tv": null,
+        "wear": null
+      },
+      "graphics": {
+        "icon": "graphics/icon-512.png",
+        "featureGraphic": "graphics/feature-1024x500.png",
+        "tvBanner": null
+      },
+      "dataSafetyCsv": null
+    }
+  }
+}

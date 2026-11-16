@@ -1,0 +1,1281 @@
+{
+  "$schema": "./rules.schema.json",
+  "$comment": "Google Play's listing rules, from Google's own pages read on the date in 'checked'. Each rule's 'status' says how sure we are: a rule that isn't 'verified' is reported as a warning whatever its severity. Google separates requirements (removal or suspension) from 'highly recommended' (promotion only): the second are warnings here. To update a rule, change its values, 'source', 'checked' and 'status' together; never change an 'id'.",
+  "store": "google",
+  "checked": "2026-11-14",
+  "rules": [
+    {
+      "id": "google.title.length",
+      "kind": "limit",
+      "applies": {
+        "field": "google.title"
+      },
+      "max": 30,
+      "count": "characters",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9898842",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Full-width and half-width characters each count as one."
+    },
+    {
+      "id": "google.title.required",
+      "kind": "required",
+      "applies": {
+        "field": "google.title"
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9859152",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.title.emoji",
+      "kind": "pattern",
+      "applies": {
+        "field": "google.title"
+      },
+      "regex": "[\\U0001F000-\\U0001FAFF\\U0001F1E6-\\U0001F1FF\\u2600-\\u27BF\\u2B00-\\u2BFF\\uFE0F\\u200D]",
+      "forbid": true,
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9898842",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Metadata policy: no emoji or emoticons in the app's name. Kaomoji aren't caught by the pattern: look for them."
+    },
+    {
+      "id": "google.title.all_caps",
+      "kind": "pattern",
+      "applies": {
+        "field": "google.title"
+      },
+      "regex": "^(?=(?:[^A-Za-z]*[A-Z]){3})[^a-z]*$",
+      "forbid": true,
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9898842",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "No ALL CAPS unless it's the brand's own styling."
+    },
+    {
+      "id": "google.title.repeated_symbols",
+      "kind": "pattern",
+      "applies": {
+        "field": "google.title"
+      },
+      "regex": "([^\\w\\s])\\1{2,}",
+      "forbid": true,
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9898842",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "No repeated or misleading special characters (three or more in a row here)."
+    },
+    {
+      "id": "google.title.promotional",
+      "kind": "words",
+      "applies": {
+        "field": "google.title"
+      },
+      "words": [
+        "free",
+        "#1",
+        "no. 1",
+        "number one",
+        "best",
+        "top",
+        "top rated",
+        "new",
+        "sale",
+        "discount",
+        "% off",
+        "cheap",
+        "limited time",
+        "popular",
+        "million downloads",
+        "app of the year",
+        "game of the year",
+        "editor's choice",
+        "editors' choice",
+        "best of play"
+      ],
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9898842",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Nothing about store performance or ranking, price or promotion, or Play programs ('New', 'Editor's Choice'). 'new' also matches 'New York': relax by id when it's part of the name."
+    },
+    {
+      "id": "google.short_description.length",
+      "kind": "limit",
+      "applies": {
+        "field": "google.shortDescription"
+      },
+      "max": 80,
+      "count": "characters",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.short_description.required",
+      "kind": "required",
+      "applies": {
+        "field": "google.shortDescription"
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9859152",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.short_description.emoji",
+      "kind": "pattern",
+      "applies": {
+        "field": "google.shortDescription"
+      },
+      "regex": "[\\U0001F000-\\U0001FAFF\\U0001F1E6-\\U0001F1FF\\u2600-\\u27BF\\u2B00-\\u2BFF\\uFE0F\\u200D]",
+      "forbid": true,
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Highly recommended against (not a policy rule here, unlike the title)."
+    },
+    {
+      "id": "google.short_description.line_breaks",
+      "kind": "pattern",
+      "applies": {
+        "field": "google.shortDescription"
+      },
+      "regex": "[\\r\\n]",
+      "forbid": true,
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.short_description.promotional",
+      "kind": "words",
+      "applies": {
+        "field": "google.shortDescription"
+      },
+      "words": [
+        "free",
+        "#1",
+        "no. 1",
+        "number one",
+        "best",
+        "top",
+        "top rated",
+        "new",
+        "sale",
+        "discount",
+        "% off",
+        "cheap",
+        "limited time",
+        "popular",
+        "million downloads",
+        "app of the year",
+        "game of the year",
+        "editor's choice",
+        "editors' choice",
+        "best of play",
+        "download now",
+        "install now",
+        "play now",
+        "get it now",
+        "try now",
+        "buy now"
+      ],
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Highly recommended against: ranking, price, promotion and award language, and calls to action."
+    },
+    {
+      "id": "google.full_description.length",
+      "kind": "limit",
+      "applies": {
+        "field": "google.fullDescription"
+      },
+      "max": 4000,
+      "count": "characters",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9859152",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Falls back to the locale's shared description."
+    },
+    {
+      "id": "google.full_description.required",
+      "kind": "required",
+      "applies": {
+        "field": "google.fullDescription"
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9859152",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.full_description.claims",
+      "kind": "words",
+      "applies": {
+        "field": "google.fullDescription"
+      },
+      "words": [
+        "#1",
+        "no. 1",
+        "number one",
+        "best",
+        "top rated",
+        "best game ever",
+        "best app ever"
+      ],
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9898842",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "No deceptive claims ('best game ever'). 'Free' is allowed in the full description."
+    },
+    {
+      "id": "google.full_description.testimonials",
+      "kind": "checklist",
+      "applies": {
+        "field": "google.fullDescription"
+      },
+      "item": "No unattributed or anonymous testimonials, no comparisons with other apps' data, no repeated or unrelated keywords or keyword lists.",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9898842",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.full_description.android_tv",
+      "kind": "pattern",
+      "applies": {
+        "field": "google.fullDescription"
+      },
+      "regex": "Android TV",
+      "when": {
+        "slotUsed": "tv"
+      },
+      "severity": "error",
+      "source": "https://developer.android.com/training/tv/publishing/distribute",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "An app opted in to Android TV says 'Android TV' in its description."
+    },
+    {
+      "id": "google.release_notes.length",
+      "kind": "limit",
+      "applies": {
+        "field": "google.releaseNotes"
+      },
+      "max": 500,
+      "count": "characters",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9859348",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "'500 Unicode characters' per language; sent with a release, not the listing."
+    },
+    {
+      "id": "google.video.youtube",
+      "kind": "pattern",
+      "applies": {
+        "field": "google.video"
+      },
+      "regex": "^(https?://(www\\.|m\\.)?youtube\\.com/watch\\?v=[A-Za-z0-9_-]{11}|https?://youtu\\.be/[A-Za-z0-9_-]{11})$",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "One YouTube video's URL: no playlist, channel or start time."
+    },
+    {
+      "id": "google.video.watch_form",
+      "kind": "pattern",
+      "applies": {
+        "field": "google.video"
+      },
+      "regex": "^https://www\\.youtube\\.com/watch\\?v=[A-Za-z0-9_-]{11}$",
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "Only the https://www.youtube.com/watch?v=<id> form is known to be taken; youtu.be and Shorts links are unverified."
+    },
+    {
+      "id": "google.video.settings",
+      "kind": "checklist",
+      "applies": {
+        "field": "google.video"
+      },
+      "item": "The video is public or unlisted, embeddable, with ads off and no age restriction; the real experience in the first 10 seconds.",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.contact.email.required",
+      "kind": "required",
+      "applies": {
+        "field": "app.contact.email"
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9859152",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Shown publicly."
+    },
+    {
+      "id": "google.contact.website",
+      "kind": "required",
+      "applies": {
+        "field": "app.contact.website"
+      },
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9859152",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Recommended; the phone is optional."
+    },
+    {
+      "id": "google.urls.privacy.required",
+      "kind": "required",
+      "applies": {
+        "field": "app.urls.privacy"
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9859455",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "A public privacy policy URL in the listing, and the policy reachable in the app too."
+    },
+    {
+      "id": "google.metadata.other_platforms",
+      "kind": "words",
+      "applies": {
+        "fields": [
+          "google.title",
+          "google.shortDescription",
+          "google.fullDescription",
+          "captions"
+        ]
+      },
+      "words": [
+        "iPhone",
+        "iPad",
+        "iOS",
+        "iPadOS",
+        "App Store",
+        "Apple TV",
+        "macOS",
+        "Mac App Store",
+        "TestFlight"
+      ],
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9898842",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "No Play policy names other platforms; a judgement: they mean nothing to a Play shopper."
+    },
+    {
+      "id": "google.metadata.placeholder_text",
+      "kind": "words",
+      "applies": {
+        "fields": [
+          "google.title",
+          "google.shortDescription",
+          "google.fullDescription",
+          "captions"
+        ]
+      },
+      "words": [
+        "lorem ipsum",
+        "lorem",
+        "placeholder",
+        "TODO",
+        "TBD",
+        "FIXME",
+        "coming soon",
+        "[insert",
+        "your text here"
+      ],
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9898842",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "Listings should reflect the real, finished app. fastlane precheck's placeholder_text."
+    },
+    {
+      "id": "google.captions.promotional",
+      "kind": "words",
+      "applies": {
+        "field": "captions"
+      },
+      "words": [
+        "free",
+        "#1",
+        "no. 1",
+        "number one",
+        "best",
+        "top",
+        "top rated",
+        "new",
+        "sale",
+        "discount",
+        "% off",
+        "cheap",
+        "limited time",
+        "popular",
+        "million downloads",
+        "app of the year",
+        "game of the year",
+        "editor's choice",
+        "editors' choice",
+        "best of play",
+        "download now",
+        "install now",
+        "play now",
+        "get it now",
+        "try now",
+        "buy now",
+        "$",
+        "€",
+        "£",
+        "award",
+        "award-winning"
+      ],
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Screenshots and the feature graphic: no 'Best', '#1', 'Top', 'New', 'Free', 'Discount', 'Sale', 'Million Downloads', awards, prices, calls to action or store badges. Google lists these as highly recommended for images, and its metadata policy covers ranking and price claims in promotional images: treated as errors."
+    },
+    {
+      "id": "google.screenshots.count",
+      "kind": "count",
+      "applies": {
+        "slots": [
+          "phone",
+          "tablet7",
+          "tablet10",
+          "tv",
+          "wear"
+        ]
+      },
+      "min": 0,
+      "max": 8,
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Up to 8 per device type, per language."
+    },
+    {
+      "id": "google.screenshots.minimum",
+      "kind": "count",
+      "applies": {
+        "slots": [
+          "phone",
+          "tablet7",
+          "tablet10",
+          "tv",
+          "wear"
+        ]
+      },
+      "min": 2,
+      "across": true,
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "At least two screenshots across the device types to publish."
+    },
+    {
+      "id": "google.screenshots.format",
+      "kind": "format",
+      "applies": {
+        "slots": [
+          "phone",
+          "tablet7",
+          "tablet10",
+          "tv",
+          "wear"
+        ]
+      },
+      "formats": [
+        "png",
+        "jpeg"
+      ],
+      "alpha": false,
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "JPEG or 24-bit PNG, no alpha."
+    },
+    {
+      "id": "google.screenshots.file_size",
+      "kind": "format",
+      "applies": {
+        "slots": [
+          "phone",
+          "tablet7",
+          "tablet10",
+          "tv",
+          "wear"
+        ]
+      },
+      "maxBytes": 8388608,
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "Google states no file size for phone, tablet, TV or Wear screenshots (Android XR's are 8 MB); 8 MB is a cautious cap."
+    },
+    {
+      "id": "google.screenshots.phone.size",
+      "kind": "size",
+      "applies": {
+        "slots": [
+          "phone",
+          "tv"
+        ]
+      },
+      "range": {
+        "minSide": 320,
+        "maxSide": 3840,
+        "maxAspect": 2
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Each side 320-3840 px; the long side no more than twice the short."
+    },
+    {
+      "id": "google.screenshots.tablet.size",
+      "kind": "size",
+      "applies": {
+        "slots": [
+          "tablet7",
+          "tablet10"
+        ]
+      },
+      "range": {
+        "minSide": 1080,
+        "maxSide": 7680,
+        "minAspect": 1.77,
+        "maxAspect": 1.78
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Large screens: each side 1080-7680 px, 16:9 or 9:16."
+    },
+    {
+      "id": "google.screenshots.wear.size",
+      "kind": "size",
+      "applies": {
+        "slot": "wear"
+      },
+      "range": {
+        "minSide": 384,
+        "maxSide": 3840,
+        "minAspect": 1,
+        "maxAspect": 1
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "1:1, at least 384x384."
+    },
+    {
+      "id": "google.screenshots.wear.plain",
+      "kind": "checklist",
+      "applies": {
+        "slot": "wear"
+      },
+      "item": "Wear OS screenshots show only the app's interface: no device frames, extra text, graphics or backgrounds, no transparency or masking (a requirement for Wear, not a recommendation). A Tiles shot if the app has Tiles.",
+      "when": {
+        "slotUsed": "wear"
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.screenshots.tablet7.count",
+      "kind": "count",
+      "applies": {
+        "slot": "tablet7"
+      },
+      "min": 4,
+      "when": {
+        "slotUsed": "tablet7"
+      },
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Four or more recommended (for promotion); not required."
+    },
+    {
+      "id": "google.screenshots.tablet10.count",
+      "kind": "count",
+      "applies": {
+        "slot": "tablet10"
+      },
+      "min": 4,
+      "when": {
+        "slotUsed": "tablet10"
+      },
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Four or more recommended (for promotion); not required."
+    },
+    {
+      "id": "google.screenshots.featuring.app",
+      "kind": "count",
+      "applies": {
+        "slot": "phone"
+      },
+      "min": 4,
+      "of": {
+        "minSide": 1080,
+        "minAspect": 1.77,
+        "maxAspect": 1.78
+      },
+      "when": {
+        "game": false
+      },
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "To be eligible for featuring, an app has at least 4 phone screenshots at 16:9 or 9:16 of at least 1080 px (1920x1080 or 1080x1920 and up)."
+    },
+    {
+      "id": "google.screenshots.featuring.game",
+      "kind": "count",
+      "applies": {
+        "slot": "phone"
+      },
+      "min": 3,
+      "of": {
+        "minSide": 1080,
+        "minAspect": 1.77,
+        "maxAspect": 1.78
+      },
+      "when": {
+        "game": true
+      },
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "To be eligible for featuring, a game has at least 3 screenshots at 16:9 or 9:16 of at least 1080 px, either orientation."
+    },
+    {
+      "id": "google.screenshots.tv.count",
+      "kind": "count",
+      "applies": {
+        "slot": "tv"
+      },
+      "min": 1,
+      "when": {
+        "slotUsed": "tv"
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "At least one TV screenshot when the app is opted in to Android TV."
+    },
+    {
+      "id": "google.screenshots.tv.unaltered",
+      "kind": "checklist",
+      "applies": {
+        "slot": "tv"
+      },
+      "item": "At least one TV screenshot is unaltered: the app at full resolution, with no caption or art over it (TV quality TV-G4).",
+      "when": {
+        "slotUsed": "tv"
+      },
+      "severity": "warning",
+      "source": "https://developer.android.com/docs/quality-guidelines/tv-app-quality",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.screenshots.content",
+      "kind": "checklist",
+      "applies": {
+        "slots": [
+          "phone",
+          "tablet7",
+          "tablet10",
+          "tv",
+          "wear"
+        ]
+      },
+      "item": "Screenshots show the real experience, the UI first in the first three; taglines no more than 20% of the picture; a tidy status bar; no device frames or added backgrounds (recommended), no people's fingers on a device. Panoramas are fine.",
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.icon.required",
+      "kind": "required",
+      "applies": {
+        "slot": "icon"
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.icon.size",
+      "kind": "size",
+      "applies": {
+        "slot": "icon"
+      },
+      "sizes": [
+        [
+          512,
+          512
+        ]
+      ],
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.icon.format",
+      "kind": "format",
+      "applies": {
+        "slot": "icon"
+      },
+      "formats": [
+        "png"
+      ],
+      "maxBytes": 1048576,
+      "severity": "error",
+      "source": "https://developer.android.com/distribute/google-play/resources/icon-design-specifications",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "32-bit PNG, up to 1024 KB."
+    },
+    {
+      "id": "google.icon.transparency",
+      "kind": "format",
+      "applies": {
+        "slot": "icon"
+      },
+      "transparency": false,
+      "severity": "warning",
+      "source": "https://developer.android.com/distribute/google-play/resources/icon-design-specifications",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Avoid transparency: Play's background shows through it. Full square; Play masks it with a 30% radius and adds the shadow."
+    },
+    {
+      "id": "google.icon.badges",
+      "kind": "checklist",
+      "applies": {
+        "slot": "icon"
+      },
+      "item": "No badges or text about ranking, price or Play programs in the icon; no graphic violence.",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9898842",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.feature_graphic.required",
+      "kind": "required",
+      "applies": {
+        "slot": "featureGraphic"
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.feature_graphic.size",
+      "kind": "size",
+      "applies": {
+        "slot": "featureGraphic"
+      },
+      "sizes": [
+        [
+          1024,
+          500
+        ]
+      ],
+      "orientation": "asListed",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.feature_graphic.format",
+      "kind": "format",
+      "applies": {
+        "slot": "featureGraphic"
+      },
+      "formats": [
+        "png",
+        "jpeg"
+      ],
+      "alpha": false,
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "JPEG or 24-bit PNG, no alpha."
+    },
+    {
+      "id": "google.feature_graphic.content",
+      "kind": "checklist",
+      "applies": {
+        "slot": "featureGraphic"
+      },
+      "item": "Key elements clear of the cut-off zones and the video's play button; background to the edges; not pure white, black or dark grey; text localised; no device imagery, store badges, prices, awards or claims.",
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.feature_graphic.alt_text.required",
+      "kind": "required",
+      "applies": {
+        "field": "altText.featureGraphic"
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Not in the API (unverified): set it in Play Console; the checklist prints it."
+    },
+    {
+      "id": "google.feature_graphic.alt_text.length",
+      "kind": "limit",
+      "applies": {
+        "field": "altText.featureGraphic"
+      },
+      "max": 140,
+      "count": "characters",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.feature_graphic.alt_text.wording",
+      "kind": "pattern",
+      "applies": {
+        "field": "altText.featureGraphic"
+      },
+      "regex": "(?i)^\\s*(a\\s+|an\\s+)?(photo|image|picture|graphic|screenshot)\\s+of\\b",
+      "forbid": true,
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Describe what it shows; don't start with 'photo of' or 'image of'."
+    },
+    {
+      "id": "google.tv_banner.required",
+      "kind": "required",
+      "applies": {
+        "slot": "tvBanner"
+      },
+      "when": {
+        "slotUsed": "tv"
+      },
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.tv_banner.size",
+      "kind": "size",
+      "applies": {
+        "slot": "tvBanner"
+      },
+      "sizes": [
+        [
+          1280,
+          720
+        ]
+      ],
+      "orientation": "asListed",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.tv_banner.format",
+      "kind": "format",
+      "applies": {
+        "slot": "tvBanner"
+      },
+      "formats": [
+        "png",
+        "jpeg"
+      ],
+      "alpha": false,
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "JPEG or 24-bit PNG, no alpha."
+    },
+    {
+      "id": "google.forms.data_safety",
+      "kind": "checklist",
+      "applies": {
+        "field": "stores.google.dataSafetyCsv"
+      },
+      "item": "Every app on a testing or production track has a Data safety form, even one that collects nothing. Export it from Play Console as CSV and point stores.google.dataSafetyCsv at it to send it by API (POST applications/{package}/dataSafety): an import overwrites every answer.",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/10787469",
+      "checked": "2026-11-14",
+      "status": "verified"
+    },
+    {
+      "id": "google.categories.known",
+      "kind": "enum",
+      "applies": {
+        "field": "stores.google.category"
+      },
+      "valuesFrom": "categories.ids",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9859673",
+      "checked": "2026-11-14",
+      "status": "observed",
+      "note": "Set in Play Console only (no API); the config's category is read to know whether it's a game. Names are Google's; the ids are Play's own as they appear in its category URLs."
+    },
+    {
+      "id": "google.forms.category_tags",
+      "kind": "checklist",
+      "applies": {
+        "field": "stores.google.category"
+      },
+      "item": "Choose the category and up to five tags in Play Console (Store settings): the API can't set them.",
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9859673",
+      "checked": "2026-11-14",
+      "status": "verified"
+    }
+  ],
+  "slots": {
+    "$comment": "Google Play's image types (the API's AppImageType). 'group' is screenshots or graphics. Which config screen fills a screenshot slot is stores.google.slots; graphics come from stores.google.graphics. Counts are per language. Sizes: 'range' is minSide/maxSide in pixels and long side over short side (minAspect, maxAspect); 'sizes' are exact.",
+    "phone": {
+      "imageType": "phoneScreenshots",
+      "group": "screenshots",
+      "kind": "phone",
+      "count": {
+        "min": 0,
+        "max": 8
+      },
+      "range": {
+        "minSide": 320,
+        "maxSide": 3840,
+        "maxAspect": 2
+      },
+      "formats": [
+        "png",
+        "jpeg"
+      ],
+      "alpha": false,
+      "status": "verified"
+    },
+    "tablet7": {
+      "imageType": "sevenInchScreenshots",
+      "group": "screenshots",
+      "kind": "tablet",
+      "count": {
+        "min": 0,
+        "max": 8
+      },
+      "range": {
+        "minSide": 1080,
+        "maxSide": 7680,
+        "minAspect": 1.77,
+        "maxAspect": 1.78
+      },
+      "formats": [
+        "png",
+        "jpeg"
+      ],
+      "alpha": false,
+      "status": "verified",
+      "note": "16:9 or 9:16. Four or more recommended. Chromebook shots go only through Play Console."
+    },
+    "tablet10": {
+      "imageType": "tenInchScreenshots",
+      "group": "screenshots",
+      "kind": "tablet",
+      "count": {
+        "min": 0,
+        "max": 8
+      },
+      "range": {
+        "minSide": 1080,
+        "maxSide": 7680,
+        "minAspect": 1.77,
+        "maxAspect": 1.78
+      },
+      "formats": [
+        "png",
+        "jpeg"
+      ],
+      "alpha": false,
+      "status": "verified",
+      "note": "16:9 or 9:16. Four or more recommended."
+    },
+    "tv": {
+      "imageType": "tvScreenshots",
+      "group": "screenshots",
+      "kind": "tv",
+      "count": {
+        "min": 0,
+        "max": 8
+      },
+      "range": {
+        "minSide": 320,
+        "maxSide": 3840,
+        "maxAspect": 2
+      },
+      "formats": [
+        "png",
+        "jpeg"
+      ],
+      "alpha": false,
+      "status": "verified",
+      "note": "At least one when the app is opted in to Android TV, and at least one unaltered. Shown only on TVs."
+    },
+    "wear": {
+      "imageType": "wearScreenshots",
+      "group": "screenshots",
+      "kind": "watch",
+      "count": {
+        "min": 0,
+        "max": 8
+      },
+      "range": {
+        "minSide": 384,
+        "maxSide": 3840,
+        "minAspect": 1,
+        "maxAspect": 1
+      },
+      "formats": [
+        "png",
+        "jpeg"
+      ],
+      "alpha": false,
+      "status": "verified",
+      "note": "1:1, at least 384x384; the app's interface only: no device frames, extra text, graphics or backgrounds, no transparency or masking."
+    },
+    "icon": {
+      "imageType": "icon",
+      "group": "graphics",
+      "kind": null,
+      "count": {
+        "min": 1,
+        "max": 1
+      },
+      "sizes": [
+        [
+          512,
+          512
+        ]
+      ],
+      "formats": [
+        "png"
+      ],
+      "alpha": true,
+      "maxBytes": 1048576,
+      "status": "verified",
+      "note": "32-bit PNG, sRGB, full square (Play applies the mask and shadow); up to 1024 KB."
+    },
+    "featureGraphic": {
+      "imageType": "featureGraphic",
+      "group": "graphics",
+      "kind": null,
+      "count": {
+        "min": 1,
+        "max": 1
+      },
+      "sizes": [
+        [
+          1024,
+          500
+        ]
+      ],
+      "orientation": "asListed",
+      "formats": [
+        "png",
+        "jpeg"
+      ],
+      "alpha": false,
+      "status": "verified",
+      "note": "JPEG or 24-bit PNG. Needs alt text (altText.featureGraphic)."
+    },
+    "tvBanner": {
+      "imageType": "tvBanner",
+      "group": "graphics",
+      "kind": null,
+      "count": {
+        "min": 0,
+        "max": 1
+      },
+      "sizes": [
+        [
+          1280,
+          720
+        ]
+      ],
+      "orientation": "asListed",
+      "formats": [
+        "png",
+        "jpeg"
+      ],
+      "alpha": false,
+      "status": "verified",
+      "note": "Required when the app is opted in to Android TV; shown only on TVs."
+    }
+  },
+  "categories": {
+    "$comment": "Google Play's categories (32 for apps, 17 for games, read 2026-11-14) and tags. Play Console only: no API sets them. The names are Google's (verified); the ids are Play's own as its category URLs show them (observed). An id starting GAME_ is a game.",
+    "source": "https://support.google.com/googleplay/android-developer/answer/9859673",
+    "checked": "2026-11-14",
+    "status": "verified",
+    "ids": [
+      "ART_AND_DESIGN",
+      "AUTO_AND_VEHICLES",
+      "BEAUTY",
+      "BOOKS_AND_REFERENCE",
+      "BUSINESS",
+      "COMICS",
+      "COMMUNICATION",
+      "DATING",
+      "EDUCATION",
+      "ENTERTAINMENT",
+      "EVENTS",
+      "FINANCE",
+      "FOOD_AND_DRINK",
+      "HEALTH_AND_FITNESS",
+      "HOUSE_AND_HOME",
+      "LIBRARIES_AND_DEMO",
+      "LIFESTYLE",
+      "MAPS_AND_NAVIGATION",
+      "MEDICAL",
+      "MUSIC_AND_AUDIO",
+      "NEWS_AND_MAGAZINES",
+      "PARENTING",
+      "PERSONALIZATION",
+      "PHOTOGRAPHY",
+      "PRODUCTIVITY",
+      "SHOPPING",
+      "SOCIAL",
+      "SPORTS",
+      "TOOLS",
+      "TRAVEL_AND_LOCAL",
+      "VIDEO_PLAYERS",
+      "WEATHER",
+      "GAME_ACTION",
+      "GAME_ADVENTURE",
+      "GAME_ARCADE",
+      "GAME_BOARD",
+      "GAME_CARD",
+      "GAME_CASINO",
+      "GAME_CASUAL",
+      "GAME_EDUCATIONAL",
+      "GAME_MUSIC",
+      "GAME_PUZZLE",
+      "GAME_RACING",
+      "GAME_ROLE_PLAYING",
+      "GAME_SIMULATION",
+      "GAME_SPORTS",
+      "GAME_STRATEGY",
+      "GAME_TRIVIA",
+      "GAME_WORD"
+    ],
+    "names": {
+      "ART_AND_DESIGN": "Art and Design",
+      "AUTO_AND_VEHICLES": "Auto and Vehicles",
+      "BEAUTY": "Beauty",
+      "BOOKS_AND_REFERENCE": "Books and Reference",
+      "BUSINESS": "Business",
+      "COMICS": "Comics",
+      "COMMUNICATION": "Communications",
+      "DATING": "Dating",
+      "EDUCATION": "Education",
+      "ENTERTAINMENT": "Entertainment",
+      "EVENTS": "Events",
+      "FINANCE": "Finance",
+      "FOOD_AND_DRINK": "Food and Drink",
+      "HEALTH_AND_FITNESS": "Health and Fitness",
+      "HOUSE_AND_HOME": "House and Home",
+      "LIBRARIES_AND_DEMO": "Libraries and Demo",
+      "LIFESTYLE": "Lifestyle",
+      "MAPS_AND_NAVIGATION": "Maps and Navigation",
+      "MEDICAL": "Medical",
+      "MUSIC_AND_AUDIO": "Music and Audio",
+      "NEWS_AND_MAGAZINES": "News and Magazines",
+      "PARENTING": "Parenting",
+      "PERSONALIZATION": "Personalization",
+      "PHOTOGRAPHY": "Photography",
+      "PRODUCTIVITY": "Productivity",
+      "SHOPPING": "Shopping",
+      "SOCIAL": "Social",
+      "SPORTS": "Sports",
+      "TOOLS": "Tools",
+      "TRAVEL_AND_LOCAL": "Travel and Local",
+      "VIDEO_PLAYERS": "Video Players and Editors",
+      "WEATHER": "Weather",
+      "GAME_ACTION": "Games: Action",
+      "GAME_ADVENTURE": "Games: Adventure",
+      "GAME_ARCADE": "Games: Arcade",
+      "GAME_BOARD": "Games: Board",
+      "GAME_CARD": "Games: Card",
+      "GAME_CASINO": "Games: Casino",
+      "GAME_CASUAL": "Games: Casual",
+      "GAME_EDUCATIONAL": "Games: Educational",
+      "GAME_MUSIC": "Games: Music",
+      "GAME_PUZZLE": "Games: Puzzle",
+      "GAME_RACING": "Games: Racing",
+      "GAME_ROLE_PLAYING": "Games: Role Playing",
+      "GAME_SIMULATION": "Games: Simulation",
+      "GAME_SPORTS": "Games: Sports",
+      "GAME_STRATEGY": "Games: Strategy",
+      "GAME_TRIVIA": "Games: Trivia",
+      "GAME_WORD": "Games: Word"
+    },
+    "maxTags": 5
+  }
+}

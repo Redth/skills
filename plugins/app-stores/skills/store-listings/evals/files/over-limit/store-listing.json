@@ -1,0 +1,86 @@
+{
+  "$comment": "Synthetic eval fixture: Play's short description is over 80 characters and starts with a price word.",
+  "version": 1,
+  "app": {
+    "name": "Sample Recipes",
+    "ids": {
+      "apple": {
+        "bundleId": "com.example.samplerecipes",
+        "appId": null
+      },
+      "google": {
+        "package": "com.example.samplerecipes"
+      }
+    },
+    "copyright": "2026 Example Studio",
+    "contact": {
+      "email": "support@example.com",
+      "phone": null,
+      "website": "https://example.com"
+    },
+    "urls": {
+      "marketing": "https://example.com",
+      "support": "https://example.com/support",
+      "privacy": "https://example.com/privacy",
+      "privacyChoices": null
+    }
+  },
+  "primaryLocale": "en-US",
+  "locales": {
+    "en-US": {
+      "description": "Plan a week of meals in minutes. Pick recipes you like, and Sample Recipes builds the grocery list for you.",
+      "google": {
+        "title": "Sample Recipes: Meal Planner",
+        "shortDescription": "Free! Plan a whole week of healthy family meals in minutes and build your grocery list.",
+        "fullDescription": null,
+        "video": null,
+        "releaseNotes": null
+      }
+    }
+  },
+  "screenshots": {
+    "folder": "screenshots",
+    "shots": []
+  },
+  "screens": {
+    "android-phone": {
+      "kind": "phone"
+    }
+  },
+  "stores": {
+    "apple": {
+      "enabled": false
+    },
+    "google": {
+      "enabled": true,
+      "defaultLanguage": "en-US",
+      "slots": {
+        "phone": "android-phone",
+        "tablet7": null,
+        "tablet10": null,
+        "tv": null,
+        "wear": null
+      },
+      "graphics": {
+        "icon": "graphics/icon-512.png",
+        "featureGraphic": "graphics/feature-1024x500.png",
+        "tvBanner": null
+      },
+      "dataSafetyCsv": null
+    },
+    "amazon": {
+      "enabled": false
+    },
+    "steam": {
+      "enabled": false
+    },
+    "itch": {
+      "enabled": false
+    }
+  },
+  "forms": {},
+  "rules": {
+    "extraForbiddenWords": [],
+    "relax": []
+  }
+}

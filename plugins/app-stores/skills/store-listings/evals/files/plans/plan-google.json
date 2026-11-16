@@ -1,0 +1,58 @@
+{
+  "$comment": "Synthetic eval fixture: a recorded plan for the invented Sample Recipes app. The hashes are placeholders.",
+  "version": 1,
+  "store": "google",
+  "createdAt": "2026-11-14T10:00:00Z",
+  "listing": "out/listing.json",
+  "listingSha256": "synthetic-sha256-of-out-listing-json",
+  "fingerprint": "synthetic-sha256-of-the-store-values-compared",
+  "options": {
+    "ageRating": false,
+    "newVersion": null
+  },
+  "actions": [
+    {
+      "id": 1,
+      "kind": "google.listing.update",
+      "locale": "en-US",
+      "summary": "change title: 'Sample Recipes' → 'Sample Recipes: Meal Planner'; change short description: 'Recipes and meal plans.' → 'Plan a week of meals in minutes.'",
+      "set": {
+        "title": "Sample Recipes: Meal Planner",
+        "shortDescription": "Plan a week of meals in minutes."
+      }
+    },
+    {
+      "id": 2,
+      "kind": "google.images.replace",
+      "locale": "en-US",
+      "imageType": "phoneScreenshots",
+      "summary": "replace 3 phone screenshots with 4",
+      "files": [
+        "google/metadata/android/en-US/images/phoneScreenshots/01_plan.png",
+        "google/metadata/android/en-US/images/phoneScreenshots/02_recipe.png",
+        "google/metadata/android/en-US/images/phoneScreenshots/03_shopping.png",
+        "google/metadata/android/en-US/images/phoneScreenshots/04_week.png"
+      ]
+    },
+    {
+      "id": 3,
+      "kind": "google.listing.update",
+      "locale": "de-DE",
+      "summary": "add the de-DE listing (title 'Sample Recipes: Essensplaner')",
+      "set": {
+        "title": "Sample Recipes: Essensplaner",
+        "shortDescription": "Plane eine Woche voller Mahlzeiten in Minuten.",
+        "fullDescription": "Plane eine Woche voller Mahlzeiten in Minuten."
+      }
+    }
+  ],
+  "unchanged": [
+    "en-US featureGraphic: 1 picture, as it is",
+    "en-US icon: 1 picture, as it is",
+    "details: contact email and website, as they are"
+  ],
+  "notes": [
+    "Play Console only: category, tags, content rating, target audience, ads, Sign-in details and the other App content declarations.",
+    "The feature graphic's alt text is Console-only: 'A phone showing a week of planned meals'."
+  ]
+}
