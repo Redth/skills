@@ -227,3 +227,16 @@ misses the screen. So:
   `dumpsys` doesn't say (`mIsFullscreen` missing on an unusual input method), put a `hideKeyboard` before the tap
   for that device or layout in a `stepsPatch` ([config.md](config.md#overrides-when-a-devices-layout-differs)).
 - A screen meant to show the keyboard full screen is rarely one a store wants: capture text entry in portrait.
+
+**The caret.** Back closes the keyboard and leaves the field focused, its caret blinking (a shot lands with it on
+or off, so two identical frames don't rule it out). `unfocus` (and `fill`, at its end) reads the dump and, only
+while a text field (an `EditText` or the like) has `focused="true"`, closes the keyboard and presses
+`KEYCODE_ESCAPE`, which newer Android versions take to clear the focus; then it reads the dump again. On older
+versions an Escape no view handles falls back to back and navigates: the field is gone from the dump, and the step
+fails saying to give `unfocus` a tap instead. `settle` after typing warns when a field still has the focus.
+
+**Forms.** A `fill` closes the keyboard before each field after the first (it covers the next one, and the dump
+lists only what's on screen), scrolls each field into view (down, then up) and taps it. **Two panes** (an open
+foldable, a tablet): a `scroll` swipes the screen's middle, which may be the other pane; `"in": {"id": <the
+pane>}` swipes inside that element's bounds. `scroll {"to": …}` looks down first, then up, stopping each way when
+the dump stops changing.

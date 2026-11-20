@@ -92,7 +92,7 @@ class MacOSDriver(base.Driver):
 
     NAME = "macos"
     PLATFORMS = ("macos",)
-    STEPS = ("launch", "tap", "type", "wait", "settle", "script")
+    STEPS = ("launch", "tap", "type", "wait", "settle", "script", "fill", "unfocus")
     FINDERS = ("id", "text", "label")
     WINDOW_TIMEOUT = 30
 

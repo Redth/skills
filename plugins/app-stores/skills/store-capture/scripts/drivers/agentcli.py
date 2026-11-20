@@ -36,7 +36,7 @@ import xml.etree.ElementTree as ET
 from . import base
 from .hosted import HostedDriver, type_target
 
-DIRECTIONS = ("up", "down", "left", "right")
+DIRECTIONS = base.DIRECTIONS
 
 
 def parse_json(text):
@@ -141,7 +141,7 @@ class AgentCliDriver(HostedDriver):
     PLATFORM_ARGS = {"ios": "ios", "ipados": "ios", "android": "android", "macos": "maccatalyst",
                      "windows": "windows"}
     STEPS = ("launch", "deepLink", "url", "appFile", "tap", "type", "wait", "scroll", "back", "swipe", "settle",
-             "script", "posture", "hideKeyboard")
+             "script", "posture", "hideKeyboard", "fill", "unfocus")
     FINDERS = ("id", "text", "css", "xpath")
     LOCATORS = {"id": "accessibility-id", "text": "text", "css": "css-selector", "xpath": "xpath"}
     INSTALL = ""
@@ -648,13 +648,23 @@ class AgentCliDriver(HostedDriver):
         raise base.StepFailed("%s %r didn't appear within %g s" % (query[0], query[1], timeout))
 
     def step_scroll(self, ctx, value):
-        """``to`` an element: ``ui scroll --element <id>`` (into view; when the agent can't, scrolled down until
-        it's found, at most ``times``, 8); a ``direction`` (``times`` times, each ``distance``, default 400):
-        ``ui scroll --dx/--dy``."""
+        """``to`` an element: ``ui scroll --element <id>`` (into view, in whichever pane holds it); when the agent
+        can't, scrolled ``direction`` (default down) until it's found or the tree stops changing, then the other way
+        (at most ``times``, 8, each way). ``to`` ``"top"`` or ``"bottom"``: until the tree stops changing. A
+        ``direction`` (``times`` times, each ``distance``, default 400): ``ui scroll --dx/--dy``. ``in``: the pane to
+        scroll (``ui scroll --element <its id>`` with the delta)."""
         value = value or {}
         if isinstance(value, str):
             value = {"direction": value}
+        direction = value.get("direction")
+        if direction is not None and direction not in DIRECTIONS:
+            raise base.StepFailed("step %d: scroll direction is up, down, left or right" % ctx.index)
         to = value.get("to")
+        if isinstance(to, str):
+            base.Driver.step_scroll(self, ctx, value)
+            return
+        within = self.scroll_container(ctx, value.get("in"))
+        distance = value.get("distance")
         if to:
             query = base.element_query(to)
             if query is None:
@@ -663,21 +673,48 @@ class AgentCliDriver(HostedDriver):
                                                              self.element_id(ctx, query)], check=False))
             if ok:
                 return
-            base.note("  the agent couldn't scroll to it (%s): scrolling down instead" % message[:120])
-            for _ in range(int(value.get("times") or 8)):
-                self.cli(ctx.device, ["ui", "scroll", "--dy", "-400"])
-                el = self.find(ctx, query)
-                if el is not None and el.bounds:
-                    return
-            raise base.StepFailed("step %d: couldn't scroll %s %r into view" % (ctx.index, query[0], query[1]))
-        direction = value.get("direction", "down")
-        if direction not in DIRECTIONS:
-            raise base.StepFailed("step %d: scroll direction is up, down, left or right" % ctx.index)
-        d = float(value.get("distance") or 400)
-        # The CLIs' sign: a negative --dy scrolls down (content moves up).
-        delta = {"down": ("--dy", -d), "up": ("--dy", d), "right": ("--dx", -d), "left": ("--dx", d)}[direction]
+            first = direction or "down"
+            base.note("  the agent couldn't scroll to it (%s): scrolling %s, then %s, instead" % (
+                message[:120], first, base.OPPOSITE[first]))
+            times = int(value.get("times") or 8)
+            moved = 0
+            for way, most in ((first, times), (base.OPPOSITE[first], None)):
+                most = times + moved if most is None else most
+                before = self.scroll_fingerprint(ctx, within)
+                for _ in range(most):
+                    self.scroll_once(ctx, way, within, distance)
+                    el = self.find(ctx, query)
+                    if el is not None and el.bounds:
+                        return
+                    after = self.scroll_fingerprint(ctx, within)
+                    if after is not None and after == before:
+                        break
+                    before = after
+                    if way == first:
+                        moved += 1
+            raise base.StepFailed("step %d: couldn't scroll %s %r into view (scrolled %s and %s)" % (
+                ctx.index, query[0], query[1], first, base.OPPOSITE[first]))
         for _ in range(int(value.get("times") or 1)):
-            self.cli(ctx.device, ["ui", "scroll", delta[0], "%g" % delta[1]])
+            self.scroll_once(ctx, direction or "down", within, distance)
+
+    def scroll_once(self, ctx, direction, within=None, distance=None):
+        """``ui scroll --dy|--dx <d>`` (the CLIs' sign: a negative ``--dy`` scrolls down), on ``within``'s element
+        (``--element <id>``) when there is one."""
+        d = float(distance or 400)
+        delta = {"down": ("--dy", -d), "up": ("--dy", d), "right": ("--dx", -d), "left": ("--dx", d)}[direction]
+        args = ["ui", "scroll"]
+        if within is not None:
+            element = within.attrs.get("elementId")
+            if not element:
+                raise base.StepFailed("step %d: the pane to scroll in has no element id" % ctx.index)
+            args += ["--element", element]
+        self.cli(ctx.device, args + [delta[0], "%g" % delta[1]])
+
+    def scroll_fingerprint(self, ctx, within=None):
+        """The agent's tree (the elements' bounds move as the content scrolls)."""
+        if base.DRY_RUN:
+            return None
+        return json.dumps(self.tree(ctx.device), sort_keys=True)
 
     def step_back(self, ctx, value):
         """The agent's back action (``POST /api/v1/ui/actions/back``)."""

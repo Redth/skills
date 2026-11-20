@@ -122,6 +122,32 @@ happen to any app.
   caught both as `missed` instead of shooting the wrong screen. Before recapturing, run `capture.py --changes`, show
   the user what changed and which screens it touches, and repair the steps (a `stepsPatch` for one device or
   layout), never the check ([staging.md](staging.md#7-updating-when-the-app-changed)).
+- **A set that doesn't look in use.** Every check passed and the user turned the set down: a data-entry form
+  was blank, its fields showing only their placeholders. Staging had covered the data, sign-in and skips, but not
+  what each screen looks like with someone using it. Ask it per screen (`inUse`), fill forms with believable values
+  (`fill`, nothing saved), record the user's rule in `staging.inUse` so later screens get the same, and look at
+  every picture asking "does this look in use?" ([staging.md](staging.md#looking-in-use)).
+- **A form that typing scrolled.** After typing into a long form the shot started mid-form, the title under the
+  navigation bar. `fill`'s `"scrollTo": "top"` (or a `scroll {"to": "top"}` after the keyboard's down).
+- **A number pad that won't close.** On a small display `mobile: hideKeyboard` couldn't close a number pad ("did
+  not know how to dismiss the keyboard": it has no Done or Return key), and a scroll back up opened it again: a
+  direction-only `mobile: scroll` presses for half a second at a quarter of the window before dragging, and that
+  point was a field, so the press focused it. What closed it was the app's own Done button beside the pad; what
+  scrolled back without reopening it was a quick `mobile: swipe`. The driver now tries a button named Done, Close or
+  Hide keyboard after the keyboard's keys, scrolls iOS by swipes, and tries a tap outside the field only last (many
+  apps don't close the keyboard for it). Still up after every try, the step fails saying so: find the app's Done
+  (`--inspect`), and only when there's none tell the user it's the app's to fix; never ship the keyboard or drop
+  that device's typing quietly ([appium.md](appium.md#scrolling-on-ios)).
+- **A caret after the keyboard closed.** On Android, back closed the keyboard but the field kept its focus, and
+  the caret blinked into some shots and not others (`settle` saw two identical frames either way). `unfocus` (a
+  `fill` does it) presses Escape while a field has the focus and checks the screen didn't go back.
+- **The other pane scrolled.** On an open foldable the form was the right pane; a `scroll {direction}` swiped the
+  screen's middle (the list), and `scroll {to}` only looked down, so a field above was never found and the form
+  never went back to its top. `scroll {"in": {"id": <the pane>}}` (and `fill`'s `in`); `scroll {to}` now looks
+  both ways.
+- **A patch per field.** Typing a form on Android needed, for every field, the keyboard closed (it covers the next
+  field), the field scrolled into view (the dump lists only what's on screen) and then the typing. One `fill` does
+  that for every field on every driver.
 - **A landscape keyboard swallowing a tap.** On an open foldable, text entry put the keyboard full screen; the
   number sheet's Done tap landed on the keyboard, and the next `hideKeyboard` closed only the keyboard. The drivers
   now close a full-screen keyboard before a tap on Android ([adb.md](adb.md#the-keyboard)).

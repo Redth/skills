@@ -72,6 +72,9 @@ FIND_JS = r"""
   el = cands.filter(function (e) { return e && shows(e); })[0] || null;
   if (!el) return null;
   if (q.scroll) el.scrollIntoView({block: "center", inline: "center"});
+  if (q.scrollBy) el.scrollBy(q.scrollBy[0] * el.clientWidth, q.scrollBy[1] * el.clientHeight);
+  if (q.edge === "top") el.scrollTop = 0;
+  if (q.edge === "bottom") el.scrollTop = el.scrollHeight;
   if (q.focus && el.focus) el.focus();
   var r = el.getBoundingClientRect();
   return {x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height};
@@ -101,13 +104,27 @@ def with_query(url, params):
         query.append((k, str(v)))
     return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query)))
 
+# The text field that has the focus (an input, a textarea, something contenteditable), and taking it away.
+FOCUSED_JS = r"""
+(function (blur) {
+  var a = document.activeElement;
+  if (!a || a === document.body || a === document.documentElement) return null;
+  var typing = /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable;
+  if (!typing) return null;
+  var r = {id: a.id || a.getAttribute("data-testid") || a.getAttribute("name") || "", tag: a.tagName};
+  if (blur) a.blur();
+  return r;
+})
+"""
+
 
 class ChromeDriver(base.Driver):
     """Web pages in headless Chrome (see the module's docstring)."""
 
     NAME = "chrome"
     PLATFORMS = ()   # any: a web app captured at any device's size
-    STEPS = ("launch", "url", "deepLink", "tap", "type", "wait", "scroll", "back", "settle", "script")
+    STEPS = ("launch", "url", "deepLink", "tap", "type", "wait", "scroll", "back", "settle", "script", "fill",
+             "unfocus")
     FINDERS = ("css", "id", "text", "label", "xpath")
     LOAD_TIMEOUT = 60
 
@@ -354,17 +371,54 @@ class ChromeDriver(base.Driver):
         self.frames()
 
     def step_scroll(self, ctx, value):
-        """Scroll an element into view (``to``), or the page ``direction`` by most of a screen (``times``)."""
+        """Scroll an element into view (``to``: ``scrollIntoView``, whichever way it is), to the ``"top"`` or
+        ``"bottom"``, or ``direction`` by most of a screen (``times``); ``in``: an element (a pane, a list) scrolled
+        instead of the page."""
         value = value or {}
-        if value.get("to"):
-            query = self._target(ctx, value["to"], "scroll to")
+        if isinstance(value, str):
+            value = {"direction": value}
+        within = base.element_query(value["in"]) if value.get("in") else None
+        if within is not None:
+            self._target(ctx, value["in"], "scroll in")
+        to = value.get("to")
+        if isinstance(to, str):
+            if to not in base.EDGES:
+                raise base.StepFailed("step %d: scroll to is an element, \"top\" or \"bottom\"" % ctx.index)
+            if within is not None:
+                q = {"finder": within[0], "value": within[1], "edge": to}
+                self.evaluate("%s(%s)" % (FIND_JS.strip(), json.dumps(q)), dry=True)
+            else:
+                self.evaluate("window.scrollTo(0, %s)" % ("0" if to == "top" else "document.body.scrollHeight"))
+        elif to:
+            query = self._target(ctx, to, "scroll to")
             self.locate(query, scroll=True)
         else:
             d = value.get("direction") or "down"
+            if d not in base.DIRECTIONS:
+                raise base.StepFailed("step %d: scroll direction is up, down, left or right" % ctx.index)
             dx, dy = {"down": (0, 1), "up": (0, -1), "right": (1, 0), "left": (-1, 0)}[d]
             for _ in range(int(value.get("times") or 1)):
-                self.evaluate("window.scrollBy(%d * innerWidth * 0.8, %d * innerHeight * 0.8)" % (dx, dy))
+                if within is not None:
+                    q = {"finder": within[0], "value": within[1], "scrollBy": [dx * 0.8, dy * 0.8]}
+                    self.evaluate("%s(%s)" % (FIND_JS.strip(), json.dumps(q)), dry=True)
+                else:
+                    self.evaluate("window.scrollBy(%d * innerWidth * 0.8, %d * innerHeight * 0.8)" % (dx, dy))
         self.frames()
+
+    def focused_field(self, ctx):
+        """The input, textarea or contenteditable that has the focus (``document.activeElement``), or ``False``."""
+        r = self.evaluate("%s(false)" % FOCUSED_JS.strip(), dry=None)
+        if base.DRY_RUN:
+            return None
+        return base.Element(id=r.get("id") or None, cls=r.get("tag")) if isinstance(r, dict) else False
+
+    def clear_focus(self, ctx):
+        """``blur()`` the focused text field: ``True`` when one had the focus, else ``False``."""
+        r = self.evaluate("%s(true)" % FOCUSED_JS.strip(), dry=None)
+        if base.DRY_RUN:
+            return None
+        self.frames()
+        return isinstance(r, dict)
 
     def step_back(self, ctx, value):
         """``history.back()``, then wait for it to draw."""

@@ -108,7 +108,11 @@ appId: com.example.samplerecipes
   `swipe`, `back`, `waitForAnimationToEnd`; `appId:` first, or `url:` for the web) and run; the host then takes
   the screenshot (the whole framebuffer, status bar included). Maestro's text selectors are regular expressions:
   the driver escapes the text it's given. Maestro has no sleep, so a `wait` of some milliseconds becomes an
-  optional `extendedWaitUntil` on an id that's never there. Docs: https://docs.maestro.dev.
+  optional `extendedWaitUntil` on an id that's never there. A `fill` becomes, per field, `scrollUntilVisible` (down
+  only), `tapOn` and `inputText` (with `hideKeyboard` between fields on Android, and after the last), and
+  `hideKeyboard` is Maestro's own; `scroll {"to": "top"}` is five swipes; a scroll or fill `in` a pane can't be
+  written as a flow (the screen is `skipped`: use adb, Appium or the agent for that device). Docs:
+  https://docs.maestro.dev.
 - `launchApp.arguments` arrive as launch arguments on iOS and intent extras on Android; React Native and Flutter
   read them through a launch-arguments package ([screenshot-mode.md](screenshot-mode.md)).
 - **Maestro can't set the locale or the status bar** (`--device-locale` is `maestro start-device`'s, not `maestro

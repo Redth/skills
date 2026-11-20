@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "build/SampleRecipes.app" } },
+  "locales": ["en-US"],
+  "staging": {
+    "account": { "kind": "bypass", "how": "the Debug build's SampleRecipesFakeSession" },
+    "launch": { "args": { "SampleRecipesFakeSession": "demo" }, "env": { "SampleRecipesFakeSession": "demo" } },
+    "inUse": { "rule": "screens look filled out, in use", "by": "the user, in chat, 2026-11-18" },
+    "confirmed": { "screen": "servings", "device": "iphone-6.9", "on": "2026-11-18", "by": "the user, in chat" }
+  },
+  "devices": [
+    { "id": "iphone-6.9", "platform": "ios", "driver": "appium", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max" } },
+    { "id": "duo-outer", "platform": "ios", "driver": "appium", "width": 1398, "height": 2034, "posture": "folded",
+      "target": { "deviceType": "iPhone Duo" } }
+  ],
+  "screens": [
+    { "id": "servings", "state": "Lemon Pasta's scaling form", "inUse": "scaled for a dinner party: 12 servings, 45 minutes",
+      "steps": [ { "launch": {} }, { "tap": { "id": "recipe-lemon-pasta" } }, { "tap": { "id": "scale" } },
+                 { "fill": { "fields": [ { "field": "servings-field", "text": "12" }, { "field": "minutes-field", "text": "45" } ],
+                             "keyboard": { "tap": { "id": "page-title" } }, "scrollTo": "top" }, "name": "fill" } ],
+      "verify": [ { "id": "servings-field", "contains": "12" }, { "keyboard": "hidden" } ] }
+  ]
+}

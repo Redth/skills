@@ -6,6 +6,7 @@
   {"query": "We added Ailoha to our Flutter app; capture the store screenshots with it.", "should_trigger": true},
   {"query": "Capture our store screenshots on the Pixel Fold emulator folded and unfolded, and on the iPhone Duo open.", "should_trigger": true},
   {"query": "The capture keeps leaving the keyboard up on the search screen; make the plan close it.", "should_trigger": true},
+  {"query": "Our store screenshots show empty forms. Recapture them with the forms filled in, like someone is using the app.", "should_trigger": true},
   {"query": "Use our existing Appium tests to take the store screenshots on iOS and Android.", "should_trigger": true},
   {"query": "Add a screenshot mode to our app so a launch argument opens each screen with demo data.", "should_trigger": true},
   {"query": "Import our fastlane snapshot screenshots into the captures folder.", "should_trigger": true},

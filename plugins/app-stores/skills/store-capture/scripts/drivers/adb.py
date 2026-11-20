@@ -178,6 +178,26 @@ def active_display(output):
     return on[0] if len(set(on)) == 1 else None
 
 
+# The classes of the views a person types into, as the dump names them (a .NET MAUI Entry and Compose's TextField
+# are EditTexts too).
+EDITABLE = ("EditText", "AutoCompleteTextView", "TextInputEditText", "SearchAutoComplete")
+
+
+def focused_text_field(elements):
+    """The dump's text field that has the focus (``focused="true"`` on an EditText or the like), or ``None``."""
+    for el in elements:
+        if el.attrs.get("focused") == "true" and any(k in (el.cls or "") for k in EDITABLE):
+            return el
+    return None
+
+
+def same_field(a, b):
+    """True when two dumps' elements are the same field (its id, else its class and bounds)."""
+    if a.id:
+        return a.id == b.id
+    return a.cls == b.cls and a.bounds == b.bounds
+
+
 def keyboard_up(output):
     """Whether ``dumpsys input_method`` says the keyboard is showing (``mInputShown=true``, or ``mImeWindowVis``
     with its visible bit); ``None`` when it says neither."""
@@ -215,7 +235,7 @@ class AdbDriver(base.Driver):
     NAME = "adb"
     PLATFORMS = ("android",)
     STEPS = ("launch", "deepLink", "url", "appFile", "tap", "type", "wait", "scroll", "back", "swipe", "settle",
-             "script", "posture", "hideKeyboard")
+             "script", "posture", "hideKeyboard", "fill", "unfocus")
     FINDERS = ("id", "text", "label", "xpath")
     MANAGES_DEVICE = True     # the uiautomator driver leaves size, locale, appearance and status bar alone
     BOOT_TIMEOUT = 600
@@ -620,6 +640,48 @@ class AdbDriver(base.Driver):
         self.shell("input", "keyevent", "KEYCODE_BACK")
         base.poll(lambda: self.keyboard_shown(ctx) is False, 3, interval=0.3, what="the keyboard to close")
 
+    def focused_field(self, ctx):
+        """The text field with the focus now, from the dump (``focused="true"``), or ``False``."""
+        if base.DRY_RUN:
+            return None
+        _, elements = self.dump()
+        return focused_text_field(elements) or False
+
+    def clear_focus(self, ctx):
+        """Clear a text field's focus (its caret blinks in a shot otherwise; back closes the keyboard, not the
+        focus): the keyboard closed first (back, only while it's up), then Escape, which newer Android versions
+        take to clear the focus, pressed only while a text field has it. The dump is read again after: the field
+        unfocused is ``True``; the field gone means Escape went back instead (an older Android, or an app that
+        doesn't take it), a ``StepFailed`` saying to give ``unfocus`` a tap; still focused is ``False`` with a
+        warning."""
+        if base.DRY_RUN:
+            base.note("  (dry run: if the dump shows a text field with the focus, the keyboard closed and Escape "
+                      "pressed, then the dump read again)")
+            return None
+        _, elements = self.dump()
+        field = focused_text_field(elements)
+        if field is None:
+            return False
+        if self.keyboard_shown(ctx):
+            self.hide_keyboard(ctx, True)
+            _, elements = self.dump()
+            field = focused_text_field(elements)
+            if field is None:
+                return True
+        self.shell("input", "keyevent", "KEYCODE_ESCAPE")
+        base.sleep(0.3)
+        _, after = self.dump()
+        if not any(same_field(field, el) for el in after):
+            raise base.StepFailed("step %d: unfocus: the screen changed when Escape was pressed to clear %s's "
+                                  "focus (Escape may have gone back here): give unfocus a tap (a title or label "
+                                  "outside the field) instead" % (ctx.index, base.describe_element(field)))
+        still = focused_text_field(after)
+        if still is not None and same_field(field, still):
+            ctx.warn("step %d: %s kept the focus after Escape: give unfocus a tap (a title or label outside the "
+                     "field), and look at the picture for a caret" % (ctx.index, base.describe_element(field)))
+            return False
+        return True
+
     def clear_fullscreen_keyboard(self, ctx):
         """Before a tap: a keyboard up full screen (``keyboard_fullscreen``) covers the app, so a tap meant for a
         button behind it (a sheet's Done) would land on the keyboard. Close it first, with the back key, only
@@ -1006,28 +1068,35 @@ class AdbDriver(base.Driver):
             self.step_tap(ctx, target)
         self.shell("input", "text", input_text(value["text"]))
 
-    def _swipe_for(self, ctx, direction):
-        w, h = self.size(ctx.device)
-        cx, cy = w // 2, h // 2
+    def _swipe_for(self, ctx, direction, bounds=None):
+        """A swipe's ``(x1, y1, x2, y2)`` across the screen's middle, or ``bounds``' (an element's: a pane)."""
+        if bounds:
+            left, top, right, bottom = bounds
+            w, h = right - left, bottom - top
+            cx, cy = left + w // 2, top + h // 2
+        else:
+            w, h = self.size(ctx.device)
+            cx, cy = w // 2, h // 2
         dx, dy = int(w * 0.3), int(h * 0.25)
         # The finger moves against the way the content scrolls.
         return {"down": (cx, cy + dy, cx, cy - dy), "up": (cx, cy - dy, cx, cy + dy),
                 "right": (cx + dx, cy, cx - dx, cy), "left": (cx - dx, cy, cx + dx, cy)}[direction]
 
-    def step_scroll(self, ctx, value):
-        """Scroll ``direction`` (``times``), or until the element ``to`` is on screen (at most ``times``, 10)."""
-        value = value or {}
-        direction = value.get("direction") or "down"
-        times = int(value.get("times") or (10 if value.get("to") else 1))
-        target = base.element_query(value.get("to")) if value.get("to") else None
-        for _ in range(times):
-            if target and self.find(ctx, target):
-                return
-            self.shell("input", "swipe", *(self._swipe_for(ctx, direction) + (400,)))
-            base.sleep(0.4)
-        if target and not self.find(ctx, target):
-            raise base.StepFailed("step %d: scrolled %s %d times and %s %r didn't appear"
-                                  % (ctx.index, direction, times, target[0], target[1]))
+    def scroll_once(self, ctx, direction, within=None):
+        """``input swipe`` across the screen's middle, or within ``within``'s bounds (a pane), then a moment for it to
+        come to rest."""
+        bounds = within.bounds if within is not None else None
+        if within is not None and not bounds:
+            raise base.StepFailed("step %d: the element to scroll in has no bounds" % ctx.index)
+        self.shell("input", "swipe", *(self._swipe_for(ctx, direction, bounds) + (400,)))
+        base.sleep(0.4)
+
+    def scroll_fingerprint(self, ctx, within=None):
+        """The dump (what's on screen moves in it as the content scrolls; scroll bars don't)."""
+        if base.DRY_RUN:
+            return None
+        self.shell("uiautomator", "dump", UI_DUMP, check=False, quiet=True, timeout=60)
+        return self.adb_run("exec-out", "cat", UI_DUMP, quiet=True, timeout=60).out
 
     def step_back(self, ctx, value):
         """``input keyevent KEYCODE_BACK``."""

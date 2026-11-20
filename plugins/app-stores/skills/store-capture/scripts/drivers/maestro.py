@@ -80,7 +80,8 @@ class MaestroDriver(HostedDriver):
 
     NAME = "maestro"
     PLATFORMS = ("ios", "ipados", "android", "web")
-    STEPS = ("flow", "launch", "deepLink", "url", "tap", "type", "wait", "scroll", "back", "swipe", "settle")
+    STEPS = ("flow", "launch", "deepLink", "url", "tap", "type", "wait", "scroll", "back", "swipe", "settle", "fill",
+             "hideKeyboard")
     FINDERS = ("id", "text", "label")
     HOST_STEPS = ()
     POSTURE_SETTING = True   # the device's posture is set by the host before the flow runs
@@ -199,9 +200,41 @@ class MaestroDriver(HostedDriver):
             # Maestro has no sleep: wait the time for something that's never there, and don't mind it.
             return [("extendedWaitUntil", {"visible": {"id": "appstores-never-there"},
                                            "timeout": int(value.get("ms") or 0), "optional": True})]
+        if kind == "fill":
+            opts = base.fill_options(value)
+            if opts.get("in") is not None:
+                raise base.StepSkipped("step %d: maestro can't scroll within a pane (fill's in): drive this device "
+                                       "with adb, appium or its agent" % index)
+            try:
+                fields = base.fill_fields(opts)
+            except ValueError as e:
+                raise base.StepFailed("step %d: %s" % (index, e)) from None
+            out = []
+            for n, (query, text) in enumerate(fields, 1):
+                if n > 1 and device.get("platform") == "android":
+                    out.append(("hideKeyboard", None))
+                out.append(("scrollUntilVisible", {"element": selector(query), "direction": "DOWN"}))
+                out += [("tapOn", selector(query)), ("inputText", text)]
+            if opts.get("keyboard", True) not in (False, "keep"):
+                out.append(("hideKeyboard", None))
+            if opts.get("scrollTo") is not None:
+                out += self.translate(device, screen, {"scroll": {"to": opts["scrollTo"]}}, index)
+            return out
+        if kind == "hideKeyboard":
+            if isinstance(value, dict) and value.get("tap"):
+                return self.translate(device, screen, {"tap": value["tap"]}, index)
+            return [("hideKeyboard", None)]
         if kind == "scroll":
             value = value if isinstance(value, dict) else {"direction": value}
             direction = value.get("direction") or "down"
+            if value.get("in") is not None:
+                raise base.StepSkipped("step %d: maestro can't scroll within a pane (scroll's in): drive this device "
+                                       "with adb, appium or its agent" % index)
+            if isinstance(value.get("to"), str):
+                if value["to"] not in base.EDGES:
+                    raise base.StepFailed("step %d: scroll to is an element, \"top\" or \"bottom\"" % index)
+                way = base.EDGES[value["to"]]
+                return [("swipe", {"direction": SCROLL_SWIPE[way]})] * int(value.get("times") or 5)
             if value.get("to"):
                 query = base.element_query(value["to"])
                 if query is None:

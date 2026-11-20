@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-20T11:20:02Z",
+  "finishedAt": "2026-11-20T11:22:47Z",
+  "plan": "capture-plan.json",
+  "app": { "revision": "9c1e2a7f30", "describe": "v2.1-3-g9c1e2a7", "dirty": false, "repo": "." },
+  "shots": [
+    { "locale": "en-US", "device": "iphone-6.9", "screen": "servings", "driver": "appium", "status": "taken",
+      "path": "en-US/iphone-6.9/servings.png", "width": 1320, "height": 2868,
+      "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2", "via": "appium" }, "statusBar": "verified",
+      "fixes": [], "warnings": [], "state": "Lemon Pasta's scaling form", "stateCheck": "passed", "appRevision": "9c1e2a7f30" },
+    { "locale": "en-US", "device": "duo-outer", "screen": "servings", "driver": "appium", "status": "missed", "kept": "none",
+      "reason": "step 4: the keyboard is still up after the appium driver's own close (mobile: hideKeyboard didn't: An unknown server-side error occurred while processing the command. Original error: Did not know how to dismiss the keyboard. Try to dismiss it manually); a Done or Return button above the keyboard (no Done or Return button above the keyboard); a tap on id 'page-title'. A number pad has no Done or Return key, so the keyboard's own close can't work on it: the app's own Done (an accessory or floating button) is what closes it, so name it in done. A tap or scroll that lands on a field opens the keyboard again. If the app has no way to close it, that's the app's to fix: tell the user, with this device and screen; don't capture the screen with the keyboard up, and don't drop its typing on this device unless they decide to. Not tried yet: a done (the app's own Done or Close button, by id or label, or {x, y}); a scroll.",
+      "state": "Lemon Pasta's scaling form", "stateCheck": "none" }
+  ],
+  "notes": ["en-US/duo-outer/servings: the UI tree where the steps stopped is in .inspect/en-US/duo-outer/servings.txt"]
+}

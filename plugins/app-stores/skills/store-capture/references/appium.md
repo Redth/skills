@@ -76,10 +76,11 @@ All JSON over HTTP to the local server; `<s>` is the session id.
 | `tap` | find (`POST /session/<s>/element`, the element under the key `element-6066-11e4-a52e-4f735466cecf`; 404 `no such element` when it isn't there), then `POST /session/<s>/element/<e>/click` |
 | `type` | `POST /session/<s>/element/<e>/value` `{ "text": … }`, or into `GET /session/<s>/element/active` |
 | `wait` | find until it appears |
-| `scroll` | iOS `mobile: scroll` (`direction` or `toVisible`, `elementId`), Android `mobile: scrollGesture` (`left`, `top`, `width`, `height` or `elementId`, `direction`, `percent`); `to` an element: scroll until it's found |
+| `scroll` | iOS `mobile: swipe` the finger's way (the opposite of the scroll's; `elementId` for `in`), never `mobile: scroll` with a direction ([below](#scrolling-on-ios)); Android `mobile: scrollGesture` (`left`, `top`, `width`, `height` or `elementId`, `direction`, `percent`); a Mac `mobile: scroll`; `to` an element: scroll until it's found, down then up, each way until the page source stops changing |
 | `swipe` | `mobile: swipe` (iOS), `mobile: swipeGesture` (Android), or `POST /session/<s>/actions` (a touch pointer; `DELETE …/actions` after) sized from `GET /session/<s>/window/rect` |
 | `back` | `POST /session/<s>/back` (on iOS that's navigation: never a way to close the keyboard) |
-| `hideKeyboard` | `mobile: isKeyboardShown`, then `mobile: hideKeyboard` (iOS: `keys` Done, Return, Go, Search, Next: the keyboard's own key), then on iOS a Done or Return button above the keyboard |
+| `hideKeyboard` | `mobile: isKeyboardShown`, then `mobile: hideKeyboard` (iOS: `keys` Done, Return, Go, Search, Next: the keyboard's own key), then the plan's `done` or, on iOS, a button named Done, Close, Hide keyboard or Dismiss keyboard (the app's own: a number pad has no key that closes it, so `mobile: hideKeyboard` always fails there), then a `scroll`, then last a `tap` ([config.md](config.md#the-keyboard-focus-and-forms)) |
+| `unfocus` | the host's (adb's Escape on Android); on iOS give it a `tap` (the keyboard closing usually takes the focus with it) |
 | `posture` | the host's ([simctl.md](simctl.md#the-iphone-duo), [adb.md](adb.md#foldables)) |
 | screenshot | the host's (below), else `GET /session/<s>/screenshot` (a base64 PNG) |
 
@@ -101,6 +102,17 @@ host), it's Appium's `GET /session/<s>/screenshot`. The size is checked either w
 
 Wait for scroll bars to fade after a scroll (`settle`) and put the keyboard away (`hideKeyboard`, never `back` on
 iOS) before the shot. Appium never sets the status bar: the host does.
+
+## Scrolling on iOS
+
+XCUITest's `mobile: scroll` with only a direction (no element) **presses for half a second** at a quarter of the
+window's width and height before it drags, slowly. When that point is a text field, the press focuses it: the
+number pad that `hideKeyboard` just closed comes back, and the page doesn't move. On a large iPhone the point may
+miss the fields by luck; on a small display (the iPhone Duo's cover) it landed in one. So the driver scrolls iOS
+with a quick `mobile: swipe` the finger's way (`up` content is a `down` swipe), on the window or the `in` element,
+with no hold: a form's scroll back to the top after typing (`fill`'s `scrollTo`, `scroll {"to": "top"}`) leaves the
+keyboard down. By hand, the same: `mobile: swipe` or a W3C pointer drag with no pause, never a direction-only
+`mobile: scroll` after typing.
 
 ## Stacks
 

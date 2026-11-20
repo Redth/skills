@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "build/SampleRecipes.app" },
+           "android": { "package": "com.example.samplerecipes", "activity": ".MainActivity", "apk": "build/app-Signed.apk" } },
+  "locales": ["en-US"],
+  "staging": {
+    "account": { "kind": "bypass", "how": "the Debug build's SampleRecipesFakeSession" },
+    "seed": { "kind": "file", "file": "store/demo/recipes.db", "into": { "ios": "Library/Caches/recipes.db", "android": "cache/recipes.db" } },
+    "launch": { "args": { "SampleRecipesFakeSession": "demo" }, "env": { "SampleRecipesFakeSession": "demo" } },
+    "network": { "kind": "offline" },
+    "inUse": { "rule": "generally most screens we capture should look like they're somewhat filled out, in use",
+               "by": "the user, in chat, 2026-11-18",
+               "values": "a family cooking for four: everyday dinners, metric amounts, invented names", "save": false },
+    "confirmed": { "screen": "plan", "device": "iphone-6.9", "on": "2026-11-18", "by": "the user, in chat" }
+  },
+  "devices": [
+    { "id": "iphone-6.9", "platform": "ios", "driver": "appium", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max" } },
+    { "id": "fold-open", "platform": "android", "driver": "adb", "width": 2076, "height": 2152, "posture": "open",
+      "layout": "wide", "target": { "avd": "appstores-fold" } }
+  ],
+  "screens": [
+    { "id": "plan", "state": "this week's plan, five invented dinners", "inUse": "the week planned, Tuesday's dinner ticked off",
+      "steps": [ { "launch": {} }, { "wait": { "id": "plan-title" } } ], "verify": { "text": "Lemon Pasta" } },
+    { "id": "add-recipe", "state": "the new-recipe form",
+      "inUse": "half written: a name, servings and two ingredients, not saved",
+      "steps": [ { "launch": {} }, { "tap": { "id": "add-recipe" } },
+                 { "fill": { "fields": [ { "field": "recipe-name", "text": "Lemon Pasta" }, { "field": "servings", "text": "4" },
+                                         { "field": "ingredient-1", "text": "300 g spaghetti" },
+                                         { "field": "ingredient-2", "text": "2 lemons" } ],
+                             "in": { "id": "recipe-form" }, "scrollTo": "top" }, "name": "fill" } ],
+      "verify": [ { "id": "recipe-name", "contains": "Lemon Pasta" }, { "keyboard": "hidden" } ] }
+  ]
+}

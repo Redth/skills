@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "build/SampleRecipes.app" } },
+  "locales": ["en-US"],
+  "staging": {
+    "account": { "kind": "bypass", "how": "the Debug build's SampleRecipesFakeSession" },
+    "seed": { "kind": "file", "file": "store/demo/recipes.db", "into": { "ios": "Library/Caches/recipes.db", "android": "cache/recipes.db" } },
+    "launch": { "args": { "SampleRecipesFakeSession": "demo" }, "env": { "SampleRecipesFakeSession": "demo" } },
+    "network": { "kind": "offline" },
+    "confirmed": { "screen": "plan", "device": "iphone-6.9", "on": "2026-11-18", "by": "the user, in chat" }
+  },
+  "devices": [
+    { "id": "iphone-6.9", "platform": "ios", "driver": "appium", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max" } }
+  ],
+  "screens": [
+    { "id": "plan", "state": "this week's plan, five invented dinners",
+      "steps": [ { "launch": {} }, { "wait": { "id": "plan-title" } } ], "verify": { "text": "Lemon Pasta" } },
+    { "id": "add-recipe", "state": "the new-recipe form",
+      "steps": [ { "launch": {} }, { "tap": { "id": "add-recipe" } }, { "wait": { "id": "recipe-name" } } ],
+      "verify": { "id": "recipe-name" } }
+  ]
+}

@@ -57,7 +57,14 @@ from appstores_lib import web  # noqa: E402
 
 # Every step kind the plan may use (CONTRACT.md 10.2), and every element finder.
 STEP_KINDS = ("launch", "deepLink", "url", "tap", "type", "wait", "scroll", "back", "swipe", "flow", "script",
-              "settle", "appFile", "posture", "hideKeyboard")
+              "settle", "appFile", "posture", "hideKeyboard", "fill", "unfocus")
+# Steps that type: a screen with one is a typing screen (its keyboard isn't checked unless asked; a field may keep
+# its focus, and its caret, after it).
+TYPING_STEPS = ("type", "fill")
+# Scroll directions, each one's opposite, and the two ends a ``scroll {"to": …}`` may name instead of an element.
+DIRECTIONS = ("up", "down", "left", "right")
+OPPOSITE = {"up": "down", "down": "up", "left": "right", "right": "left"}
+EDGES = {"top": "up", "bottom": "down"}
 # Keys a step may carry besides its kind: a comment, and a name other layers patch it by (stepsPatch).
 STEP_META = ("$comment", "name")
 # A foldable's postures (the plan's word, and the words other tools use for the same).
@@ -491,7 +498,118 @@ def step_element(kind, value):
         return element_query(target)
     if kind == "scroll":
         return element_query(value.get("to"))
+    if kind in ("fill", "hideKeyboard", "unfocus"):
+        return None
     return element_query(value)
+
+
+def fill_options(value):
+    """A ``fill`` step's value as a dict: a list is its ``fields``."""
+    if isinstance(value, list):
+        return {"fields": value}
+    return dict(value or {}) if isinstance(value, dict) else {}
+
+
+def fill_fields(value):
+    """A ``fill`` step's fields as ``[(query, text)]``: each entry's ``field`` is an element (``{"id": "servings"}``,
+    ``{"text": "Servings"}``) or a string, which is an id. Raises ``ValueError`` for an entry without a field or
+    text."""
+    out = []
+    for n, entry in enumerate(fill_options(value).get("fields") or [], 1):
+        if not isinstance(entry, dict) or entry.get("text") is None:
+            raise ValueError("fill's field %d needs a field and its text" % n)
+        field = entry.get("field")
+        query = ("id", field) if isinstance(field, str) and field else element_query(field)
+        if query is None:
+            raise ValueError("fill's field %d needs a field (an id, or an element: id, text, label, xpath, css)" % n)
+        out.append((query, str(entry["text"])))
+    return out
+
+
+def step_elements(kind, value):
+    """Every element a step names, as ``(finder, wanted)``: its own (``step_element``), a scroll's ``in``, a
+    ``fill``'s fields, its ``in`` and ``scrollTo``, and the ``done`` and ``tap`` a ``hideKeyboard``, ``unfocus`` or a
+    fill's ``keyboard`` taps. Raises ``ValueError`` when one names more than one way."""
+    out = []
+
+    def add(element):
+        q = element_query(element)
+        if q is not None:
+            out.append(q)
+
+    def add_keyboard(v):
+        if isinstance(v, dict):
+            add(v.get("done"))
+            add(v.get("tap"))
+            if isinstance(v.get("scroll"), dict):
+                add(v["scroll"].get("in"))
+
+    if kind == "fill":
+        opts = fill_options(value)
+        out.extend(q for q, _ in fill_fields(opts))
+        add(opts.get("in"))
+        add(opts.get("scrollTo"))
+        add_keyboard(opts.get("keyboard"))
+        return out
+    if kind in ("hideKeyboard", "unfocus"):
+        add_keyboard(value)
+        return out
+    own = step_element(kind, value)
+    if own is not None:
+        out.append(own)
+    if kind == "scroll" and isinstance(value, dict):
+        add(value.get("in"))
+    return out
+
+
+def typed(screen):
+    """True when a screen's steps type something (a ``type`` or ``fill`` step)."""
+    for st in screen.get("steps") or []:
+        if isinstance(st, dict):
+            try:
+                if step_of(st)[0] in TYPING_STEPS:
+                    return True
+            except ValueError:
+                continue
+    return False
+
+
+def describe_target(target):
+    """A tap target in a few words: ``id 'title'``, ``(540, 300)``."""
+    if isinstance(target, dict) and "x" in target and "y" in target:
+        return "(%g, %g)" % (target["x"], target["y"])
+    query = element_query(target)
+    return describe_query(query) if query else json.dumps(target)
+
+
+def describe_element(element):
+    """An element found, in a few words: ``the field id 'servings'``."""
+    for what, v in (("id", element.id), ("text", element.text), ("label", element.label)):
+        if v:
+            return "the field %s %r" % (what, v)
+    return "a text field"
+
+
+def focus_may_remain(screen, upto):
+    """True when, before step ``upto`` (1-based), the screen typed (``type``, or a ``fill`` with ``"unfocus": false``
+    or its keyboard kept) and no ``unfocus`` came after: a field may still have focus, and a caret."""
+    left = False
+    for i, st in enumerate(screen.get("steps") or [], 1):
+        if i >= upto or not isinstance(st, dict):
+            break
+        try:
+            kind, value = step_of(st)
+        except ValueError:
+            continue
+        if kind == "type":
+            left = True
+        elif kind == "fill":
+            opts = fill_options(value)
+            keep = opts.get("keyboard") == "keep"
+            left = not opts.get("unfocus", not keep)
+        elif kind == "unfocus":
+            left = False
+    return left
 
 
 def describe_query(query, contains=None):
@@ -1236,13 +1354,13 @@ class Driver(object):
         ``None`` for the default (``hidden`` when the screen's steps type nothing; with typing, nothing is asked,
         but a keyboard left up is a warning). ``WrongState`` when it isn't so; returns False when an asked-for
         check couldn't be made (the driver can't see the keyboard: ``keyboard_shown`` is ``None``)."""
-        typed = any(step_of(st)[0] == "type" for st in screen.get("steps") or [] if isinstance(st, dict))
+        types = typed(screen)
         wanted = (rule or {}).get("keyboard")
         if wanted == "any":
             return True
         implicit = wanted is None
         if implicit:
-            wanted = None if typed else "hidden"
+            wanted = None if types else "hidden"
         shown = self.keyboard_shown(ctx)
         if shown is None:
             return implicit
@@ -1370,12 +1488,13 @@ class Driver(object):
             if kind not in self.STEPS:
                 return "step %d (%s): the %s driver can't do %s steps" % (i, describe_step(step), self.NAME, kind)
             try:
-                query = step_element(kind, value)
+                queries = step_elements(kind, value)
             except ValueError as e:
                 return "step %d (%s): %s" % (i, describe_step(step), e)
-            if query and query[0] not in self.FINDERS and not (kind == "wait" and not self.FINDERS):
-                return "step %d (%s): the %s driver can't find elements by %s (it finds by %s)" % (
-                    i, describe_step(step), self.NAME, query[0], ", ".join(self.FINDERS) or "nothing")
+            for query in queries:
+                if query[0] not in self.FINDERS and not (kind == "wait" and not self.FINDERS):
+                    return "step %d (%s): the %s driver can't find elements by %s (it finds by %s)" % (
+                        i, describe_step(step), self.NAME, query[0], ", ".join(self.FINDERS) or "nothing")
             if kind == "wait" and isinstance(value, dict) and value.get("contains") is not None and self.FINDERS \
                     and not self.CONTAINS:
                 return "step %d (%s): the %s driver can't read what an element shows: wait for the text itself " \
@@ -1470,48 +1589,385 @@ class Driver(object):
             self.apply_posture(ctx.device, posture, ctx.shot)
             self.state["posture"] = posture
 
+    # The keyboard, focus and typing into forms.
+
+    KEYBOARD_CLOSE = 3.0    # seconds a keyboard has to go down after each try
+
     def step_hideKeyboard(self, ctx, value):
-        """``hideKeyboard``: close the on-screen keyboard if it's up (``hide_keyboard``); ``{"tap": <element>}`` taps
-        that element instead (a label or title outside the field: the field loses focus), on any driver that taps."""
-        if isinstance(value, dict) and value.get("tap"):
-            if "tap" not in self.STEPS:
-                raise StepSkipped("step %d: the %s driver can't tap" % (ctx.index, self.NAME))
-            self.step_tap(ctx, value["tap"])
+        """``hideKeyboard``: close the on-screen keyboard if it's up, trying one way after another until it's down
+        (``close_keyboard``): the driver's own (``hide_keyboard``: Android's back, only while the keyboard is up;
+        Appium's ``mobile: hideKeyboard``; ``"own": false`` leaves it out), the app's own Done (``done``: an element
+        or ``{x, y}``; Appium on iOS looks for a button named Done, Close or Hide keyboard by itself: a number pad
+        has no key that closes it), a scroll (``scroll``: ``true``, a direction, or ``{"direction", "in"}``), then,
+        last, a tap on something neutral (``tap``: a title or label outside the field, or ``{x, y}``; many apps
+        don't close the keyboard for it). Still up after every one: the step fails, naming what was tried."""
+        self.close_keyboard(ctx, value)
+
+    def keyboard_tries(self, ctx, opts):
+        """The ways ``close_keyboard`` tries, in order, as ``(kind, words, callable)``."""
+        tries = []
+        if opts.get("own", True) is not False:
+            tries.append(("own", "the %s driver's own close" % self.NAME, lambda: self.hide_keyboard(ctx, True)))
+        if opts.get("done") is not None:
+            tries.append(("done", "the Done %s" % describe_target(opts["done"]),
+                          lambda: self.tap_target(ctx, opts["done"])))
+        else:
+            tries.append(("auto-done", "a Done or Return button above the keyboard",
+                          lambda: self.tap_accessory_done(ctx)))
+        scroll = opts.get("scroll")
+        if scroll not in (None, False):
+            how = scroll if isinstance(scroll, dict) else {"direction": scroll if isinstance(scroll, str) else "up"}
+            how = dict(how, times=1)
+            how.setdefault("direction", "up")
+            tries.append(("scroll", "a scroll %s" % how["direction"], lambda: self.step_scroll(ctx, how)))
+        if opts.get("tap") is not None:
+            tries.append(("tap", "a tap on %s" % describe_target(opts["tap"]),
+                          lambda: self.tap_target(ctx, opts["tap"])))
+        return tries
+
+    def close_keyboard(self, ctx, value, quiet=False):
+        """Close the keyboard if it's up (``step_hideKeyboard``'s tries, in order, each followed by a look at the
+        keyboard). A driver that can't see the keyboard does the plan's own ``done`` and ``tap`` once each (the picture
+        shows whether it worked); with neither it can't close it: ``StepSkipped``, or nothing when ``quiet`` (a
+        ``fill`` on a driver without an on-screen keyboard)."""
+        opts = value if isinstance(value, dict) else {}
+        tries = self.keyboard_tries(ctx, opts)
+        if DRY_RUN:
+            note("  (dry run: if the keyboard is up, tried in turn until it's down: %s)" % "; ".join(
+                words for _, words, _ in tries))
+            for kind, _, fn in tries:
+                if kind == "own":
+                    try:
+                        fn()
+                    except (StepSkipped, StepFailed):
+                        pass
             return
-        self.hide_keyboard(ctx, value)
+        shown = self.keyboard_shown(ctx)
+        if shown is False:
+            return
+        if shown is None:
+            failure = None
+            done_any = False
+            for kind, words, fn in tries:
+                if kind in ("auto-done", "scroll"):
+                    continue
+                try:
+                    fn()
+                    done_any = True
+                except StepSkipped:
+                    continue
+                except StepFailed as e:
+                    failure = failure or e
+            if done_any:
+                return
+            if failure is not None and not quiet:
+                raise failure
+            if quiet:
+                return
+            raise StepSkipped("step %d: the %s driver can't see the keyboard: give hideKeyboard a tap (an element "
+                              "outside the field)" % (ctx.index, self.NAME))
+        tried = []
+        for kind, words, fn in tries:
+            try:
+                fn()
+            except StepSkipped:
+                continue
+            except StepFailed as e:
+                tried.append("%s (%s)" % (words, str(e)[:160]))
+            else:
+                tried.append(words)
+            try:
+                poll(lambda: self.keyboard_shown(ctx) is not True, self.KEYBOARD_CLOSE, interval=0.5,
+                     what="the keyboard to close")
+                if kind != "own":
+                    note("  the keyboard closed after %s" % words)
+                return
+            except StepFailed:
+                continue
+        untried = [w for k, w in (("done", "a done (the app's own Done or Close button, by id or label, or {x, y})"),
+                                  ("scroll", "a scroll"),
+                                  ("tap", "a tap on something neutral (a title, by id or {x, y}: a last resort, "
+                                          "many apps don't close the keyboard for it)"))
+                   if k not in [t[0] for t in tries]]
+        raise StepFailed(
+            "step %d: the keyboard is still up after %s. A number pad has no Done or Return key, so the keyboard's own "
+            "close can't work on it: the app's own Done (an accessory or floating button) is what closes it, so name "
+            "it in done. A tap or scroll that lands on a field opens the keyboard again. If the app has no way to "
+            "close it, that's the app's to fix: tell the user, with this device and screen; don't capture the screen "
+            "with the keyboard up, and don't drop its typing on this device unless they decide to.%s" % (
+                ctx.index, "; ".join(tried) or "nothing (no way to close it here)",
+                (" Not tried yet: %s." % "; ".join(untried)) if untried else ""))
 
     def hide_keyboard(self, ctx, value):
-        """Close the keyboard if it's up, without doing anything else (never a navigation back). The base can't."""
+        """The driver's own way to close the keyboard, once (never a navigation back). The base has none."""
         raise StepSkipped("step %d: the %s driver can't see the keyboard: give hideKeyboard a tap (an element "
                           "outside the field)" % (ctx.index, self.NAME))
+
+    def tap_accessory_done(self, ctx):
+        """Tap a Done (or Return) button the app shows above the keyboard, found by the driver itself. The base
+        can't."""
+        raise StepSkipped("the %s driver doesn't look for a Done button by itself" % self.NAME)
+
+    def tap_target(self, ctx, target):
+        """Tap an element or ``{x, y}`` for a keyboard or focus try; ``StepSkipped`` on a driver that can't tap."""
+        if "tap" not in self.STEPS:
+            raise StepSkipped("step %d: the %s driver can't tap" % (ctx.index, self.NAME))
+        self.step_tap(ctx, target)
+
+    def step_unfocus(self, ctx, value):
+        """``unfocus``: clear the text field's focus, so no caret blinks in the shot: ``true``, or ``{"tap": …}`` (an
+        element or ``{x, y}`` outside the field, tapped first). Then the driver's own way (``clear_focus``: on
+        Android a key the focused field handles, checked; on the web ``blur()``). A driver with neither warns: look
+        at the picture for a caret."""
+        self.unfocus(ctx, value, quiet=False)
+
+    def unfocus(self, ctx, value, quiet=False):
+        """``step_unfocus``'s work; ``quiet`` (a ``fill``'s own unfocus): no warning where the driver can't."""
+        opts = value if isinstance(value, dict) else {}
+        if opts.get("tap") is not None:
+            self.tap_target(ctx, opts["tap"])
+        result = self.clear_focus(ctx)
+        if result is None and opts.get("tap") is None and not quiet:
+            ctx.warn("step %d: the %s driver can't clear a field's focus by itself: give unfocus a tap (a title or "
+                     "label outside the field), and look at the picture for a caret" % (ctx.index, self.NAME))
+
+    def clear_focus(self, ctx):
+        """Clear a text field's focus: ``True`` when it did, ``False`` when no field had it, ``None`` when this driver
+        can't tell or can't (the base)."""
+        return None
+
+    def focused_field(self, ctx):
+        """The text field that has focus now (an ``Element``), ``False`` when none has, ``None`` when this driver
+        can't tell (the base)."""
+        return None
+
+    def step_fill(self, ctx, value):
+        """``fill``: type into a form's fields in one step, the same on every driver that types. ``value`` is a list
+        of ``{"field": <element, or an id>, "text": "…"}``, or ``{"fields": [...], "in": <the pane they're in>,
+        "keyboard": true | "keep" | <hideKeyboard's object>, "unfocus": bool, "scrollTo": "top" | "bottom" |
+        <element>}``. Each field is brought into view (scrolled to, both ways, within ``in``), then typed into (the
+        driver's ``type``); on Android the keyboard is closed before each field after the first (it covers the next
+        one). Then the keyboard is closed (``close_keyboard``), the focus cleared (``unfocus``, unless ``"unfocus":
+        false`` or the keyboard's kept) and, with ``scrollTo``, the form scrolled back (typing scrolls a long form).
+        Nothing is submitted: no Return, no Save."""
+        opts = fill_options(value)
+        try:
+            fields = fill_fields(opts)
+        except ValueError as e:
+            raise StepFailed("step %d: %s" % (ctx.index, e)) from None
+        if not fields:
+            raise StepFailed("step %d: fill has no fields" % ctx.index)
+        within = opts.get("in")
+        android = ctx.device.get("platform") == "android"
+        for n, (query, text) in enumerate(fields, 1):
+            where = "step %d (fill, field %d: %s)" % (ctx.index, n, describe_query(query))
+            note("  fill %d: %s <- %r" % (n, describe_query(query), text))
+            try:
+                if n > 1 and android and not DRY_RUN and self.keyboard_shown(ctx):
+                    try:
+                        self.hide_keyboard(ctx, True)
+                    except (StepFailed, StepSkipped) as e:
+                        note("  the keyboard didn't close before the next field: %s" % str(e)[:160])
+                if "scroll" in self.STEPS:
+                    self.bring_into_view(ctx, query, within)
+                self.step_type(ctx, {query[0]: query[1], "text": text})
+            except StepFailed as e:
+                raise StepFailed("%s: %s" % (where, e)) from None
+        keyboard = opts.get("keyboard", True)
+        if keyboard not in (False, "keep"):
+            self.close_keyboard(ctx, keyboard if isinstance(keyboard, dict) else True, quiet=True)
+        if opts.get("unfocus", keyboard != "keep"):
+            self.unfocus(ctx, True, quiet=True)
+        if opts.get("scrollTo") is not None:
+            if "scroll" not in self.STEPS:
+                ctx.warn("step %d: the %s driver can't scroll, so the form wasn't scrolled back (scrollTo)"
+                         % (ctx.index, self.NAME))
+            else:
+                how = {"to": opts["scrollTo"]}
+                if within is not None:
+                    how["in"] = within
+                self.step_scroll(ctx, how)
+
+    def bring_into_view(self, ctx, query, within=None):
+        """Scroll ``query``'s element into view (both ways, within ``within``) unless it's in view already."""
+        if self.in_view(ctx, query):
+            return
+        how = {"to": {query[0]: query[1]}}
+        if within is not None:
+            how["in"] = within
+        self.step_scroll(ctx, how)
+
+    # Scrolling: one gesture a driver (scroll_once), the rest here.
+
+    SCROLLS = 10            # a scroll to an element or an end: at most this many gestures each way
+
+    def step_scroll(self, ctx, value):
+        """``scroll``: ``direction`` (``times`` gestures, default 1); ``to`` an element (looked for in ``direction``,
+        default down, until it's in view or the content stops moving, then the other way: at most ``times``, default
+        ``SCROLLS``, each way); ``to`` ``"top"`` or ``"bottom"`` (until the content stops moving). ``in``: the element
+        to scroll within (a pane of a two-pane layout, a list), else the screen's middle."""
+        value = {"direction": value} if isinstance(value, str) else dict(value or {})
+        direction = value.get("direction")
+        if direction is not None and direction not in DIRECTIONS:
+            raise StepFailed("step %d: scroll direction is up, down, left or right" % ctx.index)
+        within = self.scroll_container(ctx, value.get("in"))
+        inside = (" within %s" % describe_query(element_query(value["in"]))) if within is not None else ""
+        to = value.get("to")
+        if isinstance(to, str):
+            if to not in EDGES:
+                raise StepFailed("step %d: scroll to is an element, \"top\" or \"bottom\"" % ctx.index)
+            times = int(value.get("times") or self.SCROLLS)
+            if not self.scroll_to_end(ctx, EDGES[to], times, within):
+                ctx.warn("step %d: still moving after %d scrolls %s%s: maybe not at the %s yet" % (
+                    ctx.index, times, EDGES[to], inside, to))
+            return
+        if to:
+            query = element_query(to)
+            if query is None:
+                raise StepFailed("step %d: scroll to needs an element (or \"top\", \"bottom\")" % ctx.index)
+            times = int(value.get("times") or self.SCROLLS)
+            first = direction or "down"
+            if self.scroll_into_view(ctx, query, first, times, within):
+                return
+            raise StepFailed("step %d: scrolled %s and %s%s (until the content stopped moving, at most %d times) and "
+                             "%s didn't appear" % (ctx.index, first, OPPOSITE[first], inside, times,
+                                                   describe_query(query)))
+        for _ in range(int(value.get("times") or 1)):
+            self.scroll_once(ctx, direction or "down", within)
+
+    def scroll_container(self, ctx, element):
+        """The element a scroll is ``in`` (waited for), or ``None``."""
+        if element is None:
+            return None
+        query = element_query(element)
+        if query is None:
+            raise StepFailed("step %d: scroll's in needs an element (id, text, label, xpath, css)" % ctx.index)
+        found = self.wait_for(ctx, query, element.get("timeout") if isinstance(element, dict) else None)
+        found.attrs.setdefault("query", query)
+        return found
+
+    def scroll_once(self, ctx, direction, within=None):
+        """One scroll gesture ``direction`` (the content's way: ``down`` shows what's below), within the element
+        ``within`` (``scroll_container``) or the screen. Drivers that scroll implement it."""
+        raise StepSkipped("step %d: the %s driver can't scroll" % (ctx.index, self.NAME))
+
+    def in_view(self, ctx, query):
+        """True when ``query``'s element is on screen now (the base: ``find`` finds it)."""
+        return self.find(ctx, query) is not None
+
+    def scroll_fingerprint(self, ctx, within=None):
+        """Something that changes when the content moves, to tell a scroll reached the end: the base, the screen's
+        pixels (tree drivers read their tree: scroll bars fading change the pixels); ``None`` when it can't tell."""
+        probe = os.path.join(self.options.workdir, ".scroll-%s.png" % ctx.device["id"])
+        try:
+            os.makedirs(self.options.workdir, exist_ok=True)
+            self.screenshot(ctx.device, probe)
+            return None if DRY_RUN else file_sha256(probe)
+        except (DriverError, OSError):
+            return None
+        finally:
+            if os.path.exists(probe):
+                os.unlink(probe)
+
+    def scroll_to_end(self, ctx, direction, times, within=None):
+        """Scroll ``direction`` until the content stops moving (True), at most ``times`` (False)."""
+        before = self.scroll_fingerprint(ctx, within)
+        for _ in range(times):
+            self.scroll_once(ctx, direction, within)
+            if DRY_RUN:
+                return True
+            after = self.scroll_fingerprint(ctx, within)
+            if after is not None and after == before:
+                return True
+            before = after
+        return False
+
+    def scroll_into_view(self, ctx, query, first, times, within=None):
+        """Scroll until ``query``'s element is in view: ``first`` until it's there or the content stops moving (at
+        most ``times``), then the other way (as far again, and ``times`` more). True when it's in view."""
+        moved = 0
+        for way, most in ((first, times), (OPPOSITE[first], None)):
+            most = times + moved if most is None else most
+            before = None
+            for _ in range(most):
+                if self.in_view(ctx, query):
+                    return True
+                if DRY_RUN:
+                    return True
+                if before is None:
+                    before = self.scroll_fingerprint(ctx, within)
+                self.scroll_once(ctx, way, within)
+                after = self.scroll_fingerprint(ctx, within)
+                if after is not None and after == before:
+                    note("  scrolling %s reached the end" % way)
+                    break
+                before = after
+                if way == first:
+                    moved += 1
+        return bool(self.in_view(ctx, query))
 
     def step_settle(self, ctx, value):
         """``settle``: wait until two screenshots in a row are identical (no animation), at most ``timeout``
         seconds (default ``SETTLE_TIMEOUT``); a screen that never settles is a warning, not a failure.
         ``ignore``: rectangles ``[x, y, width, height]`` (the picture's pixels) left out of the comparison, for
-        an animation that never stops (a gently moving illustration, a live clock)."""
+        an animation that never stops (a gently moving illustration, a live clock).
+
+        After typing (a ``type`` or ``fill`` step with no ``unfocus`` since), a field that keeps its focus keeps a
+        blinking caret, which two identical frames can't rule out (the shot lands with it on or off): the driver
+        reads the focus where it can (``focused_field``), else watches the settled screen a moment longer for a
+        blink, and either is a warning saying to add ``unfocus``."""
         timeout = float((value or {}).get("timeout") or self.SETTLE_TIMEOUT) if isinstance(value, dict) \
             else self.SETTLE_TIMEOUT
         ignore = (value or {}).get("ignore") if isinstance(value, dict) else None
         probe = os.path.join(self.options.workdir, ".settle-%s.png" % ctx.device["id"])
+        if not DRY_RUN:
+            os.makedirs(self.options.workdir, exist_ok=True)
         last = [None]
 
-        def same():
+        def digest():
             self.screenshot(ctx.device, probe)
             if DRY_RUN:
+                return None
+            return masked_sha256(probe, ignore) if ignore else file_sha256(probe)
+
+        def same():
+            d = digest()
+            if DRY_RUN:
                 return True
-            digest = masked_sha256(probe, ignore) if ignore else file_sha256(probe)
-            hit = digest == last[0]
-            last[0] = digest
+            hit = d == last[0]
+            last[0] = d
             return hit
 
         try:
-            poll(same, timeout, interval=0.3, what="the screen to settle")
-        except StepFailed:
-            ctx.warn("the screen was still changing after %g s (an animation, a spinner?)" % timeout)
+            settled = True
+            try:
+                poll(same, timeout, interval=0.3, what="the screen to settle")
+            except StepFailed:
+                settled = False
+                ctx.warn("the screen was still changing after %g s (an animation, a spinner?)" % timeout)
+            if settled and not DRY_RUN and focus_may_remain(ctx.screen, ctx.index):
+                self.check_caret(ctx, last[0], digest)
         finally:
             if os.path.exists(probe):
                 os.unlink(probe)
+
+    def check_caret(self, ctx, settled, digest):
+        """After typing, before the shot: warn when a field still has focus (``focused_field``), or, where the driver
+        can't tell, when the settled screen changes again within a second or so (a caret's blink)."""
+        field = self.focused_field(ctx)
+        if field:
+            ctx.warn("step %d: %s still has the focus after typing, so its caret may blink in the shot: add an unfocus "
+                     "step after the typing (a fill does it)" % (ctx.index, describe_element(field)))
+            return
+        if field is False:
+            return
+        for _ in range(4):
+            sleep(0.3)
+            if digest() != settled:
+                ctx.warn("step %d: the screen changed again after it settled, as a text caret blinks after typing: "
+                         "add an unfocus step (with a tap where the driver can't clear the focus), and look at the "
+                         "picture for a caret" % ctx.index)
+                return
 
     def step_script(self, ctx, value):
         """``script``: run a command the plan provides, as is, from the plan's folder: a list of arguments, a
@@ -1543,7 +1999,8 @@ __all__ = [
     "DriverError", "ToolMissing", "CommandError", "CommandTimeout", "StepFailed", "WrongState", "StepSkipped",
     "NotLocal", "run", "spawn", "stop", "which", "sleep", "poll", "http", "http_json", "check_local", "quote",
     "mask", "note", "SECRETS", "XPathError", "xpath_all", "xpath_first", "posture_of", "POSTURES",
-    "step_of", "describe_step", "element_query", "step_element", "find_element", "find_xpath", "parse_uiautomator",
-    "parse_bounds", "file_sha256", "STEP_KINDS", "FINDER_KEYS", "RUNNER", "SPAWNER", "SLEEP", "CLOCK", "LOG",
+    "step_of", "describe_step", "element_query", "step_element", "step_elements", "fill_options", "fill_fields",
+    "typed", "focus_may_remain", "describe_target", "describe_element", "TYPING_STEPS", "DIRECTIONS", "OPPOSITE",
+    "EDGES", "find_element", "find_xpath", "parse_uiautomator", "parse_bounds", "file_sha256", "STEP_KINDS", "FINDER_KEYS", "RUNNER", "SPAWNER", "SLEEP", "CLOCK", "LOG",
     "DRY_RUN",
 ]

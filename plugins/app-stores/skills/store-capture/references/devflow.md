@@ -133,8 +133,9 @@ Seen with preview.14 on iOS simulators; check `maui devflow --help` and the rele
 - **Native views registered with the agent** show their `automationId` in `ui tree`, but `ui query`/`ui tap
   --automationId` don't find them: the driver falls back to the tree and taps them by the agent's own element id
   (`native:registered:<guid>`).
-- **`ui scroll --element`** can answer `success: false` for an element below the fold: the driver then scrolls down
-  step by step until it's found.
+- **`ui scroll --element`** can answer `success: false` for an element below the fold: the driver then scrolls
+  (`direction` first, default down, then the other way) step by step until it's found or the tree stops changing.
+  `scroll {"in": {"id": <a pane>}}` scrolls that element (`ui scroll --element <its id> --dy …`), not the page.
 - **`ui tap` doesn't wait**: right after a launch an element may not be there yet. The driver waits for it (as a
   `wait` step would) before tapping when the first tap finds nothing.
 
@@ -142,8 +143,10 @@ When a screen needs any of these and the app can't change, switch that **device*
 taps for real and reads native menus), keeping its `id`; other devices can stay on `devflow`.
 
 - **The keyboard isn't in the tree** on iOS: the driver can't see or close it there. End a typing screen's steps
-  with `{ "hideKeyboard": { "tap": <a label or title outside the field> } }`, and look at the picture (an asked-for
-  keyboard check is `unchecked` on iOS). On Android the host (`adb`) sees and closes it.
+  with `{ "hideKeyboard": { "done": <the app's own Done button>, "tap": <a label or title outside the field> } }`
+  (each tapped once: a number pad has no key that closes it, and many apps don't close it for a tap outside), and
+  look at the picture (an asked-for keyboard check is `unchecked` on iOS). On Android the host (`adb`) sees and
+  closes it, and clears the field's focus (`unfocus`). A `fill` types each field with `ui fill`.
 - **Text** is the agent's own query (exact); when it finds nothing the driver looks in the tree, ignoring case and
   surrounding space, then for the words inside a longer text, as every driver does. An `xpath` the agent's HTTP
   query refuses is evaluated over the tree, with `contains()`, `not()`, `and`/`or`
