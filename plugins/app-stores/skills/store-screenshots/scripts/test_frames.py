@@ -134,6 +134,8 @@ class Fitted(Case):
     def test_options_set_the_radius_and_bezel(self):
         m = frames.fitted("phone", 1080, 1920, options={"radius": 0.0, "bezel": 0.05})["meta"]
         self.assertEqual(m["screenRadius"], 0)
+        self.assertTrue(m["radiusSet"])   # the page keeps a set radius whatever the capture's corners hold
+        self.assertFalse(frames.fitted("phone", 1080, 1920)["meta"]["radiusSet"])
         self.assertAlmostEqual(m["bezel"], 54, places=1)
 
     def test_no_apple_only_details_and_hardware_only_when_asked(self):
@@ -170,6 +172,19 @@ class Art(Case):
         found = frames.detect(path)
         self.assertEqual((found["x"], found["y"], found["width"], found["height"]), (16, 20, 168, 360))
         self.assertAlmostEqual(found["radius"], 24, delta=4)
+
+    def test_a_slab_rounder_than_its_screen_doesnt_hide_the_screens_radius(self):
+        # The slab's corners round sooner than the screen's bounding box: its corner pixels are see-through outside.
+        path = os.path.join(self.tmp, "thin.png")
+
+        def px(x, y):
+            if not in_rrect(x, y, 0, 0, 142, 298, 21):
+                return (0, 0, 0, 0)
+            return (0, 0, 0, 0) if in_rrect(x, y, 5, 6, 132, 286, 17) else (20, 20, 24, 255)
+        rgba_png(path, 142, 298, px)
+        found = frames.detect(path)
+        self.assertEqual((found["x"], found["y"], found["width"], found["height"]), (5, 6, 132, 286))
+        self.assertAlmostEqual(found["radius"], 17, delta=4)
 
     def test_no_opening_found(self):
         path = os.path.join(self.tmp, "slab.png")

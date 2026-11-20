@@ -40,9 +40,13 @@ measurements:
 
 **A capture is never cut by the corners.** Before laying out, the page reads each capture's corners: where a
 corner's curve would cut off content (a status bar's clock or icon in the very corner, as Android draws it), the
-radius shrinks until nothing is cut. The report's frame says what happened (`corners.radiusFrom`, `reduced`,
-`clippedPx`), and `check.py` warns if anything is still cut. The frame object's `radius` sets the radius outright
-(0 for square corners).
+radius shrinks until nothing is cut. Two things don't count as content: the corner's very tip (pixels nearer the
+corner than about 6% of the radius, at least 8 px), and pure-black pixels near it, which an iOS simulator's
+framebuffer carries in its corners (the display's own mask: 15 or so at the top left), and a handful of stray pixels
+relative to the radius. The report's frame says what happened (`corners.radiusFrom`, `reduced`, `clippedPx`);
+`check.py` warns if anything is still cut, and warns when the radius was cut to under half (square corners inside a
+rounded body look wrong): look at the capture's corners. **A radius the frame object sets always wins** (`radius`, 0
+for square corners): the page keeps it and only reports what it cuts (`corners.radiusSet`), for the check to warn.
 
 **The frame object** (instead of a name), for options:
 

@@ -258,6 +258,7 @@ Exit codes: `render.py` 0, 1 (a render failed or a caption won't fit at its floo
 | check: frame warning on Play | Google discourages device imagery | `stores.google.frame: "none"`, or keep it by the user's choice |
 | check: an Apple bezel tilted, cropped or overlapped | the layout breaks Apple's terms for its art | `framed` with the bezel as it is, or a drawn frame |
 | check: the frame's corners cut the capture | content sits in the very corner even at the smallest radius | a frame with square corners (`frame.radius`: 0) or a capture with that corner clear |
+| check: the screen's corners squared | the corner check found content in the capture's corners and cut the radius | look at the corners at full size; a set `frame.radius` is always kept (what it cuts is reported) |
 | check: the device art's screen differs from the capture | the art is for another device | art for the device the capture came from (the capture is cut to fill, never stretched) |
 | check: a fold of a phone's capture | `fold` is for a foldable's inner display | `framed-bleed` for that target, or the shot's `targets` limited to the foldables |
 | check: every exploration file "not on disk" | an older check; or the report moved away from its pictures | `check.py --out design/explore/<name>` (files resolve beside the report) |

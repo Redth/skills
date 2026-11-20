@@ -127,6 +127,15 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 
 ### Fixed
 - `pattern` rules skip `""` (a field cleared on purpose): Play's `video: ""` no longer fails the YouTube rule.
+- `store-screenshots`: an iOS simulator capture's black corner tip (its framebuffer's own few pure-black pixels) no
+  longer squares every iPhone frame's screen corners: the corner check ignores the corner's tip, pure black near it
+  and a few stray pixels; a radius the frame sets is always kept (what it cuts is reported, and `check.py` warns); a
+  radius cut to under half is a warning (`design.frame.corners_squared`), not a note.
+- `store-screenshots`: the render cache's hash covers every config value a file depends on (the target's frame,
+  device and layouts, its store's overrides, the shots, the theme), so a target's frame change renders again.
+- `store-screenshots`: `theme.hero.logo`'s `widthPct` (up to 60u) is honoured for a squarish mark, its height up to
+  `maxHeightPct`; `caption.widthPct` sets the caption's box wider or narrower than the layout's; a target's
+  `layouts` gives one shot another layout on that target alone (`{"plan": "fold"}` on a foldable).
 - `store-screenshots`: `check.py` no longer guesses a Play slot for a target `store-listing.json`'s
   `stores.google.slots` leaves out (it isn't sent, so it's counted in no slot); a render report outside the config's
   `out` resolves its files beside itself.

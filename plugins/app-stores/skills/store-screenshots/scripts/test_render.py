@@ -168,6 +168,18 @@ class ConfigTests(Base):
                 self.assertIn('class="screen-back"', f["svg"])
         self.assertIsNone(res.frame("none", (100, 200)))
 
+    def test_a_shots_layout_per_target(self):
+        cfg = kit.base_config()
+        cfg["targets"]["duo"] = {"store": "apple", "width": 640, "height": 450, "capture": "duo",
+                                 "layouts": {"plan": "fold"}}
+        res = render.Resolver(render.load_config(self.project(cfg)), os.path.join(self.tmp, "p", "x.json"))
+        shot = cfg["shots"][0]
+        self.assertEqual(res.settings(shot, "duo")["layout"], "fold")
+        self.assertEqual(res.settings(shot, "phone")["layout"], "framed-bleed")
+        cfg["targets"]["duo"]["layouts"] = {"nope": "fold"}
+        with self.assertRaises(render.UsageError):
+            render.load_config(self.project(cfg, name="q"))
+
     def test_frames_draw_nothing_of_any_makers(self):
         res = render.Resolver(kit.base_config(), os.path.join(self.tmp, "x.json"))
         for store in ("apple", "google"):
@@ -641,6 +653,87 @@ class FitAndFoldTests(Base):
         self.assertNotEqual(flat["sha256"], turned["sha256"])          # the angles reached the page
         self.assertEqual(flat["tilt"], "left")
         self.assertLessEqual(self.entry(report, "en-US/phone/narrow.png")["caption"]["box"][2], 150 + 1)
+
+
+@unittest.skipUnless(CHROME, "needs Google Chrome or Chromium")
+class TrialRegressionTests(Base):
+    """What the real trial of fitted frames found: a simulator capture's black corner tip squaring every iPhone
+    frame, a set radius overruled, a squarish logo capped small, a caption box that couldn't widen, one shot's layout
+    per target, and the cache missing a target's frame."""
+
+    BAR = FitAndFoldTests.BAR
+
+    def simulator_capture(self, path, w=660, h=1434):
+        """An iOS simulator capture: a light screen whose very top-left corner tip holds 15 pure-black pixels (the
+        framebuffer's own), the clock well inside the corner."""
+        rects = [(0, 0, 4, 1, (0, 0, 0)), (0, 1, 4, 1, (0, 0, 0)), (0, 2, 4, 1, (0, 0, 0)), (0, 3, 3, 1, (0, 0, 0)),
+                 (60, 24, 50, 18, (20, 20, 20)), (w - 100, 26, 60, 14, (20, 20, 20))]
+        tk.write_png(path, w, h, fill=(242, 241, 246), rects=rects)
+        return path
+
+    def test_a_simulators_black_corner_tip_keeps_the_corners_round(self):
+        root = os.path.join(self.tmp, "p")
+        cfg = kit.base_config()
+        cfg["targets"]["phone"].update({"width": 330, "height": 717})
+        self.simulator_capture(os.path.join(root, "captures", "en-US", "phone", "plan.png"))
+        code, report, lines = self.run_render(kit.make_project(root, cfg, captures={}))
+        self.assertEqual(code, render.EXIT_OK, "\n".join(lines))
+        frame = self.entry(report, "en-US/phone/plan.png")["frame"]
+        self.assertEqual(frame["class"], "phone")
+        self.assertFalse(frame["corners"]["reduced"], frame)       # not squared by the tip
+        self.assertAlmostEqual(frame["screenRadius"], 0.12 * 660, delta=1)
+        self.assertEqual(frame["corners"]["clippedPx"], 0)
+
+    def test_a_radius_the_config_sets_always_wins(self):
+        root = os.path.join(self.tmp, "p")
+        cfg = kit.base_config()
+        cfg["targets"]["phone"].update({"width": 540, "height": 960, "frame": {"name": "phone", "radius": 0.1}})
+        FitAndFoldTests.corner_capture(self, os.path.join(root, "captures", "en-US", "phone", "plan.png"), 1080, 1920)
+        code, report, lines = self.run_render(kit.make_project(root, cfg, captures={}))
+        frame = self.entry(report, "en-US/phone/plan.png")["frame"]
+        self.assertAlmostEqual(frame["screenRadius"], 108, delta=1)  # kept, though the clock sits in the corner
+        self.assertTrue(frame["corners"]["radiusSet"])
+        self.assertGreater(frame["corners"]["clippedPx"], 0)         # reported, for check.py to warn
+
+    def test_a_squarish_logo_takes_its_width_and_the_caption_box_can_widen(self):
+        root = os.path.join(self.tmp, "p")
+        os.makedirs(os.path.join(root, "art"))
+        tk.write_png(os.path.join(root, "art", "mark.png"), 200, 190, fill=(255, 255, 255), alpha=True)
+        cfg = kit.base_config()
+        cfg["theme"]["hero"] = {"logo": "art/mark.png", "fit": "wide", "widthPct": 42}
+        cfg["shots"] = [{"id": "hero", "capture": "plan", "layout": "hero", "caption": "cap.plan"},
+                        {"id": "wide", "capture": "plan", "layout": "framed-bleed", "caption": "cap.plan",
+                         "captionStyle": {"widthPct": 94}}]
+        code, report, lines = self.run_render(kit.make_project(root, cfg))
+        self.assertEqual(code, render.EXIT_OK, "\n".join(lines))
+        logo = self.entry(report, "en-US/phone/hero.png")["caption"]["logo"]
+        self.assertEqual(logo["kind"], "logo")
+        self.assertAlmostEqual(logo["box"][2], 0.42 * 300, delta=2)    # 42u wide, though nearly square
+        block = self.entry(report, "en-US/phone/wide.png")["caption"]["blockBox"]
+        self.assertAlmostEqual(block[2], 0.94 * 300, delta=2)           # wider than the layout's 84u
+        self.assertGreaterEqual(block[0], 0.02 * 300 - 1)
+
+    def test_one_shot_folds_on_the_foldable_and_not_elsewhere(self):
+        cfg = kit.base_config()
+        cfg["targets"]["duo"] = {"store": "apple", "width": 640, "height": 450, "capture": "duo",
+                                 "device": "foldable-inner", "layouts": {"plan": "fold"}}
+        code, report, lines = self.run_render(self.project(cfg, {"en-US/phone/plan": (300, 650),
+                                                                 "en-US/duo/plan": (1400, 985)}))
+        self.assertEqual(code, render.EXIT_OK, "\n".join(lines))
+        self.assertEqual(self.entry(report, "en-US/duo/plan.png")["layout"], "fold")
+        self.assertEqual(self.entry(report, "en-US/phone/plan.png")["layout"], "framed-bleed")
+
+    def test_a_targets_frame_setting_renders_again(self):
+        cfg = kit.base_config()
+        path = self.project(cfg)
+        code, first, _ = self.run_render(path)
+        self.assertEqual(first["rendered"], 1)
+        cfg["targets"]["phone"]["frame"] = {"name": "phone"}   # draws the same, but the config changed
+        path = self.project(cfg)
+        code, again, _ = self.run_render(path)
+        self.assertEqual(again["rendered"], 1)
+        code, still, _ = self.run_render(path)
+        self.assertEqual(still["rendered"], 0)
 
 if __name__ == "__main__":
     unittest.main()

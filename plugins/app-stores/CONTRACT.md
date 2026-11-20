@@ -684,8 +684,9 @@ hash (config section, strings, capture bytes, fonts, templates, frames) is uncha
 
 - **Drawn frames are fitted:** each is drawn for its capture (`frames.py`): the screen opening is the capture's
   exact size, the bezel even, the screen's corner radius the device class's (fractions of the short side), shrunk by
-  the page where it would cut the capture's content (reported as the frame's `corners`; `check.py` warns if any is
-  still cut). `frame` may be an object: `{name, class, radius, bezel, buttons, cutout, finish}`; buttons and cutouts
+  the page where it would cut the capture's content, the corner's tip and pure-black pixels near it (a simulator's
+  mask) aside (reported as the frame's `corners`; `check.py` warns if any is still cut, or the radius was cut to under
+  half). A radius the frame object sets is kept (`corners.radiusSet`; what it cuts is reported). `frame` may be an object: `{name, class, radius, bezel, buttons, cutout, finish}`; buttons and cutouts
   are never drawn on Apple targets (`check.py` errors if a report shows them). A target's `device` names its class.
 - **A user's own device art:** `frame` may be a path (relative to the config) to a PNG or SVG, or `{art, maker,
   screen?, screenRadius?, drawn?}`. A PNG's screen is its largest enclosed see-through region (from its alpha), unless
@@ -697,7 +698,8 @@ hash (config section, strings, capture bytes, fonts, templates, frames) is uncha
   cut to fit or hiding content in its corners.
 - **The fold layout:** the report's frame has `threeD: true` and `fold: {hinge, angle, pose: open|cover, outer:
   {box, captureScale}|null}`, its `box` the projected device. A fold always draws a generic frame.
-- **Precedence:** target overrides beat store overrides beat shot settings beat the theme.
+- **Precedence:** a target's `layouts` entry for the shot beats the target's overrides, which beat store overrides,
+  which beat shot settings, which beat the theme.
 - **Exit codes:** `render.py` and `sheet.py` exit 3 when Chrome is missing. `render.py` writes the report even when it
   exits 1 for a caption that won't fit at the floor.
 - **Sheets** are `<out>/sheets/search-row-<locale>.png`, `product-page-<locale>-<target>.png`,
@@ -726,7 +728,9 @@ hash (config section, strings, capture bytes, fonts, templates, frames) is uncha
   `shot.pair` (a capture screen id or `{capture, device, frame}`); `panorama.seam` may be null. In captions, `*word*`
   takes the accent colour (across a `\n` too) and `\n` breaks the line. Later: `theme.hero` (`logo`, `fit: wide|tile`,
   `widthPct`), `theme.tilt` and a shot's tilt object (`side`, `y`, `x`, `z`, `perspective`), `theme.fold` and
-  `shot.fold`, `caption.maxWidthPct`, `target.device`, `target.slot`, the frame object.
+  `shot.fold`, `caption.maxWidthPct` and `caption.widthPct`, `theme.hero.maxHeightPct`, `target.device`, `target.slot`,
+  `target.layouts` (a shot's layout on that target), the frame object. The render cache's hash covers the job and
+  every config value a file depends on (its target, store overrides, shots, theme, panorama).
 
 ### 8.6 Rules data: the `design` table
 

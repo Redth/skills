@@ -11,7 +11,7 @@
     { "version": 1, "index": 0, "lang": "de-DE", "dir": "ltr",
       "slot": { "width": 1320, "height": 2868 },
       "theme": { "palette": {...}, "background": {...}, "fonts": [ {family, url, weight, style} ],
-                 "icon": url|null, "logo": null | { "url", "fit": "wide"|"tile", "widthPct" } },
+                 "icon": url|null, "logo": null | { "url", "fit": "wide"|"tile", "widthPct", "maxHeightPct" } },
       "panorama": null | { "count": N, "seam": 6, "background": url|null },
       "slots": [ { "shot": "plan", "layout": "hero",
                    "caption": null | { "text", "kicker", "proof", "placement", "align", "maxLines", "weight",
@@ -403,7 +403,12 @@
     var d = block.data, r = block.ref;
     return Math.max(Math.abs(d[i] - r[0]), Math.abs(d[i + 1] - r[1]), Math.abs(d[i + 2] - r[2])) > 48;
   }
-  function cutAt(blocks, R, r) {
+  // The capture's own corner tip is never content: a simulator's framebuffer can carry a few pure-black pixels
+  // there (the display's own mask), and a phone's rounded display hides that tip anyway. So pixels nearer the very
+  // corner than the tip (ux + uy under it), and pure-black ones within twice it, don't count; and a corner cuts only
+  // when more than a few pixels (relative to the radius) of content lie outside its curve.
+  function tipOf(r0) { return Math.max(8, 0.06 * r0); }
+  function cutAt(blocks, R, r, tip) {
     var worst = 0;
     blocks.forEach(function (b) {
       var n = 0;
@@ -411,10 +416,12 @@
         for (var x = 0; x < R; x++) {
           var ux = (b.k === 0 || b.k === 2) ? x : R - 1 - x;
           var uy = (b.k === 0 || b.k === 1) ? y : R - 1 - y;
-          if (ux >= r || uy >= r) continue;
+          if (ux >= r || uy >= r || ux + uy < tip) continue;
           var dx = r - ux - 0.5, dy = r - uy - 0.5;
           if (dx * dx + dy * dy <= r * r) continue;
-          if (isContent(b, (y * R + x) * 4)) n++;
+          var i = (y * R + x) * 4, dd = b.data;
+          if (ux + uy < 2 * tip && dd[i] <= 12 && dd[i + 1] <= 12 && dd[i + 2] <= 12) continue;
+          if (isContent(b, i)) n++;
         }
       }
       worst = Math.max(worst, n);
@@ -443,19 +450,22 @@
       if (!d.fitted || d.screenRadius < 1) return;
       var r0 = d.screenRadius, R = Math.min(Math.ceil(r0) + 1, Math.floor(Math.min(cw, ch) / 2));
       var blocks2 = cornerBlocks(d.img, cw, ch, R, null);
-      var allow = 0;
-      var r = r0, cut = cutAt(blocks2, R, r);
+      var tip = tipOf(r0), allow = Math.max(2, 0.0002 * r0 * r0);
+      var r = r0, cut = cutAt(blocks2, R, r, tip);
       var first = cut;
-      while (cut > allow && r > 1) {
+      // A radius the config sets is kept: what it cuts is only reported (and check.py warns).
+      var fixed = !!(d.frame && d.frame.meta && d.frame.meta.radiusSet);
+      while (!fixed && cut > allow && r > 1) {
         r = r * 0.85 < 2 ? 0 : r * 0.85;
-        cut = r > 0 ? cutAt(blocks2, R, r) : 0;
+        cut = r > 0 ? cutAt(blocks2, R, r, tip) : 0;
       }
       d.screenRadius = r;
       if (d.svg) {
         var back = d.svg.querySelector(".screen-back");
         if (back) back.setAttribute("rx", String(r));
       }
-      d.guard = { radius: r, from: r0, reduced: r < r0 - 0.01, clippedPx: cut, clippedAtFrom: first };
+      d.guard = { radius: r, from: r0, reduced: r < r0 - 0.01, clippedPx: cut > allow ? cut : 0,
+                  clippedAtFrom: first, fixed: fixed };
     } catch (e) {
       d.guard = { error: String(e && e.message || e) };
     }
@@ -799,7 +809,18 @@
         s.icon = make("img", logo.fit === "tile" ? "icon" : "logo", block);
         s.icon.src = logo.url;
         s.icon.alt = "";
-        if (logo.fit !== "tile" && logo.widthPct) s.icon.style.setProperty("--logo-w", String(logo.widthPct));
+        if (logo.fit !== "tile") {
+          // widthPct: the mark's width in u (up to 60), its height following its shape up to maxHeightPct (by
+          // default as tall as it's wide, so a stacked, squarish logo can match a measured set).
+          if (logo.widthPct) {
+            var lw = Math.min(60, logo.widthPct);
+            s.icon.dataset.sized = "1";
+            s.icon.style.setProperty("--logo-w", String(lw));
+            s.icon.style.setProperty("--logo-max-h", String(logo.maxHeightPct || lw));
+          } else if (logo.maxHeightPct) {
+            s.icon.style.setProperty("--logo-max-h", String(logo.maxHeightPct));
+          }
+        }
       } else if (layout === "hero" && job.theme.icon) {
         s.icon = make("img", "icon", block);
         s.icon.src = job.theme.icon;
@@ -904,12 +925,18 @@
     if (s.block) {
       var blockW = textW;
       if (s.plate) blockW = availW - 2 * P.platePad;
-      else if (cap.maxWidthPct) {
-        blockW = Math.min(blockW, cap.maxWidthPct / 100 * W);
-        var align = cap.align || "center", room = textW - blockW;
+      else if (cap.widthPct || cap.maxWidthPct) {
+        // widthPct: the caption's box this wide (narrower or wider than the layout's, to a measured set's width),
+        // never past 2u from the slot's edges (or a panorama's seam); maxWidthPct: at most this wide.
+        var widest = W - Math.max(2 * u, seamLeft) - Math.max(2 * u, seamRight);
+        if (cap.widthPct && !side) blockW = Math.min(widest, cap.widthPct / 100 * W);
+        if (cap.maxWidthPct) blockW = Math.min(blockW, cap.maxWidthPct / 100 * W);
+        var align = cap.align || "center";
         var leftEdge = (align === "start" && !rtl) || (align === "end" && rtl);
         var rightEdge = (align === "end" && !rtl) || (align === "start" && rtl);
-        s.blockLeft = L + (leftEdge ? 0 : rightEdge ? room : room / 2);
+        var lo = Math.max(2 * u, seamLeft), hi = W - Math.max(2 * u, seamRight) - blockW;
+        var want = leftEdge ? L : rightEdge ? L + textW - blockW : L + (textW - blockW) / 2;
+        s.blockLeft = Math.max(lo, Math.min(hi, want));
       }
       if (side && rtl) s.blockLeft += availW - textW;
       s.block.style.width = blockW + "px";
@@ -1185,6 +1212,9 @@
         "case": cap["case"] || "none"
       };
       if (s.plate) r.caption.plate = box(rel(s.plate.getBoundingClientRect(), origin));
+      if (s.block) r.caption.blockBox = box(rel(s.block.getBoundingClientRect(), origin));
+      if (s.icon) r.caption.logo = { box: box(rel(s.icon.getBoundingClientRect(), origin)),
+                                     kind: s.icon.className };
       if (s.band) r.caption.band = box(rel(s.band.getBoundingClientRect(), origin));
     } else {
       r.caption = null;
@@ -1226,6 +1256,7 @@
         if (d.guard) {
           entry.corners = { radiusFrom: round(d.guard.from || 0, 1), reduced: !!d.guard.reduced,
                             clippedPx: d.guard.clippedPx || 0 };
+          if (d.guard.fixed) entry.corners.radiusSet = true;
           if (typeof d.guard.hiddenPx === "number") entry.corners.hiddenPx = d.guard.hiddenPx;
           if (d.guard.error) entry.corners.error = d.guard.error;
         }

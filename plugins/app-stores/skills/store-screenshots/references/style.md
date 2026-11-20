@@ -63,8 +63,9 @@ use the same words.
 - `caption.case` (`upper` or `lower`) draws the words in that case without changing the strings.
 - **Matching a measured set.** `theme.tilt` (`{"y", "x", "z", "perspective"}`) sets the tilt's angles for every
   tilted shot, and a shot's own `tilt` object varies one (a live set that tilts most phones, each a little
-  differently); `caption.maxWidthPct` narrows the caption's box to a measured set's width so its lines break where the
-  set's do; `theme.hero.logo` with `fit: "wide"` puts a wordmark or a logo with words on the hero at its own shape.
+  differently); `caption.widthPct` sets the caption's box to a measured set's width (wider or narrower than the
+  layout's) so its lines break where the set's do; `theme.hero.logo` with `fit: "wide"` and `widthPct` puts the
+  brand's mark on the hero at its own shape and a measured width.
 - **Relaxing a store's design rule** (Play's frames, say, by the user's choice): it's relaxed in `store-listing.json`'s
   `rules.relax` with the user's reason, not in the style; `check.py` reads it from there, and `store-listings`'
   check knows the design rules' ids.

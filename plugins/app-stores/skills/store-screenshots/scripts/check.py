@@ -1219,12 +1219,22 @@ class Check:
         if corners.get("clippedPx"):
             self.report.add(store, own_finding(
                 "design.frame.clipped", "warning", where,
-                "the screen's rounded corners cut %d px of the capture's content even at their smallest: look at "
-                "the corners (a frame with smaller corners, frame.radius, or another capture)" % corners["clippedPx"]))
+                ("the screen's rounded corners cut %d px of the capture's content at the radius the frame sets: look "
+                 "at the corners (a smaller frame.radius, or another capture)" if corners.get("radiusSet") else
+                 "the screen's rounded corners cut %d px of the capture's content even at their smallest: look at "
+                 "the corners (a frame with smaller corners, frame.radius, or another capture)") % corners["clippedPx"]))
         if corners.get("reduced"):
-            self.report.note("%s: the frame's corners were rounded less (%s px, from %s) so they don't cut the "
-                             "capture's content" % (where, _num(frame.get("screenRadius")),
-                                                    _num(corners.get("radiusFrom"))))
+            now, was = frame.get("screenRadius") or 0, corners.get("radiusFrom") or 0
+            if was and now <= was / 2.0:
+                self.report.add(store, own_finding(
+                    "design.frame.corners_squared", "warning", where,
+                    "the screen's corners were rounded %s (%s px, from %s) so they wouldn't cut the capture's "
+                    "content: inside a rounded body that looks wrong. Look at the capture's corners; set the frame's "
+                    "radius to keep it (what it cuts is then reported)" % (
+                        "square" if not now else "far less", _num(now), _num(was))))
+            else:
+                self.report.note("%s: the frame's corners were rounded less (%s px, from %s) so they don't cut the "
+                                 "capture's content" % (where, _num(now), _num(was)))
         if isinstance(corners.get("hiddenPx"), int) and corners["hiddenPx"] > 40:
             self.report.add(store, own_finding(
                 "design.frame.hidden", "warning", where,

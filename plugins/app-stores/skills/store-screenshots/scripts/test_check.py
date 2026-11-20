@@ -531,9 +531,19 @@ class FitAndFold(CheckCase):
                                                                        "clippedPx": 12}, "screenRadius": 0})
         report = self.run_check()
         for rule in ("design.frame.hidden", "design.frame.art_upscaled", "design.frame.art_fit",
-                     "design.frame.clipped"):
+                     "design.frame.clipped", "design.frame.corners_squared"):
             self.assertEqual(self.finding(report, rule).severity, "warning", rule)
-        self.assertTrue([n for n in report.notes if "rounded less" in n])
+
+    def test_corners_squared_by_the_check_are_a_warning(self):
+        f = self.set.find("en-US/iphone/plan.png")
+        f["frame"].update({"screenRadius": 0, "corners": {"radiusFrom": 158.4, "reduced": True, "clippedPx": 0}})
+        g = self.set.find("en-US/iphone/recipe.png")
+        g["frame"].update({"screenRadius": 120, "corners": {"radiusFrom": 158.4, "reduced": True, "clippedPx": 0}})
+        report = self.run_check()
+        squared = [x for _, x in report.findings if x.rule_id == "design.frame.corners_squared"]
+        self.assertEqual([x.where for x in squared], ["en-US/iphone/plan.png"])
+        self.assertEqual(squared[0].severity, "warning")
+        self.assertTrue([n for n in report.notes if "recipe" in n and "rounded less" in n])
 
     def test_buttons_or_a_cutout_on_apple_are_errors(self):
         f = self.set.find("en-US/iphone/plan.png")

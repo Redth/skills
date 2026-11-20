@@ -170,8 +170,8 @@ def fitted(name, width, height, store=None, device=None, options=None, hint=None
     w, h = float(width), float(height)
     s = min(w, h)
     portrait = h >= w
-    radius_frac = options.get("radius")
-    radius_frac = spec["radius"] if not isinstance(radius_frac, (int, float)) else max(0.0, min(0.5, radius_frac))
+    radius_set = isinstance(options.get("radius"), (int, float))
+    radius_frac = max(0.0, min(0.5, options["radius"])) if radius_set else spec["radius"]
     bezel_frac = options.get("bezel")
     bezel_frac = spec["bezel"] if not isinstance(bezel_frac, (int, float)) else max(0.004, min(0.3, bezel_frac))
     r = radius_frac * s
@@ -305,7 +305,7 @@ def fitted(name, width, height, store=None, device=None, options=None, hint=None
         "orientation": "portrait" if portrait else "landscape",
         "viewBox": [0, 0, round(vw, 2), round(vh, 2)],
         "screen": {"x": round(sx, 2), "y": round(sy, 2), "width": w, "height": h},
-        "screenRadius": round(r, 2), "radiusFraction": round(radius_frac, 4), "bodyRadius": round(body_r, 2),
+        "screenRadius": round(r, 2), "radiusFraction": round(radius_frac, 4), "radiusSet": radius_set, "bodyRadius": round(body_r, 2),
         "bezel": round(b, 2), "rim": round(rim, 2), "realWidthMm": round(real_short * vw / s, 1),
         "hardware": {"buttons": buttons, "cutout": hole, "refused": refused,
                      "finish": options.get("finish") or "dark"},
@@ -401,11 +401,13 @@ def find_opening(width, height, alpha):
                 j += 1
         prev = cur
     comps = {}
+    rows = {}
     for y, x0, x1, rid in runs:
         root = find(rid)
+        rows.setdefault(y, []).append((x0, x1, root))
         c = comps.get(root)
         if c is None:
-            c = comps[root] = [x0, y, x1, y + 1, 0, False]
+            c = comps[root] = [x0, y, x1, y + 1, 0, False, root]
         c[0] = min(c[0], x0)
         c[1] = min(c[1], y)
         c[2] = max(c[2], x1)
@@ -418,13 +420,18 @@ def find_opening(width, height, alpha):
         return None
     best = max(enclosed, key=lambda c: c[4])
     box = {"x": best[0], "y": best[1], "width": best[2] - best[0], "height": best[3] - best[1], "area": best[4]}
-    box["radius"] = _corner_radius(width, clear, box)
+    root = best[6]
+
+    def inside(x, y):
+        return any(x0 <= x < x1 and r == root for x0, x1, r in rows.get(y, ()))
+    box["radius"] = _corner_radius(inside, box)
     return box
 
 
-def _corner_radius(width, clear, box):
-    """The opening's corner radius, from how far along each corner's diagonal the see-through starts: a quarter
-    circle of radius r meets the diagonal r(1 - 1/sqrt 2) in from the corner."""
+def _corner_radius(inside, box):
+    """The opening's corner radius, from how far along each corner's diagonal the opening starts (``inside(x, y)``:
+    the pixel is the opening's, not the see-through outside a slab whose corners round sooner): a quarter circle of
+    radius r meets the diagonal r(1 - 1/sqrt 2) in from the corner."""
     found = []
     limit = min(box["width"], box["height"]) // 2
     corners = ((box["x"], box["y"], 1, 1), (box["x"] + box["width"] - 1, box["y"], -1, 1),
@@ -432,7 +439,7 @@ def _corner_radius(width, clear, box):
                (box["x"] + box["width"] - 1, box["y"] + box["height"] - 1, -1, -1))
     for x0, y0, dx, dy in corners:
         for t in range(limit):
-            if clear[(y0 + dy * t) * width + x0 + dx * t]:
+            if inside(x0 + dx * t, y0 + dy * t):
                 found.append(t / (1 - 1 / math.sqrt(2)))
                 break
     return round(sum(found) / len(found), 1) if found else 0.0

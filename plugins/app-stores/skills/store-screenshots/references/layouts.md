@@ -16,8 +16,8 @@ Store sets used the pattern on 2026-11-14: a picture of what's current, not of w
   | `square` | 0.85 to 1.2 | Wear OS (1:1) |
   | `wide` | over 1.2 | landscape phones and tablets, Mac 16:10, TV 16:9, XR 8:5 |
 
-- **Overrides,** most specific first: a target's `layout`/`frame`/`caption`, then `stores.<store>`, then the shot,
-  then the theme. So "framed-bleed on Apple, band on Play" is one shot with `"stores": { "google": { "frame":
+- **Overrides,** most specific first: a target's `layouts` entry for the shot, then the target's
+  `layout`/`frame`/`caption`, then `stores.<store>`, then the shot, then the theme. So "framed-bleed on Apple, band on Play" is one shot with `"stores": { "google": { "frame":
   "none" } }`, and a shot that won't read on a tablet can change layout for that target alone.
 
 ## The layouts
@@ -119,7 +119,9 @@ generic hinge sits behind the fold, and shading darkens the crease and the far p
 for the foldable".
 
 - **Use for** the shot (or two) of a foldable set that shows the app spread across the inner display: an iPhone
-  Duo's inner display, an Android book foldable's. Give the shot `targets` for those devices only.
+  Duo's inner display, an Android book foldable's. Either fold that shot on the foldable's target alone and keep
+  its layout elsewhere (`targets.<id>.layouts: {"<shot id>": "fold"}`: one shot id, one entry in
+  `store-listing.json`), or give a fold-only shot `targets` for those devices.
 - **Options:** `fold` (or `theme.fold` for the set): `hinge` (`auto`: vertical, left and right halves, unless the
   capture is clearly portrait, under 0.8, when it folds across; or `vertical` | `horizontal`), `angle` (the angle
   between the halves: 120 by default, 180 flat), `turn` and `pitch` (the view, degrees), and `outer`: the outer

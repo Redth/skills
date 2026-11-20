@@ -308,18 +308,24 @@ body[data-aspect="wide"] .slot { --pad-top: 4.6; --pad-side: 5; --pad-bottom: 4.
 }
 .caption-block[data-align="start"] .icon { margin-inline: 0 auto; }
 .caption-block[data-align="end"] .icon { margin-inline: auto 0; }
-/* A brand's own wide mark (theme.hero.logo, fit "wide"): its own shape, no tile or shadow, --logo-w u at most. */
+/* A brand's own mark (theme.hero.logo, fit "wide"): its own shape, no tile or shadow. Unsized: --logo-w u wide at
+   most (56) and --logo-max-h u tall (24; 12 on a wide or square slot). With widthPct it's that wide (up to 60u, never
+   wider than its column), its height following its shape up to --logo-max-h (maxHeightPct, by default its width). */
 .logo {
   display: block;
   width: auto;
   height: auto;
-  max-width: calc(var(--u) * var(--logo-w, 56));
-  max-height: calc(var(--u) * 24);
+  max-width: min(100%, calc(var(--u) * var(--logo-w, 56)));
+  max-height: calc(var(--u) * var(--logo-max-h, 24));
   margin: 0 auto calc(var(--u) * 4);
+  object-fit: contain;
 }
+.logo[data-sized] { width: min(100%, calc(var(--u) * var(--logo-w))); }
 .caption-block[data-align="start"] .logo { margin-inline: 0 auto; }
 .caption-block[data-align="end"] .logo { margin-inline: auto 0; }
-body[data-aspect="wide"] .logo, body[data-aspect="square"] .logo { max-height: calc(var(--u) * 12); }
+body[data-aspect="wide"] .logo:not([data-sized]), body[data-aspect="square"] .logo:not([data-sized]) {
+  max-height: calc(var(--u) * var(--logo-max-h, 12));
+}
 
 /* A generic camera cutout (frame.cutout), drawn over the capture's status bar: neutral black, no maker's shape. */
 .cutout {

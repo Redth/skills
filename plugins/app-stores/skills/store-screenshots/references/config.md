@@ -97,8 +97,9 @@ PNGs work renamed into it. A target's `capture` names the device folder, a shot'
   - `floorPct`: the smallest it may shrink to. A caption that won't fit `maxLines` at the floor fails the render.
   - `font`: the family, from `fonts`.
   - `case`: `upper` or `lower` draws the words in that case (the strings stay as written); default as written.
-  - `maxWidthPct`: the caption's widest, as a % of the slot's width (by default the slot less its side margins), to
-    match a measured set's line breaks; the box sits by `align`.
+  - `widthPct`: the caption's box width as a % of the slot's width, narrower or wider than the layout's (never
+    closer than 2u to the edges), to match a measured set's line breaks; the box sits by `align`.
+  - `maxWidthPct`: the caption's widest, as a % of the slot's width: it only narrows.
   Sizing: [legibility.md](legibility.md). The defaults are `sizePct` 9.5 and `floorPct` 7 (the size that reads in
   Apple's search row, and about 12 pt on the product page).
 - `frame`: a drawn frame, fitted to each capture (`phone`, `tablet`, `watch`, `tv`, `laptop`, `desktop`, or a class:
@@ -106,7 +107,10 @@ PNGs work renamed into it. A target's `capture` names the device folder, a shot'
   `"none"`, a path to a maker's device art the user brought, or an object with options (`name` or `art`, `class`,
   `radius`, `bezel`, `buttons`, `cutout`, `finish`, `maker`, `screen`): [frames.md](frames.md).
 - `icon`: the app's icon, a rounded tile on the hero. `hero`: `{ "logo": path, "fit": "wide" | "tile",
-  "widthPct": 56 }`, the brand's own mark on the hero instead (a wordmark at its own shape with `wide`).
+  "widthPct": 42, "maxHeightPct": 42 }`, the brand's own mark on the hero instead (`wide`: at its own shape). With
+  `widthPct` (up to 60u) the mark is that wide and its height follows its shape up to `maxHeightPct` (by default as
+  tall as it's wide, so a stacked, squarish logo can match a measured set); without, at most 56u wide and 24u tall
+  (12u on wide and square slots, where it heads the words' column beside the app).
 - `tilt`: `{ "y": 14, "x": 4, "z": 3, "perspective": 260 }`, the tilt layout's angles (degrees) for every tilted
   shot; a shot's `tilt` object overrides them.
 - `fold`: the fold layout's settings for every folded shot (`hinge`, `angle`, `outer`, `turn`, `pitch`).
@@ -123,6 +127,7 @@ Each target is one output screen: one set of files per locale.
 | `capture` | the capture device id whose captures feed it |
 | `device` (optional) | the device class its drawn frames take when the capture's shape doesn't say: `foldable-inner` for a foldable's inner display, `foldable-outer`, `phone-classic`... ([frames.md](frames.md)) |
 | `slot` (optional, Google) | the Play slot it fills when `store-listing.json` doesn't say |
+| `layouts` (optional) | a shot's layout on this target alone, by shot id: `{ "plan": "fold" }` folds shot `plan` on a foldable's target while it stays `framed-bleed` elsewhere. Beats every other layout setting |
 | `frame`, `layout`, `caption` (optional) | overrides for this target alone: e.g. `"frame": "tablet"` on an iPad, `"caption": false` on Play's tablets |
 
 Which store slot a file fills is decided later by `store-listings`: Apple's by the pixel size, Play's by

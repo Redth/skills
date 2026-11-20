@@ -53,7 +53,7 @@ PAGE = os.path.join(TEMPLATES_DIR, "set.html")
 REPORT_NAME = "render-report.json"
 
 # Bumped when the way a job is built changes, so old renders aren't taken as current.
-RENDERER_VERSION = "2"
+RENDERER_VERSION = "3"
 
 EXIT_OK = 0
 EXIT_ERRORS = 1
@@ -67,7 +67,8 @@ RTL_LANGUAGES = ("ar", "arc", "ckb", "dv", "fa", "he", "iw", "ks", "ku", "ps", "
 # 9.5u starts a tall slot's caption at about 11 pt in Apple's search row; 7u is about 12 pt on the product page
 # (references/legibility.md, from the screenshot-craft measurements).
 DEFAULT_CAPTION = {"placement": "top", "align": "center", "maxLines": 2, "weight": 800, "sizePct": 9.5,
-                   "floorPct": 7.0, "font": None, "plate": "solid", "case": None, "maxWidthPct": None}
+                   "floorPct": 7.0, "font": None, "plate": "solid", "case": None, "maxWidthPct": None,
+                   "widthPct": None}
 # A fold's angle between its halves: open (both halves of the inner display seen), and with the outer display
 # shown on the lifted panel's back (under 90, so the back faces the viewer).
 FOLD_ANGLE = 120
@@ -199,8 +200,15 @@ def semantic_problems(cfg):
             if t not in targets:
                 out.append("shot %s names target %s, which isn't in targets" % (s["id"], t))
         layouts = [s.get("layout")] + [o.get("layout") for o in (s.get(styles.ROLE_STORES) or {}).values()]
+        layouts += [(t.get("layouts") or {}).get(s["id"]) for t in targets.values() if isinstance(t, dict)]
         if "callout" in layouts and not s.get("callout"):
             out.append("shot %s uses the callout layout but has no callout" % s["id"])
+    for tid, t in targets.items():
+        if not isinstance(t, dict):
+            continue
+        for sid in (t.get("layouts") or {}):
+            if not sid.startswith("$") and sid not in seen:
+                out.append("target %s's layouts names shot %s, which isn't in shots" % (tid, sid))
     pano = cfg.get("panorama")
     if pano:
         for sid in pano["shots"]:
@@ -351,8 +359,8 @@ class Resolver:
         store = self.stores.get(target["store"]) or {}
         role_store = (shot.get(styles.ROLE_STORES) or {}).get(target["store"]) or {}
         layers = [shot, store, target]
-        layout = _first(target.get("layout"), store.get("layout"), role_store.get("layout"), shot.get("layout"),
-                        DEFAULT_LAYOUT)
+        layout = _first((target.get("layouts") or {}).get(shot["id"]), target.get("layout"), store.get("layout"),
+                        role_store.get("layout"), shot.get("layout"), DEFAULT_LAYOUT)
         frame = _first(target.get("frame"), store.get("frame"), role_store.get("frame"), shot.get("frame"),
                        self.theme.get("frame"), DEFAULT_FRAME)
         style = dict(DEFAULT_CAPTION)
@@ -376,6 +384,7 @@ class Resolver:
         if layout == "gameplay":
             words = False
         from_role_store = (target.get("layout") is None and store.get("layout") is None
+                           and (target.get("layouts") or {}).get(shot["id"]) is None
                            and role_store.get("layout") is not None and role_store.get("layout") != shot.get("layout"))
         return {"layout": layout, "frame": frame, "style": style, "words": words,
                 "roleStoreLayout": shot.get("layout") if from_role_store else None}
@@ -427,7 +436,7 @@ class Resolver:
                            "maxLines": style.get("maxLines"), "weight": style.get("weight"),
                            "sizePct": style.get("sizePct"), "floorPct": style.get("floorPct"),
                            "font": style.get("font"), "plate": style.get("plate"), "case": style.get("case"),
-                           "maxWidthPct": style.get("maxWidthPct")}
+                           "maxWidthPct": style.get("maxWidthPct"), "widthPct": style.get("widthPct")}
         pair = None
         if st["layout"] == "pair" and shot.get("pair"):
             spec = shot["pair"]
@@ -544,7 +553,8 @@ class Resolver:
         if hero.get("logo"):
             p = self.path(hero["logo"])
             files.append(p)
-            logo = {"url": file_url(p), "fit": hero.get("fit") or "wide", "widthPct": hero.get("widthPct")}
+            logo = {"url": file_url(p), "fit": hero.get("fit") or "wide", "widthPct": hero.get("widthPct"),
+                    "maxHeightPct": hero.get("maxHeightPct")}
         return {"palette": palette, "background": bg, "fonts": fonts, "icon": icon, "logo": logo,
                 "captionFont": (t.get("caption") or {}).get("font")}
 
@@ -599,7 +609,12 @@ class Resolver:
         job = {"version": 1, "index": index, "lang": locale, "dir": "rtl" if is_rtl(locale) else "ltr",
                "slot": {"width": target["width"], "height": target["height"]},
                "theme": theme, "panorama": panorama, "slots": slots}
-        return {"job": job, "files": sorted(set(files)), "fallbacks": fallbacks,
+        # Every config value the file depends on, as written: the target (its frame, device, layouts...), its
+        # store's overrides, the shots drawn on the page, the theme and the panorama. A change to any of them renders
+        # the file again even when it draws the same job (render.py's cache keys on this too).
+        config_view = {"target": target, "store": self.stores.get(target["store"]), "theme": self.theme,
+                       "shots": [s for s in members], "panorama": pano if group else None}
+        return {"job": job, "files": sorted(set(files)), "fallbacks": fallbacks, "configView": config_view,
                 "layout": slots[index]["layout"], "capturePath": slots[index]["capturePath"],
                 "role": shot.get("role"), "tilt": slots[index]["tilt"] if slots[index]["layout"] == "tilt" else None,
                 "notes": slots[index].get("notes") or []}
@@ -621,7 +636,7 @@ class Resolver:
             return v
 
         view = {"renderer": RENDERER_VERSION, "templates": templates_digest, "job": scrub(unit["job"]),
-                "size": [unit["width"], unit["height"]]}
+                "config": unit.get("configView"), "size": [unit["width"], unit["height"]]}
         return sha256_bytes(jsonio.canonical(view).encode("utf-8"))
 
 
