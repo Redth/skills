@@ -1021,7 +1021,12 @@ class Check:
         if not _has_caption(f):
             return
         text = cap["text"]
-        if cap.get("fits") is False:
+        if cap.get("outside"):
+            self.report.add(store, own_finding(
+                "design.caption.outside", "error", where,
+                "the %s runs off the slot (cut off in the picture): shorten the words, or make the hero's logo smaller "
+                "(theme.hero or the target's hero)" % " and ".join(str(x) for x in cap["outside"])))
+        elif cap.get("fits") is False:
             if cap.get("hyphenationAvailable") is False:
                 lang = (f.get("lang") or f.get("locale") or "").split("-")[0]
                 fix = ("; this Chrome can't hyphenate %s: add soft hyphens (\"\\u00ad\" in the JSON, or \"&shy;\") "

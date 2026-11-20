@@ -729,7 +729,9 @@ hash (config section, strings, capture bytes, fonts, templates, frames) is uncha
   takes the accent colour (across a `\n` too) and `\n` breaks the line. Later: `theme.hero` (`logo`, `fit: wide|tile`,
   `widthPct`), `theme.tilt` and a shot's tilt object (`side`, `y`, `x`, `z`, `perspective`), `theme.fold` and
   `shot.fold`, `caption.maxWidthPct` and `caption.widthPct`, `theme.hero.maxHeightPct`, `target.device`, `target.slot`,
-  `target.layouts` (a shot's layout on that target), the frame object. The render cache's hash covers the job and
+  `target.layouts` (a shot's layout on that target), `target.hero` (over `theme.hero`), the frame object. A caption
+  whose words or hero mark leave the slot doesn't fit (`caption.fits: false`, `caption.outside: [roles]`); the hero's
+  mark shrinks before its claim to keep the block in its room. The render cache's hash covers the job and
   every config value a file depends on (its target, store overrides, shots, theme, panorama).
 
 ### 8.6 Rules data: the `design` table

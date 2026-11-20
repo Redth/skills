@@ -527,7 +527,7 @@ class Resolver:
                 out[k] = spec[k]
         return out
 
-    def theme_job(self, files):
+    def theme_job(self, files, target=None):
         t = self.theme
         palette = dict(DEFAULT_PALETTE)
         palette.update({k: v for k, v in (t.get("palette") or {}).items() if v is not None})
@@ -549,7 +549,8 @@ class Resolver:
             files.append(p)
             icon = file_url(p)
         logo = None
-        hero = t.get("hero") or {}
+        hero = dict(t.get("hero") or {})
+        hero.update(dict((k, v) for k, v in ((target or {}).get("hero") or {}).items() if v is not None))
         if hero.get("logo"):
             p = self.path(hero["logo"])
             files.append(p)
@@ -591,7 +592,7 @@ class Resolver:
     def _job(self, locale, target_id, target, shot, group, pano):
         files = []
         fallbacks = {"captures": [], "strings": []}
-        theme = self.theme_job(files)
+        theme = self.theme_job(files, target)
         members = group if group else [shot]
         slots = []
         for s in members:
@@ -837,7 +838,11 @@ def run(config_path, locales=None, targets=None, shots=None, out=None, force=Fal
         code = EXIT_ERRORS
     for e in files:
         cap = e.get("caption") or {}
-        if cap and cap.get("fits") is False:
+        if cap and cap.get("outside"):
+            log("error: %s: the %s runs off the slot: shorten the words or make the hero's logo smaller (a target's "
+                "hero.logo)" % (e["path"], " and ".join(cap["outside"])))
+            code = EXIT_ERRORS
+        elif cap and cap.get("fits") is False:
             log("error: %s: the caption doesn't fit in %d lines even at its floor (%.1f px)%s"
                 % (e["path"], cap.get("maxLines") or 0, cap.get("floorPx") or 0, fit_hint(e)))
             code = EXIT_ERRORS

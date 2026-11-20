@@ -102,7 +102,13 @@ column at the start side and the app beside them, so the shot still shows the ap
 - **Use for** shot 1 of a brand visitors already know, or a set whose UI doesn't explain itself.
 - **Options:** `caption` (the claim), `proof` (a short, true, verifiable line), `kicker` (a small line above). The
   brand mark on top is `theme.hero.logo` (`fit`: `wide` draws a wordmark or a logo with words at its own shape, no
-  tile; `tile` as an icon; `widthPct` its widest in u) or else `theme.icon` (a rounded tile).
+  tile; `tile` as an icon; `widthPct` its widest in u) or else `theme.icon` (a rounded tile). A target's `hero`
+  overrides it key by key (a tall, stacked logo smaller on a landscape slot).
+- **Sharing the height:** the mark, the words and the app share the slot. When the block (mark, kicker, claim,
+  proof) is taller than its room (beside the app, the slot less its margins; above it, enough to leave 30% of the
+  slot for the app), the mark shrinks first, to 4u at the least, then the claim, never below its floor. Words or a
+  mark that still leave the slot don't fit: the report says which (`caption.outside`), render.py exits 1 and
+  `check.py` errors (`design.caption.outside`).
 - **Rules:** Apple 2.3.3 wants the app in use, not "merely the title art": the sliver of UI is why the layout has
   one, and more than half the set must still be the app in use (`check.py` counts a `hero` as in use only when
   its real UI covers 30% of the slot or more, the report's `uiShare`: a side-by-side hero usually does). On Play, `check.py` warns about a `hero` among the first three shots: Google asks for UI first there; a

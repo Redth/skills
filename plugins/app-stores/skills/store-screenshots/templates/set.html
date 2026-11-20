@@ -949,6 +949,13 @@
         s.fit = fitCaption(s, base, floor, maxLines, P.leading);
         s.fit.sizePx = base; s.fit.floorPx = floor; s.fit.maxLines = maxLines;
       }
+      if (s.layout === "hero") {
+        // The hero's words, mark and app share the height: beside the app the block may take the slot less its top
+        // and bottom margins; above it, enough to leave --hero-device-min of the slot for the app.
+        var roomH = side ? H - 2 * P.padTop
+                         : H - P.padTop - P.gap - cssNum(style, "--hero-device-min", 0.3) * H;
+        fitHeroBlock(s, roomH, u, P.leading);
+      }
       ch = s.block.getBoundingClientRect().height;
       // The block keeps room for --caption-reserve-lines lines at the starting size even when the words take
       // fewer, so every shot of a set puts its caption's top and its device in the same place.
@@ -1086,6 +1093,35 @@
     if (s.layout === "callout" && s.spec.callout) placeCallout(s, main, job, W, H, u, SL, SR);
   }
 
+  // When a hero's block (mark, kicker, claim, proof) is taller than its room, the mark shrinks first (to 4u tall at
+  // the least), then the claim, never below its floor. What still doesn't fit is reported by slotReport.
+  function fitHeroBlock(s, roomH, u, leading) {
+    function blockH() { return s.block.getBoundingClientRect().height; }
+    if (blockH() <= roomH + 0.5) return;
+    if (s.icon) {
+      var h = s.icon.getBoundingClientRect().height, least = 4 * u;
+      var from = h;
+      while (blockH() > roomH + 0.5 && h > least + 0.5) {
+        h = Math.max(least, h * 0.88);
+        if (s.icon.classList.contains("icon")) {
+          s.icon.style.width = h + "px"; s.icon.style.height = h + "px";
+        } else {
+          s.icon.style.width = "auto"; s.icon.style.maxWidth = "100%"; s.icon.style.maxHeight = h + "px";
+        }
+      }
+      if (h < from - 0.5) s.logoShrunk = { from: from, to: h };
+    }
+    if (blockH() > roomH + 0.5 && s.fit && s.caption) {
+      var px = s.fit.px;
+      while (blockH() > roomH + 0.5 && px > s.fit.floorPx + 1e-6) {
+        px = Math.max(s.fit.floorPx, px - Math.max(0.5, px * 0.03));
+        s.caption.style.fontSize = px + "px";
+      }
+      s.fit.px = px;
+      s.fit.lines = Math.max(1, Math.round(s.caption.getBoundingClientRect().height / (px * leading)));
+    }
+  }
+
   // A solid plate hugs its words: as wide as the longest line plus its padding, placed by the caption's alignment.
   function shrinkPlate(s, P, L, availW) {
     var widest = 0;
@@ -1181,6 +1217,16 @@
     var kicker = textItem(s.kicker, "kicker");
     var captionItem = textItem(s.caption, "caption");
     var proof = textItem(s.proof, "proof");
+    // Anything of the words (or the hero's mark) leaving the slot doesn't fit, whatever the line count says.
+    var outside = [];
+    textBoxes.forEach(function (t) {
+      var q = t.rect;
+      if (q.left < -1 || q.top < -1 || q.right > W + 1 || q.bottom > H + 1) outside.push(t.role);
+    });
+    if (s.icon) {
+      var lq = rel(s.icon.getBoundingClientRect(), origin);
+      if (lq.width > 0 && (lq.left < -1 || lq.top < -1 || lq.right > W + 1 || lq.bottom > H + 1)) outside.push("logo");
+    }
     var share = 0;
     textBoxes.forEach(function (t) { share += clipArea(t.rect, W, H); });
     share /= W * H;
@@ -1196,7 +1242,8 @@
         sizePx: fit ? round(fit.sizePx, 1) : 0,
         floorPx: fit ? round(fit.floorPx, 1) : 0,
         atFloor: fit ? fit.px <= fit.floorPx + 0.05 : false,
-        fits: fit ? fit.ok : true,
+        fits: (fit ? fit.ok : true) && !outside.length,
+        outside: outside,
         hyphenated: !!(fit && fit.ok && fit.hyphens === "auto"),
         hyphenationAvailable: cap.text ? hyphenationAvailable(job.lang, cap.text) : null,
         softHyphens: /&shy;|\u00ad/.test(cap.text || ""),
@@ -1214,7 +1261,9 @@
       if (s.plate) r.caption.plate = box(rel(s.plate.getBoundingClientRect(), origin));
       if (s.block) r.caption.blockBox = box(rel(s.block.getBoundingClientRect(), origin));
       if (s.icon) r.caption.logo = { box: box(rel(s.icon.getBoundingClientRect(), origin)),
-                                     kind: s.icon.className };
+                                     kind: s.icon.className,
+                                     shrunk: s.logoShrunk ? { from: round(s.logoShrunk.from, 1),
+                                                              to: round(s.logoShrunk.to, 1) } : null };
       if (s.band) r.caption.band = box(rel(s.band.getBoundingClientRect(), origin));
     } else {
       r.caption = null;

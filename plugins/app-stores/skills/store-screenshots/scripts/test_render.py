@@ -713,6 +713,57 @@ class TrialRegressionTests(Base):
         self.assertAlmostEqual(block[2], 0.94 * 300, delta=2)           # wider than the layout's 84u
         self.assertGreaterEqual(block[0], 0.02 * 300 - 1)
 
+    def hero_project(self, caption, hero=None, target_hero=None, maxlines=None, name="p", size=None):
+        root = os.path.join(self.tmp, name)
+        os.makedirs(os.path.join(root, "art"), exist_ok=True)
+        tk.write_png(os.path.join(root, "art", "mark.png"), 200, 200, fill=(255, 255, 255), alpha=True)
+        cfg = kit.base_config()
+        cfg["theme"]["hero"] = hero or {"logo": "art/mark.png", "fit": "wide", "widthPct": 42}
+        if maxlines:
+            cfg["theme"]["caption"]["maxLines"] = maxlines
+        if size:
+            cfg["theme"]["caption"].update({"sizePct": size, "floorPct": size})
+        cfg["targets"] = {"wide": {"store": "apple", "width": 700, "height": 492, "capture": "duo",
+                                   "device": "foldable-inner"}}
+        if target_hero:
+            cfg["targets"]["wide"]["hero"] = target_hero
+        cfg["shots"] = [{"id": "hero", "capture": "plan", "layout": "hero", "caption": "c"}]
+        cfg["strings"] = {"en-US": {"c": caption}}
+        return kit.make_project(root, cfg, captures={"en-US/duo/plan": (1400, 984)})
+
+    def test_a_tall_logo_shrinks_before_the_words_leave_a_wide_hero(self):
+        hero = {"logo": "art/mark.png", "fit": "wide", "widthPct": 55}
+        words = "Plan your *week*,\nshop by aisle,\ncook it all\ntonight"
+        code, report, lines = self.run_render(self.hero_project(words, hero=hero, maxlines=4))
+        self.assertEqual(code, render.EXIT_OK, "\n".join(lines))
+        f = self.entry(report, "en-US/wide/hero.png")
+        cap = f["caption"]
+        self.assertTrue(cap["fits"], cap)
+        self.assertEqual(cap["outside"], [])
+        self.assertIsNotNone(cap["logo"]["shrunk"])                  # the mark gave way, not the slot's edge
+        block = cap["blockBox"]
+        self.assertLessEqual(block[1] + block[3], 492 + 1)
+        self.assertGreaterEqual(block[1], -1)
+
+    def test_words_that_still_leave_the_slot_dont_fit(self):
+        words = "\n".join(["Plan", "your", "whole", "week", "of", "meals"])
+        root = self.hero_project(words, maxlines=5, size=18)
+        code, report, lines = self.run_render(root)
+        cap = self.entry(report, "en-US/wide/hero.png")["caption"]
+        self.assertIn("caption", cap["outside"])
+        self.assertFalse(cap["fits"])
+        self.assertEqual(code, render.EXIT_ERRORS)
+        self.assertTrue(any("runs off the slot" in line for line in lines), lines)
+        import check
+        found = [x for _, x in check.run_check(root).findings if x.rule_id == "design.caption.outside"]
+        self.assertEqual([x.severity for x in found], ["error"])
+
+    def test_a_targets_hero_logo_overrides_the_themes(self):
+        code, report, lines = self.run_render(self.hero_project("Plan your week", target_hero={"widthPct": 10}))
+        self.assertEqual(code, render.EXIT_OK, "\n".join(lines))
+        logo = self.entry(report, "en-US/wide/hero.png")["caption"]["logo"]
+        self.assertAlmostEqual(logo["box"][2], 0.10 * 700, delta=2)
+
     def test_one_shot_folds_on_the_foldable_and_not_elsewhere(self):
         cfg = kit.base_config()
         cfg["targets"]["duo"] = {"store": "apple", "width": 640, "height": 450, "capture": "duo",

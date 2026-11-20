@@ -131,6 +131,9 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   longer squares every iPhone frame's screen corners: the corner check ignores the corner's tip, pure black near it
   and a few stray pixels; a radius the frame sets is always kept (what it cuts is reported, and `check.py` warns); a
   radius cut to under half is a warning (`design.frame.corners_squared`), not a note.
+- `store-screenshots`: words or a hero's mark leaving the slot no longer report as fitting (`caption.outside`,
+  render.py exits 1, `check.py` errors `design.caption.outside`); the hero's mark shrinks before its claim (never
+  below the claim's floor) so mark, words and app share the height; a target's `hero` overrides `theme.hero`.
 - `store-screenshots`: the render cache's hash covers every config value a file depends on (the target's frame,
   device and layouts, its store's overrides, the shots, the theme), so a target's frame change renders again.
 - `store-screenshots`: `theme.hero.logo`'s `widthPct` (up to 60u) is honoured for a squarish mark, its height up to

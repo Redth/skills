@@ -127,6 +127,7 @@ Each target is one output screen: one set of files per locale.
 | `capture` | the capture device id whose captures feed it |
 | `device` (optional) | the device class its drawn frames take when the capture's shape doesn't say: `foldable-inner` for a foldable's inner display, `foldable-outer`, `phone-classic`... ([frames.md](frames.md)) |
 | `slot` (optional, Google) | the Play slot it fills when `store-listing.json` doesn't say |
+| `hero` (optional) | the hero's mark on this target alone, over `theme.hero` key by key: `{ "widthPct": 24 }` on a landscape slot |
 | `layouts` (optional) | a shot's layout on this target alone, by shot id: `{ "plan": "fold" }` folds shot `plan` on a foldable's target while it stays `framed-bleed` elsewhere. Beats every other layout setting |
 | `frame`, `layout`, `caption` (optional) | overrides for this target alone: e.g. `"frame": "tablet"` on an iPad, `"caption": false` on Play's tablets |
 

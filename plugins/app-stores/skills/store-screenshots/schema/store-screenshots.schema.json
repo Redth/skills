@@ -92,6 +92,18 @@
         }
       ]
     },
+    "hero": {
+      "$comment": "The hero's brand mark: logo (a path; any shape, a transparent PNG or SVG), fit wide (drawn at its own shape, no tile: a wordmark or a logo with words) or tile (as the icon), widthPct (its width in u, up to 60) and maxHeightPct (its tallest in u). Over theme.icon.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "logo": { "$ref": "#/$defs/pathOrNull" },
+        "fit": { "enum": ["wide", "tile", null] },
+        "widthPct": { "$comment": "The mark's width in u (1% of the slot's width), up to 60; its height follows its shape.", "type": ["number", "null"], "minimum": 5, "maximum": 60 },
+        "maxHeightPct": { "$comment": "The mark's tallest, in u: by default as tall as widthPct (24 without one; 12 on wide and square slots).", "type": ["number", "null"], "minimum": 4, "maximum": 60 }
+      }
+    },
     "tiltAngles": {
       "$comment": "A tilt's angles in degrees (y: the turn, x: the lean back, z: the roll) and perspective in u; the layout's own by aspect class where not given.",
       "type": "object",
@@ -193,18 +205,7 @@
         "caption": { "$ref": "#/$defs/captionStyle" },
         "frame": { "$ref": "#/$defs/frame" },
         "icon": { "$comment": "The app's icon, shown on the hero.", "$ref": "#/$defs/pathOrNull" },
-        "hero": {
-          "$comment": "The hero's brand mark: logo (a path; any shape, a transparent PNG or SVG), fit wide (drawn at its own shape, no tile: a wordmark or a logo with words) or tile (as the icon), widthPct (its width in u, up to 60) and maxHeightPct (its tallest in u). Over theme.icon.",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "$comment": { "type": "string" },
-            "logo": { "$ref": "#/$defs/pathOrNull" },
-            "fit": { "enum": ["wide", "tile", null] },
-            "widthPct": { "$comment": "The mark's width in u (1% of the slot's width), up to 60; its height follows its shape.", "type": ["number", "null"], "minimum": 5, "maximum": 60 },
-            "maxHeightPct": { "$comment": "The mark's tallest, in u: by default as tall as widthPct (24 without one; 12 on wide and square slots).", "type": ["number", "null"], "minimum": 4, "maximum": 60 }
-          }
-        },
+        "hero": { "$ref": "#/$defs/hero" },
         "tilt": { "$comment": "The tilt layout's angles for the whole set (a shot's tilt object overrides them).", "$ref": "#/$defs/tiltAngles" },
         "fold": { "$comment": "The fold layout's settings for the whole set (a shot's fold overrides them).", "$ref": "#/$defs/fold" }
       }
@@ -231,6 +232,7 @@
         "capture": { "$comment": "The capture device whose captures feed this target.", "$ref": "#/$defs/id" },
         "device": { "$comment": "The device class its drawn frames take (a foldable's outer or inner display, a 16:9 phone...), where the capture's shape doesn't say.", "$ref": "#/$defs/deviceClass" },
         "slot": { "$comment": "Google only: the Play slot this target fills, when store-listing.json doesn't say.", "enum": ["phone", "tablet7", "tablet10", "tv", "wear"] },
+        "hero": { "$comment": "The hero's mark on this target alone, over theme.hero key by key (a tall logo smaller on a landscape slot).", "$ref": "#/$defs/hero" },
         "layout": { "$ref": "#/$defs/layout" },
         "layouts": {
           "$comment": "A shot's layout on this target alone, by shot id (\"plan\": \"fold\" on a foldable's inner display): over everything else, so one shot id serves every target.",
