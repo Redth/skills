@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-20T09:12:04Z",
+  "finishedAt": "2026-11-20T09:14:51Z",
+  "plan": "capture-plan.json",
+  "app": { "revision": "4be1f0c2d9", "describe": "v2.0-41-g4be1f0c", "dirty": false, "repo": "." },
+  "shots": [
+    { "locale": "en-US", "device": "iphone-6.9", "screen": "nutrition", "driver": "appium", "status": "taken",
+      "path": "en-US/iphone-6.9/nutrition.png", "width": 1320, "height": 2868,
+      "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2", "via": "appium" }, "statusBar": "verified",
+      "fixes": [], "warnings": [], "state": "Lemon Pasta's nutrition per serving, five values, each with when it was last cooked",
+      "stateCheck": "passed", "appRevision": "4be1f0c2d9" },
+    { "locale": "en-US", "device": "android-phone", "screen": "nutrition", "driver": "appium", "status": "taken",
+      "path": "en-US/android-phone/nutrition.png", "width": 1080, "height": 1920,
+      "source": { "avd": "appstores-android-phone", "api": 36, "via": "appium" }, "statusBar": "verified",
+      "fixes": [], "warnings": [], "state": "Lemon Pasta's nutrition per serving, five values, each with when it was last cooked",
+      "stateCheck": "passed", "appRevision": "4be1f0c2d9" }
+  ]
+}

@@ -37,28 +37,39 @@ FIND_JS = r"""
 (function (q) {
   function visible(e) { var r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; }
   function own(e) { return (e.innerText || e.value || e.placeholder || "").trim(); }
-  var el = null, all;
-  if (q.finder === "css") el = document.querySelector(q.value);
+  function norm(t) { return String(t).replace(/\s+/g, " ").trim().toLowerCase(); }
+  function shows(e) {
+    if (q.contains === undefined || q.contains === null) return true;
+    var w = norm(q.contains);
+    return [e.innerText, e.textContent, e.value, e.getAttribute && e.getAttribute("aria-label"),
+            e.getAttribute && e.getAttribute("title"), e.getAttribute && e.getAttribute("alt")].some(function (t) {
+      return t !== undefined && t !== null && norm(t).indexOf(w) >= 0; });
+  }
+  function list(nodes) { return Array.prototype.slice.call(nodes || []); }
+  var el = null, all, cands = [];
+  if (q.finder === "css") cands = list(document.querySelectorAll(q.value));
   else if (q.finder === "id") {
     var v = CSS.escape(q.value);
-    el = document.querySelector('[data-testid="' + v + '"]') || document.getElementById(q.value) ||
-         document.querySelector('[data-test-id="' + v + '"],[data-test="' + v + '"]');
+    cands = list(document.querySelectorAll('[data-testid="' + v + '"]')).concat(
+      [document.getElementById(q.value)], list(document.querySelectorAll('[data-test-id="' + v + '"],[data-test="' + v + '"]')));
   } else if (q.finder === "xpath") {
-    el = document.evaluate(q.value, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+    var snap = document.evaluate(q.value, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+    for (var k = 0; k < snap.snapshotLength; k++) cands.push(snap.snapshotItem(k));
   } else if (q.finder === "label") {
-    all = Array.prototype.slice.call(document.querySelectorAll("[aria-label],[alt],[title]")).filter(visible);
-    el = all.filter(function (e) { return [e.getAttribute("aria-label"), e.getAttribute("alt"),
-      e.getAttribute("title")].indexOf(q.value) >= 0; })[0] || null;
+    all = list(document.querySelectorAll("[aria-label],[alt],[title]")).filter(visible);
+    cands = all.filter(function (e) { return [e.getAttribute("aria-label"), e.getAttribute("alt"),
+      e.getAttribute("title")].indexOf(q.value) >= 0; });
   } else if (q.finder === "text") {
-    all = Array.prototype.slice.call(document.body ? document.body.querySelectorAll("*") : []).filter(visible);
+    all = list(document.body ? document.body.querySelectorAll("*") : []).filter(visible);
     var want = q.value.trim(), lower = want.toLowerCase();
     var tests = [function (t) { return t === want; }, function (t) { return t.toLowerCase() === lower; },
                  function (t) { return t.toLowerCase().indexOf(lower) >= 0; }];
-    for (var i = 0; i < tests.length && !el; i++) {
-      var hits = all.filter(function (e) { return tests[i](own(e)); });
-      el = hits.filter(function (e) { return !hits.some(function (o) { return o !== e && e.contains(o); }); })[0] || null;
+    for (var i = 0; i < tests.length && !cands.length; i++) {
+      var hits = all.filter(function (e) { return tests[i](own(e)) && shows(e); });
+      cands = hits.filter(function (e) { return !hits.some(function (o) { return o !== e && e.contains(o); }); });
     }
   }
+  el = cands.filter(function (e) { return e && shows(e); })[0] || null;
   if (!el) return null;
   if (q.scroll) el.scrollIntoView({block: "center", inline: "center"});
   if (q.focus && el.focus) el.focus();
@@ -249,19 +260,28 @@ class ChromeDriver(base.Driver):
 
     # -- elements -----------------------------------------------------------------------------------------------
 
-    def locate(self, query, scroll=False, focus=False):
-        """An element's middle and size in CSS px (``{"x", "y", "width", "height"}``), or ``None``."""
+    def locate(self, query, scroll=False, focus=False, contains=None):
+        """An element's middle and size in CSS px (``{"x", "y", "width", "height"}``), or ``None``; with
+        ``contains``, the first element ``query`` finds whose text (``innerText``, ``textContent``, its value, its
+        ``aria-label``, ``title`` or ``alt``) contains it, ignoring case and runs of space."""
         q = {"finder": query[0], "value": query[1], "scroll": scroll, "focus": focus}
+        if contains is not None:
+            q["contains"] = contains
         return self.evaluate("%s(%s)" % (FIND_JS.strip(), json.dumps(q)),
                              dry={"x": 1, "y": 1, "width": 2, "height": 2})
 
-    def find(self, ctx, query):
-        """The element on the page now, as a ``base.Element`` in CSS px, or ``None``."""
-        r = self.locate(query)
+    def find(self, ctx, query, contains=None):
+        """The element on the page now, as a ``base.Element`` in CSS px, or ``None`` (``contains``: one that
+        shows that text, ``locate``)."""
+        r = self.locate(query, contains=contains)
         if not r:
             return None
         return base.Element(id=str(query[1]), bounds=(int(r["x"] - r["width"] / 2), int(r["y"] - r["height"] / 2),
                                                       int(r["x"] + r["width"] / 2), int(r["y"] + r["height"] / 2)))
+
+    def find_containing(self, ctx, query, wanted):
+        """An element ``query`` finds that shows ``wanted`` (``locate`` with ``contains``), or ``None``."""
+        return self.find(ctx, query, contains=wanted)
 
     def click(self, x, y):
         """A mouse press and release at CSS ``(x, y)``."""

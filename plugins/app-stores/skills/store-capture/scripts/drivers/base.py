@@ -65,6 +65,10 @@ POSTURES = ("folded", "open", "half-open")
 POSTURE_ALIASES = {"unfolded": "open", "opened": "open", "closed": "folded", "half-opened": "half-open",
                    "partially-folded": "half-open", "tabletop": "half-open", "book": "half-open"}
 FINDER_KEYS = ("id", "text", "label", "xpath", "css")
+# What an element shows, by attribute, in the trees the drivers read (UI Automator's text and content-desc,
+# XCUITest's label and value, an agent's text and value, a Mac's title, Windows' Name): what a ``contains`` check
+# reads, on the element and everything under it. Never an id (XCUITest's ``name``, ``resource-id``).
+TEXT_ATTRS = ("text", "label", "value", "content-desc", "contentDescription", "title", "description", "Name")
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 # What to install when a program is missing (ToolMissing's hint), by the program's name.
@@ -490,6 +494,12 @@ def step_element(kind, value):
     return element_query(value)
 
 
+def describe_query(query, contains=None):
+    """An element check in a few words: ``id 'amount'``, ``id 'amount' containing '24'``."""
+    out = "%s %r" % (query[0], query[1])
+    return out + (" containing %r" % contains if contains is not None else "")
+
+
 def element_query(value):
     """The element a step value names, as ``(finder, wanted)`` (``("id", "search")``), or ``None`` when it names
     none. Raises ``ValueError`` when it names more than one way."""
@@ -506,14 +516,16 @@ class Element(object):
     ``label`` (content description / accessibility label), ``cls`` (its class or role), ``bounds``
     ``(left, top, right, bottom)`` in screen pixels (or ``None``) and ``attrs`` (everything the tree said)."""
 
-    def __init__(self, id=None, text=None, label=None, cls=None, bounds=None, attrs=None):
-        """Describe one element."""
+    def __init__(self, id=None, text=None, label=None, cls=None, bounds=None, attrs=None, node=None):
+        """Describe one element (``node``: its node in the tree it was read from, when there is one, for what's
+        under it)."""
         self.id = id or None
         self.text = text or None
         self.label = label or None
         self.cls = cls or None
         self.bounds = bounds
         self.attrs = dict(attrs or {})
+        self.node = node
 
     @property
     def center(self):
@@ -556,7 +568,7 @@ def parse_uiautomator(xml_text):
     for node in root.iter("node"):
         a = node.attrib
         elements.append(Element(id=a.get("resource-id"), text=a.get("text"), label=a.get("content-desc"),
-                                cls=a.get("class"), bounds=parse_bounds(a.get("bounds", "")), attrs=a))
+                                cls=a.get("class"), bounds=parse_bounds(a.get("bounds", "")), attrs=a, node=node))
     return root, elements
 
 
@@ -566,8 +578,8 @@ def _id_matches(have, wanted):
     return have == wanted or have.endswith(":id/" + wanted) or have.endswith("/" + wanted)
 
 
-def find_element(elements, finder, wanted):
-    """The first of ``elements`` that ``finder`` (``id``, ``text`` or ``label``) matches, or ``None``.
+def find_elements(elements, finder, wanted):
+    """Every one of ``elements`` that ``finder`` (``id``, ``text`` or ``label``) matches, best first.
 
     ``id`` matches the whole id or its last part (``com.example.samplerecipes:id/search`` for ``search``);
     ``text`` and ``label`` match exactly first, then ignoring case and surrounding space, then as a part of it.
@@ -576,20 +588,103 @@ def find_element(elements, finder, wanted):
     sized = [e for e in elements if e.bounds and e.bounds[2] > e.bounds[0] and e.bounds[3] > e.bounds[1]]
     pool = sized + [e for e in elements if e not in sized]
     if finder == "id":
-        for e in pool:
-            if _id_matches(e.id, wanted):
-                return e
-        return None
+        return [e for e in pool if _id_matches(e.id, wanted)]
     if finder not in ("text", "label"):
         raise ValueError("find_element finds by id, text or label, not %r" % finder)
     get = (lambda e: e.text) if finder == "text" else (lambda e: e.label)
     w = str(wanted)
+    out = []
     for test in (lambda v: v == w, lambda v: v.strip().lower() == w.strip().lower(),
                  lambda v: w.strip().lower() in v.lower()):
         for e in pool:
             v = get(e)
-            if v and test(v):
-                return e
+            if v and test(v) and e not in out:
+                out.append(e)
+    return out
+
+
+def find_element(elements, finder, wanted):
+    """The first of ``elements`` that ``finder`` (``id``, ``text`` or ``label``) matches, or ``None``
+    (``find_elements``' best)."""
+    found = find_elements(elements, finder, wanted)
+    return found[0] if found else None
+
+
+def _norm(text):
+    return " ".join(str(text).split()).lower()
+
+
+def texts_contain(texts, wanted):
+    """True when one of ``texts`` contains ``wanted``, ignoring case and runs of space (``"24"`` is in ``"24 oz"``
+    and in ``"Add  24"``)."""
+    w = _norm(wanted)
+    return bool(w) and any(w in _norm(t) for t in texts if t not in (None, ""))
+
+
+def node_texts(node):
+    """What a tree node and every node under it show (``TEXT_ATTRS``), in document order."""
+    out = []
+    for n in node.iter():
+        for a in TEXT_ATTRS:
+            v = n.attrib.get(a)
+            if v:
+                out.append(v)
+    return out
+
+
+def element_texts(element):
+    """What an element shows, and what's under it where the driver read a tree: its ``text``, its attributes'
+    ``TEXT_ATTRS``, its node's descendants and an agent item's ``children``."""
+    out = [element.text]
+    for a in TEXT_ATTRS:
+        v = element.attrs.get(a)
+        if isinstance(v, str) and v:
+            out.append(v)
+    if element.node is not None:
+        out.extend(node_texts(element.node))
+    stack = list(element.attrs.get("children") or []) if isinstance(element.attrs.get("children"), list) else []
+    while stack:
+        item = stack.pop(0)
+        if not isinstance(item, dict):
+            continue
+        for a in TEXT_ATTRS:
+            v = item.get(a)
+            if isinstance(v, str) and v:
+                out.append(v)
+        stack.extend(item.get("children") or [])
+    return [t for t in out if t]
+
+
+def matching(root, elements, query):
+    """Every element ``query`` (``(finder, wanted)``) finds in a tree read once: ``root`` (for ``xpath``) and its
+    ``elements`` (each with its ``node``), best first."""
+    finder, wanted = query
+    if finder != "xpath":
+        return find_elements(elements, finder, wanted)
+    by_node = dict((id(e.node), e) for e in elements if e.node is not None)
+    try:
+        nodes = xpath_all(root, wanted)
+    except XPathError:
+        node = xpath_first(root, wanted)
+        nodes = [node] if node is not None else []
+    out = []
+    for node in nodes:
+        e = by_node.get(id(node))
+        if e is None:
+            a = node.attrib
+            e = Element(id=a.get("resource-id"), text=a.get("text"), label=a.get("content-desc"),
+                        cls=a.get("class"), bounds=parse_bounds(a.get("bounds", "")), attrs=a, node=node)
+        out.append(e)
+    return out
+
+
+def first_containing(root, elements, query, wanted):
+    """The first element ``query`` finds in a tree whose texts, or its descendants', contain ``wanted``
+    (``texts_contain``), or ``None``: ``{"id": "amount", "contains": "24"}`` on a chip that shows 24 itself (iOS's
+    label) or on a child (Android's text)."""
+    for e in matching(root, elements, query):
+        if texts_contain(element_texts(e), wanted):
+            return e
     return None
 
 
@@ -983,7 +1078,7 @@ def find_xpath(root, expr, elements=None):
         return None
     a = node.attrib
     return Element(id=a.get("resource-id"), text=a.get("text"), label=a.get("content-desc"), cls=a.get("class"),
-                   bounds=parse_bounds(a.get("bounds", "")), attrs=a)
+                   bounds=parse_bounds(a.get("bounds", "")), attrs=a, node=node)
 
 
 def masked_sha256(path, rects):
@@ -1026,6 +1121,7 @@ class Driver(object):
     STEPS = ("wait", "settle", "script")   # step kinds it handles
     FINDERS = ()            # element finders it understands ("id", "text", "label", "xpath", "css")
     POSTURE_SETTING = False  # a device's or screen's posture is applied before the steps (a flow driver's, say)
+    CONTAINS = True         # with FINDERS: it can check what an element shows ({"id": …, "contains": …})
     SETTLE_TIMEOUT = 5.0    # seconds settle waits for two identical frames
     WAIT_TIMEOUT = 10.0     # seconds a wait for an element waits by default
 
@@ -1111,18 +1207,20 @@ class Driver(object):
             query = element_query(check)
             if query is None:
                 continue
-            if query[0] not in self.FINDERS:
-                unchecked.append("%s %r" % query)
+            contains = check.get("contains")
+            if query[0] not in self.FINDERS or (contains is not None and not self.CONTAINS):
+                unchecked.append(describe_query(query, contains))
                 continue
             timeout = float(check.get("timeout") if check.get("timeout") is not None else 5)
-            note("  verify %s %r" % query)
+            note("  verify %s" % describe_query(query, contains))
             try:
-                self.wait_for(ctx, query, timeout)
+                self.wait_for(ctx, query, timeout, contains)
             except StepFailed:
                 shot.state_check = "failed"
                 state = screen.get("state")
-                raise WrongState("wrong state: %s %r wasn't on screen within %g s%s" % (
-                    query[0], query[1], timeout, (" (the screen should show: %s)" % state) if state else ""))
+                raise WrongState("wrong state: %s wasn't on screen within %g s%s" % (
+                    describe_query(query, contains), timeout,
+                    (" (the screen should show: %s)" % state) if state else ""))
         if not self.check_keyboard(ctx, screen, shot, keyboard[-1] if keyboard else None):
             unchecked.append("the keyboard")
         if unchecked:
@@ -1278,6 +1376,10 @@ class Driver(object):
             if query and query[0] not in self.FINDERS and not (kind == "wait" and not self.FINDERS):
                 return "step %d (%s): the %s driver can't find elements by %s (it finds by %s)" % (
                     i, describe_step(step), self.NAME, query[0], ", ".join(self.FINDERS) or "nothing")
+            if kind == "wait" and isinstance(value, dict) and value.get("contains") is not None and self.FINDERS \
+                    and not self.CONTAINS:
+                return "step %d (%s): the %s driver can't read what an element shows: wait for the text itself " \
+                       "({\"text\": %s})" % (i, describe_step(step), self.NAME, json.dumps(value["contains"]))
         return None
 
     def folds(self, device):
@@ -1312,11 +1414,29 @@ class Driver(object):
         Drivers that can see elements implement it; the base can't."""
         raise StepSkipped("the %s driver can't find elements" % self.NAME)
 
-    def wait_for(self, ctx, query, timeout=None):
-        """Poll ``find`` until the element appears and return it; ``StepFailed`` after ``timeout`` seconds."""
+    def wait_for(self, ctx, query, timeout=None, contains=None):
+        """Poll ``find`` until the element appears and return it; ``StepFailed`` after ``timeout`` seconds. With
+        ``contains``, until an element ``query`` finds shows that text (``find_containing``)."""
         timeout = self.WAIT_TIMEOUT if timeout is None else timeout
+        if contains is not None:
+            return poll(lambda: self.find_containing(ctx, query, contains), timeout, interval=0.5,
+                        what="%s to appear" % describe_query(query, contains))
         return poll(lambda: self.find(ctx, query), timeout, interval=0.5,
                     what="%s %r to appear" % (query[0], query[1]))
+
+    def find_containing(self, ctx, query, wanted):
+        """An element ``query`` finds now that shows ``wanted``, itself or anything under it (``texts_contain``:
+        ignoring case and runs of space), or ``None``. The base: ``find``'s element and the texts ``element_texts``
+        reads from it; drivers that read a whole tree look at every element ``query`` finds
+        (``first_containing``). Under ``--dry-run``, ``find``'s answer."""
+        element = self.find(ctx, query)
+        if element is None or DRY_RUN:
+            return element
+        return element if texts_contain(self.element_texts(ctx, element), wanted) else None
+
+    def element_texts(self, ctx, element):
+        """What ``element`` shows and what's under it (``element_texts``)."""
+        return element_texts(element)
 
     # Steps every driver has.
 
@@ -1333,11 +1453,11 @@ class Driver(object):
             return
         if not self.FINDERS:
             seconds = float(value.get("timeout") or 3)
-            ctx.warn("the %s driver can't see elements: waited %g s for %s %r instead" % (
-                self.NAME, seconds, query[0], query[1]))
+            ctx.warn("the %s driver can't see elements: waited %g s for %s instead" % (
+                self.NAME, seconds, describe_query(query, value.get("contains"))))
             sleep(seconds)
             return
-        self.wait_for(ctx, query, value.get("timeout"))
+        self.wait_for(ctx, query, value.get("timeout"), value.get("contains"))
 
     def step_posture(self, ctx, value):
         """``posture``: ``"folded"``, ``"open"`` or ``"half-open"`` (or ``{"posture": …}``) in the middle of a screen's

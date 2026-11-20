@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "src/SampleRecipes/bin/Debug/net10.0-ios/iossimulator-arm64/SampleRecipes.app" },
+           "android": { "package": "com.example.samplerecipes", "activity": ".MainActivity", "apk": "src/SampleRecipes/bin/Debug/net10.0-android/com.example.samplerecipes-Signed.apk" } },
+  "appSource": { "repo": "..", "paths": ["src/SampleRecipes/Pages", "src/SampleRecipes/Controls"] },
+  "locales": ["en-US", "de-DE"],
+  "staging": {
+    "account": { "kind": "bypass", "how": "the Debug build's SampleRecipesFakeSession" },
+    "seed": { "kind": "file", "file": "store/demo/recipes.db", "into": { "ios": "Library/Caches/recipes.db", "android": "cache/recipes.db" } },
+    "launch": { "args": { "SampleRecipesFakeSession": "demo" }, "env": { "SampleRecipesFakeSession": "demo" } },
+    "network": { "kind": "offline" },
+    "confirmed": { "screen": "plan", "device": "iphone-6.9", "on": "2026-09-30", "by": "the user, in chat" }
+  },
+  "devices": [
+    { "id": "iphone-6.9", "platform": "ios", "driver": "appium", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max" } },
+    { "id": "fold-open", "platform": "android", "driver": "appium", "width": 2076, "height": 2152, "posture": "open",
+      "layout": "wide", "target": { "avd": "appstores-fold" } }
+  ],
+  "screens": [
+    { "id": "plan", "state": "this week's plan, five invented dinners", "sources": ["src/SampleRecipes/Pages/PlanPage.xaml"],
+      "steps": [ { "launch": {} }, { "wait": { "id": "plan-title" } } ], "verify": { "text": "Lemon Pasta" } },
+    { "id": "servings", "state": "Lemon Pasta scaled to 12 servings, the ingredients updated",
+      "sources": ["src/SampleRecipes/Pages/RecipePage.xaml"],
+      "steps": [ { "launch": {} }, { "tap": { "id": "recipe-lemon-pasta" } },
+                 { "tap": { "xpath": "//XCUIElementTypeNavigationBar/XCUIElementTypeButton[not(@name)]" }, "name": "menu" },
+                 { "tap": { "text": "Scale servings" } },
+                 { "type": { "id": "servings-field", "text": "12" }, "name": "amount" },
+                 { "hideKeyboard": true } ],
+      "verify": [ { "id": "ingredients" }, { "keyboard": "hidden" } ],
+      "overrides": { "android": { "stepsPatch": [ { "replace": "menu", "with": [ { "tap": { "label": "More options" } } ] } ] } } },
+    { "id": "shopping", "state": "the week's shopping list, nothing ticked", "sources": ["src/SampleRecipes/Pages/ShoppingPage.xaml"],
+      "steps": [ { "launch": {} }, { "tap": { "id": "tab-shopping" } } ], "verify": { "id": "shopping-list" } }
+  ]
+}

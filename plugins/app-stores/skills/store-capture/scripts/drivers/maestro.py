@@ -84,6 +84,7 @@ class MaestroDriver(HostedDriver):
     FINDERS = ("id", "text", "label")
     HOST_STEPS = ()
     POSTURE_SETTING = True   # the device's posture is set by the host before the flow runs
+    CONTAINS = False         # a flow's selectors can't say "this element, or one under it, shows that text"
 
     def __init__(self, options=None):
         """Set up."""

@@ -44,7 +44,8 @@ def applescript_string(text):
 
 def find_script(process, finder, wanted, action):
     """AppleScript that finds the first element of ``process``'s front window by ``finder`` and either clicks it
-    (``action="click"``) or returns its ``x,y,w,h`` in points (``"bounds"``); ``missing`` when there's none.
+    (``action="click"``), returns its ``x,y,w,h`` in points (``"bounds"``) or what it and everything in it show
+    (``"texts"``: ``texts:`` then one name, description, title or value a line); ``missing`` when there's none.
     ``text`` and ``label`` match as every driver's do: the whole of a name, description, title or value
     (AppleScript's ``is`` ignores case), then, when nothing is, a part of one (``contains``)."""
     if finder == "id":
@@ -56,10 +57,24 @@ def find_script(process, finder, wanted, action):
             w, w, w, w),
             "(name of e contains %s) or (description of e contains %s) or (title of e contains %s) or "
             "(value of e contains %s)" % (part, part, part, part)]
-    act = "click e\n          return \"clicked\"" if action == "click" else (
-        "set p to position of e\n          set s to size of e\n"
-        "          return (item 1 of p as text) & \",\" & (item 2 of p as text) & \",\" & "
-        "(item 1 of s as text) & \",\" & (item 2 of s as text)")
+    if action == "click":
+        act = "click e\n          return \"clicked\""
+    elif action == "texts":
+        reads = "".join('            try\n'
+                        '              set out to out & linefeed & (%s of x as text)\n'
+                        '            end try\n' % prop for prop in ("name", "description", "title", "value"))
+        act = ('set out to "texts:"\n'
+               '          set them to {e}\n'
+               '          try\n'
+               '            set them to them & (entire contents of e)\n'
+               '          end try\n'
+               '          repeat with x in them\n%s'
+               '          end repeat\n'
+               '          return out' % reads)
+    else:
+        act = ("set p to position of e\n          set s to size of e\n"
+               "          return (item 1 of p as text) & \",\" & (item 2 of p as text) & \",\" & "
+               "(item 1 of s as text) & \",\" & (item 2 of s as text)")
     loops = "".join('  repeat with e in (entire contents of window 1)\n'
                     '    try\n'
                     '      if %s then\n'
@@ -217,6 +232,19 @@ class MacOSDriver(base.Driver):
             return None
         x, y, w, h = (int(v) for v in m.groups())
         return base.Element(id=str(query[1]), bounds=(x, y, x + w, y + h))
+
+    def find_containing(self, ctx, query, wanted):
+        """The element ``query`` finds, when it or anything in it shows ``wanted`` (its name, description, title or
+        value: ``find_script``'s ``texts``); ``None`` otherwise."""
+        if base.DRY_RUN:
+            return self.find(ctx, query)
+        out = self.osascript(find_script(self.process, query[0], query[1], "texts"), check=False, timeout=60)
+        if not out.startswith("texts:"):
+            return None
+        texts = [t for t in out[len("texts:"):].splitlines() if t and t != "missing value"]
+        if not base.texts_contain(texts, wanted):
+            return None
+        return base.Element(id=str(query[1]), attrs={"texts": texts})
 
     def step_tap(self, ctx, value):
         """Click an element (Accessibility's ``click``), or ``{x, y}`` in the picture's pixels within the window."""

@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import base64
 import json
+import xml.etree.ElementTree as ET
 
 from . import base
 from .hosted import HostedDriver, type_target
@@ -90,6 +91,29 @@ def xpaths(attr, wanted):
     return [("xpath", "//*[@%s=%s]" % (attr, _lit(wanted))),
             ("xpath", "//*[%s=%s]" % (folded, _lit(trimmed))),
             ("xpath", "//*[contains(translate(@%s, '%s', '%s'), %s)]" % (attr, UPPER, LOWER, _lit(trimmed)))]
+
+
+def source_elements(root, family):
+    """Every node of a page source as a ``base.Element`` (with its node), its id and text read the way the
+    family's Appium driver names them: Android's ``resource-id``, ``text`` and ``content-desc``; iOS's ``name``
+    (the accessibility identifier), ``label`` and ``value``; a Mac's ``identifier`` and ``title``; Windows'
+    ``AutomationId`` and ``Name``."""
+    out = []
+    for node in root.iter():
+        a = node.attrib
+        if family == "android":
+            e = base.Element(id=a.get("resource-id"), text=a.get("text"), label=a.get("content-desc"),
+                             bounds=base.parse_bounds(a.get("bounds", "")), attrs=a, node=node)
+        elif family == "ios":
+            e = base.Element(id=a.get("name"), text=a.get("label") or a.get("value"), label=a.get("label"),
+                             attrs=a, node=node)
+        elif family == "mac":
+            e = base.Element(id=a.get("identifier"), text=a.get("title") or a.get("value") or a.get("label"),
+                             label=a.get("label"), attrs=a, node=node)
+        else:
+            e = base.Element(id=a.get("AutomationId"), text=a.get("Name"), label=a.get("Name"), attrs=a, node=node)
+        out.append(e)
+    return out
 
 
 def language_of(locale):
@@ -434,6 +458,7 @@ class AppiumDriver(HostedDriver):
     def step_tap(self, ctx, value):
         """Find the element, then ``/element/<id>/click``; a point (``x``, ``y`` in the screenshot's pixels,
         ``target.pointScale`` to convert to the session's points) is a W3C pointer tap."""
+        self.before_tap(ctx)
         if isinstance(value, dict) and "x" in value and "y" in value:
             self.pointer(ctx, [(value["x"], value["y"])], 0)
             return
@@ -584,6 +609,19 @@ class AppiumDriver(HostedDriver):
     def inspect_tree(self, ctx):
         """The page source (``GET /session/<id>/source``: XCUITest's or UiAutomator2's XML), for writing steps."""
         return self.wd(ctx.device, "GET", self.sid() + "/source", timeout=120, dry_value="") or ""
+
+    def find_containing(self, ctx, query, wanted):
+        """An element ``query`` finds that shows ``wanted``, read from the page source once: the element's own
+        label or value (iOS), text or content-desc (Android), title (Mac), Name (Windows), or a descendant's. The
+        source is the XML Appium's own xpath runs over, so a plan's xpath finds the same elements."""
+        if base.DRY_RUN:
+            return self.find(ctx, query)
+        xml = self.inspect_tree(ctx)
+        try:
+            root = ET.fromstring(xml)
+        except (ET.ParseError, TypeError, ValueError):
+            return base.Driver.find_containing(self, ctx, query, wanted)
+        return base.first_containing(root, source_elements(root, self.family(ctx.device)), query, wanted)
 
     def agent_screenshot(self, device, path):
         """``GET /session/<id>/screenshot``: a base64 PNG at the device's pixels."""

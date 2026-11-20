@@ -547,6 +547,19 @@ class AgentCliDriver(HostedDriver):
             return None
         return element_from(items[0])
 
+    def find_containing(self, ctx, query, wanted):
+        """An element ``query`` finds that shows ``wanted`` (its text or value, or a descendant's), read from the
+        agent's whole tree once; ``css`` through the agent's own query, then the element's own texts."""
+        if base.DRY_RUN or query[0] == "css":
+            return base.Driver.find_containing(self, ctx, query, wanted)
+        root, nodes = tree_to_xml(self.tree(ctx.device))
+        elements = []
+        for node, item in nodes.items():
+            e = element_from(item)
+            e.node = node
+            elements.append(e)
+        return base.first_containing(root, elements, query, wanted)
+
     def element_id(self, ctx, query, timeout=None):
         """The agent's id for the element ``query`` names, waiting for it to appear."""
         el = self.wait_for(ctx, query, timeout if timeout is not None else 10)
@@ -571,6 +584,7 @@ class AgentCliDriver(HostedDriver):
         query = base.element_query(value)
         if query is None:
             raise base.StepFailed("step %d: tap needs an element (id, text, css or xpath)" % ctx.index)
+        self.before_tap(ctx)
         timeout = (value or {}).get("timeout")
         args = self.finder_args(query) if query[0] in ("id", "text") else None
         if args is not None:

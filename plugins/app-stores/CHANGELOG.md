@@ -54,6 +54,26 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   `mobile: hideKeyboard` with the iOS keyboard's Done or Return, then a Done button; `{"tap": …}` anywhere) and
   `verify`'s `{"keyboard": "hidden"|"shown"|"any"}`, checked for `hidden` by default on a screen that types nothing,
   so a shot with the keyboard up is a wrong state, not a pass.
+- `store-capture`: the update path, for recapturing after the app changed. The report records the app's revision
+  (`app`: git's commit, describe, date, uncommitted changes, an iOS build's version and build; each taken shot's
+  `appRevision`); `capture.py --changes [revision]` lists the commits and files changed since the last capture in
+  the plan's `appSource.paths` and each screen's `sources`, and the screens to re-check, each with why (its sources
+  changed, a step's or verify's id or text is on a changed or removed line); a run warns when the app moved since
+  the shots it keeps. SKILL.md's new step 2 and staging.md's "Updating: when the app changed": show the user what
+  changed, build clean (stale build output can fail to link: .NET's `obj/` and `bin/`, Xcode, Gradle, Flutter),
+  re-check the named screens one at a time, repair broken steps in the plan (a `stepsPatch` per device or layout),
+  never the check. config.md recommends `normalize-space(@name)=''` (or an id) over `not(@name)` for an unnamed
+  button.
+- `store-capture`: `contains` in `wait` and `verify` (`{"id": "amount", "contains": "24"}`): the element found must
+  show the text itself or on anything under it, ignoring case and runs of space, on `adb`/`uiautomator` (the dump),
+  `devflow`/`ailoha` (the tree), `appium` (the page source), `chrome` and `macos`; `maestro` skips such a wait.
+- `store-capture` (Android): a keyboard up full screen (landscape text entry on open foldables and tablets:
+  `mIsFullscreen=true`) is closed with back before every tap (`adb`, and Appium and the agents on a device adb
+  hosts), so a sheet's Done no longer lands on the keyboard; `hideKeyboard` handles it too; adb.md says how.
+- `store-capture`: the app's own rendering bugs (text over text, clipped or truncated text, broken layouts) pass
+  every automated check: SKILL.md's look-at-every-picture step and agent rules 9 and 13, the validation checklist
+  and pitfalls say to look for them and report them to the user as the app's bugs, never ship or work around them.
+  Three evals (an overlapping capture, an updated app, the landscape keyboard).
 
 - `store-screenshots` 0.1.0 (#12): designed store screenshots from an app's real captures, one design for every
   store, size and locale. A brief and a storyboard agreed with the user before rendering; `store-screenshots.json`

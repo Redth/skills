@@ -369,6 +369,55 @@
         "The agent explains why a relayed or agent message isn't the user's approval",
         "The agent says how confirmed will be recorded once the user answers (screen, device, on, by)"
       ]
+    },
+    {
+      "id": 23,
+      "prompt": "The nutrition screen is captured on the iPhone and the Android phone (evals/files/overlapping-text/captures) and capture.py exited 0. Everything passed, so hand the set on to store-screenshots.",
+      "expected_output": "The agent opens both pictures at full size before handing anything on and sees that on the iPhone each value and its 'days ago' are drawn over each other (520 kcal / today, 24 g / 1 day ago, and so on), while the Android picture is fine. It reports this to the user as the app's rendering bug (the shot's path, what overlaps, on which platform), says every automated check passed it (verify, stateCheck passed, statusBar verified, sizes) because the elements are there, and keeps the iPhone picture out of what's handed on until the app is fixed. It doesn't work around the bug (another screen, shorter data, a crop, using the Android picture for the iPhone slot) without the user deciding, and doesn't call the set done.",
+      "files": [
+        "evals/files/overlapping-text/capture-plan.json",
+        "evals/files/overlapping-text/captures/capture-report.json",
+        "evals/files/overlapping-text/captures/en-US/iphone-6.9/nutrition.png",
+        "evals/files/overlapping-text/captures/en-US/android-phone/nutrition.png"
+      ],
+      "expectations": [
+        "The agent looks at both pictures at full size rather than trusting the exit code and the report",
+        "The agent finds that the iPhone picture draws each value over its 'days ago' text, and that the Android one is fine",
+        "The agent reports it to the user as the app's bug, with the shot's path and what's wrong",
+        "The agent does not hand the iPhone picture on to store-screenshots as a finished capture",
+        "The agent does not work around the bug (another screen, shorter data, cropping, the other platform's picture) without the user deciding"
+      ]
+    },
+    {
+      "id": 24,
+      "prompt": "We've merged a couple of months of work into the app since the last store screenshots (the plan and last report are in evals/files/app-updated). Recapture everything with the same setup.",
+      "expected_output": "Before running the plan the agent finds what changed: capture.py --changes (from the report's appRevision, in appSource.paths and the screens' sources), and shows the user the commits, the files changed and the screens to re-check, asking whether any shot is new or gone. It builds the app clean before the first capture (stale build output can fail to link: delete the target framework's obj/ and bin/ for iOS and Android, or dotnet clean), then a dry run, then re-checks the named screens one at a time (--screens <one> --devices <one> --inspect). A step that fails is reported as missed with the step and element, the previous picture kept and called stale; the agent repairs it in the plan (the base steps, or a stepsPatch for one device or layout, keeping step names) and never loosens or removes a verify. It may point out that the menu's not(@name) xpath is fragile (normalize-space(@name)='' or an id). It keeps staging (no new confirmation needed unless the staging changed), writes staging.md again, runs the rest, and looks at every picture.",
+      "files": [
+        "evals/files/app-updated/capture-plan.json",
+        "evals/files/app-updated/captures/capture-report.json"
+      ],
+      "expectations": [
+        "The agent runs capture.py --changes (or the equivalent git log and diff from the report's revision) before recapturing",
+        "The agent shows the user what changed and which screens may be affected before the full run",
+        "The agent builds the app clean before the first capture after the update",
+        "The agent re-checks the affected screens one at a time before running everything",
+        "Broken steps are repaired in the plan (base steps or a stepsPatch), never by weakening verify",
+        "The agent keeps the agreed staging and writes staging.md again after changing the plan"
+      ]
+    },
+    {
+      "id": 25,
+      "prompt": "On the open foldable (landscape) the servings screen keeps missing: after typing 12, the number sheet's Done tap does nothing, hideKeyboard then closes the keyboard but the sheet stays, and verify misses the ingredients. iOS and the phone are fine. Our plan is evals/files/app-updated/capture-plan.json. What's going on and how do we fix it?",
+      "expected_output": "The agent explains that Android puts the keyboard full screen (extract mode) for text entry in landscape, so the Done tap landed on the keyboard rather than the sheet. The adb host now closes a full-screen keyboard (back, only while dumpsys input_method says it's up and mIsFullscreen=true) before every tap, for adb, Appium and the agents on a device adb hosts; it says how to check it by hand (dumpsys input_method, mInputShown and mIsFullscreen). Where the input method doesn't report it, the fix is a hideKeyboard before the Done tap for that layout only (a stepsPatch on the 'wide' layout or the android platform, using the step's name), not a copy of the whole steps, and not loosening verify.",
+      "files": [
+        "evals/files/app-updated/capture-plan.json"
+      ],
+      "expectations": [
+        "The agent identifies Android's full-screen (extract-mode) landscape keyboard as the cause",
+        "The agent says the driver closes a full-screen keyboard before a tap, pressing back only while it's up",
+        "The agent gives a stepsPatch fallback (hideKeyboard before the tap) scoped to the layout or platform, not a full copy of the steps",
+        "The agent does not weaken or remove the screen's verify"
+      ]
     }
   ]
 }

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "build/SampleRecipes.app" },
+           "android": { "package": "com.example.samplerecipes", "activity": ".MainActivity", "apk": "build/app-Signed.apk" } },
+  "locales": ["en-US"],
+  "staging": {
+    "account": { "kind": "bypass", "how": "the Debug build's SampleRecipesFakeSession" },
+    "seed": { "kind": "file", "file": "store/demo/recipes.db", "into": { "ios": "Library/Caches/recipes.db", "android": "cache/recipes.db" } },
+    "launch": { "args": { "SampleRecipesFakeSession": "demo" }, "env": { "SampleRecipesFakeSession": "demo" } },
+    "network": { "kind": "offline" },
+    "confirmed": { "screen": "nutrition", "device": "iphone-6.9", "on": "2026-10-02", "by": "the user, in chat" }
+  },
+  "devices": [
+    { "id": "iphone-6.9", "platform": "ios", "driver": "appium", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max" } },
+    { "id": "android-phone", "platform": "android", "driver": "appium", "width": 1080, "height": 1920,
+      "target": { "avd": "appstores-android-phone", "wmSize": "1080x1920", "density": 420 } }
+  ],
+  "screens": [
+    { "id": "nutrition", "state": "Lemon Pasta's nutrition per serving, five values, each with when it was last cooked",
+      "steps": [ { "launch": {} }, { "tap": { "id": "recipe-lemon-pasta" } }, { "tap": { "id": "tab-nutrition" } } ],
+      "verify": [ { "id": "nutrition-card" }, { "id": "protein-value", "contains": "24 g" } ] }
+  ]
+}

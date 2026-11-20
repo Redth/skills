@@ -30,5 +30,7 @@
   {"query": "Record a tutorial video of our app for YouTube with my voice-over.", "should_trigger": false},
   {"query": "My Android emulator won't boot. Can you fix it?", "should_trigger": false},
   {"query": "Take a screenshot of this website's homepage for our pitch deck.", "should_trigger": false},
-  {"query": "Make a new app icon for our iPhone app.", "should_trigger": false}
+  {"query": "Make a new app icon for our iPhone app.", "should_trigger": false},
+  {"query": "We updated the app a lot since the last store screenshots. What changed for the screenshots, and can you recapture them?", "should_trigger": true},
+  {"query": "The text on our iOS results screen overlaps after the redesign; fix the layout in the XAML.", "should_trigger": false}
 ]

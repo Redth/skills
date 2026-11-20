@@ -18,6 +18,9 @@
     "flatten": { "$ref": "#/$defs/flatten" },
     "posture": { "$ref": "#/$defs/posture" },
     "staging": { "$ref": "#/$defs/staging" },
+    "appSource": { "$comment": "The app's source checkout, for what changed since the last capture (capture.py --changes) and the revision each shot was taken at (the report's app and appRevision): repo (its folder, relative to the plan; default the plan's own) and paths (the folders and files the staged screens are drawn by, relative to repo; with each screen's sources, what --changes looks at).", "type": "object", "additionalProperties": false, "properties": {
+      "$comment": { "type": "string" }, "repo": { "type": "string", "minLength": 1 },
+      "paths": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } } } },
     "devices": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/device" } },
     "screens": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/screen" } }
   },
@@ -124,6 +127,7 @@
         "id": { "$ref": "#/$defs/id" },
         "state": { "$comment": "What the screen must show, in plain words (whose data, which state): agreed with the user; in staging.md and the report.", "type": "string", "minLength": 1 },
         "verify": { "$ref": "#/$defs/verify" },
+        "sources": { "$comment": "The app's files (or folders) that draw this screen, relative to appSource.repo: capture.py --changes names the screen when one changed since the last capture.", "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
         "staging": { "$comment": "false: this screen gets neither the staging's seed nor its launch values (an onboarding screen, say).", "type": "boolean" },
         "devices": { "$comment": "Only these devices (ids). Default: every device.", "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
         "platforms": { "$comment": "Only devices of these platforms.", "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/platform" } },
@@ -179,13 +183,28 @@
       },
       "additionalProperties": false
     },
+    "elementCheck": {
+      "$comment": "An element to wait for or verify: one of id, text, label, xpath or css, and optionally contains (text the element shows, itself or anything under it: an iOS label, an Android child's text; ignoring case and runs of space).",
+      "type": "object",
+      "properties": {
+        "$comment": { "type": "string" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "xpath": { "type": "string", "minLength": 1 },
+        "css": { "type": "string", "minLength": 1 },
+        "contains": { "type": "string", "minLength": 1 },
+        "timeout": { "$comment": "Seconds to wait for it. Default 10 (a wait), 5 (verify).", "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
     "argValue": { "type": ["string", "number", "boolean"] },
     "envName": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
     "stringOrList": { "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "array", "minItems": 1, "items": { "type": "string" } } ] },
     "appPath": { "$comment": "A path inside the app's own data: iOS relative to its data container (Library/Caches/app.db), Android to /data/data/<package> (files/app.db, cache/app.db); one, or one per platform.", "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } } ] },
     "keyboardCheck": { "$comment": "The on-screen keyboard: hidden (the default for a screen that types nothing, where the driver can tell), shown, or any (not checked).", "type": "object", "required": ["keyboard"], "additionalProperties": false, "properties": {
       "$comment": { "type": "string" }, "keyboard": { "enum": ["hidden", "shown", "any"] }, "timeout": { "type": "number", "minimum": 0 } } },
-    "verifyCheck": { "anyOf": [ { "$ref": "#/$defs/element" }, { "$ref": "#/$defs/keyboardCheck" } ] },
+    "verifyCheck": { "anyOf": [ { "$ref": "#/$defs/elementCheck" }, { "$ref": "#/$defs/keyboardCheck" } ] },
     "verify": { "$comment": "An element (or a list), and the keyboard's state, that must be so before the shot; otherwise the shot is missed, 'wrong state'. A driver that can't see elements reports it unchecked.", "anyOf": [ { "$ref": "#/$defs/verifyCheck" }, { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/verifyCheck" } } ] },
     "staging": {
       "$comment": "How the app is staged for the captures, agreed with the user before the plan is run (references/staging.md). capture.py puts launch and seed into every screen, grants the permissions, checks the account's variables are set, and captures more than one screen only once confirmed is set; capture.py --write-staging writes it readable as staging.md.",
@@ -261,7 +280,7 @@
             { "type": "number", "minimum": 0 },
             { "type": "object", "required": ["ms"], "additionalProperties": false, "properties": {
               "$comment": { "type": "string" }, "ms": { "type": "number", "minimum": 0 } } },
-            { "$ref": "#/$defs/element" }
+            { "$ref": "#/$defs/elementCheck" }
           ] } } },
         { "type": "object", "required": ["scroll"], "additionalProperties": false, "properties": {
           "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },

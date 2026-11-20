@@ -181,6 +181,13 @@ class HostedDriver(base.Driver):
         h = self.host(ctx.device)
         return h.keyboard_shown(ctx) if h is not None else None
 
+    def before_tap(self, ctx):
+        """Before a tap: a keyboard up full screen (Android's landscape text entry) covers the app, so the host
+        (adb) closes it first, or a touch meant for a button behind it would land on the keyboard."""
+        h = self.host(ctx.device)
+        if h is not None and hasattr(h, "clear_fullscreen_keyboard") and getattr(h, "serial", None):
+            h.clear_fullscreen_keyboard(ctx)
+
     def hide_keyboard(self, ctx, value):
         """The host closes the keyboard when it can (adb: the back key, only while the keyboard is up)."""
         h = self.host(ctx.device)
