@@ -694,8 +694,7 @@ def design_finding(store, name, entry, where, message):
         severity = "warning"
         message = "%s (unverified design rule: %s%s)" % (message, status,
                                                          ", checked " + entry["checked"] if entry.get("checked") else "")
-    snake = re.sub(r"([A-Z])", lambda m: "_" + m.group(1).lower(), name)
-    return rules.Finding("%s.design.%s" % (store, snake), severity, where, message, entry.get("source"), status)
+    return rules.Finding(rules.design_rule_id(store, name), severity, where, message, entry.get("source"), status)
 
 
 # ---------------------------------------------------------------------------------------------------------

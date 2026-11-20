@@ -1352,7 +1352,8 @@ def _live_apple_pictures(m, folder, plats, primary):
                     pictures.append((src, loc, key, slot))
                     names[src] = item.get("fileName") or os.path.basename(src)
                     counts.setdefault((platform, key), collections.Counter())[loc] += 1
-                    if item.get("md5") and item.get("downloadedMd5") and item["md5"] != item["downloadedMd5"]:
+                    if item.get("reencoded") or (item.get("md5") and item.get("downloadedMd5")
+                                                 and item["md5"] != item["downloadedMd5"]):
                         copies += 1
                         copied_slots.add(key)
     _import_apple_screenshots(m, pictures, names, primary)
@@ -1363,7 +1364,7 @@ def _live_apple_pictures(m, folder, plats, primary):
         if (key in copied_slots or uneven) and key not in keep:
             keep.append(key)
     if keep and m.set(["stores", "apple", "keep"], keep):
-        m.notes.append("stores.apple.keep lists %s: their pictures are App Store Connect's own copies (re-encoded, "
+        m.notes.append("stores.apple.keep lists %s: their pictures are the App Store's own copies (re-encoded, "
                        "not the uploads) or differ by locale in a way the config's fallback can't say, so push.py "
                        "plan leaves those slots as the store has them. Take a slot out of keep once its pictures are "
                        "the originals or the new set" % ", ".join(keep))
@@ -1381,7 +1382,7 @@ def _live_apple_pictures(m, folder, plats, primary):
                            "1 picture is" if sum(reference.values()) == 1 else "%d pictures are" % sum(reference.values()),
                            _shown(folder), ", ".join("%s %d" % kv for kv in reference.items())))
     if copies:
-        m.notes.append("%d screenshot%s copied in %s App Store Connect's own cop%s, not the file%s uploaded "
+        m.notes.append("%d screenshot%s copied in %s the App Store's own cop%s, not the file%s uploaded "
                        "(their slots are in stores.apple.keep)" % (
                            copies, "" if copies == 1 else "s", "is" if copies == 1 else "are", "y" if copies == 1 else "ies",
                            "" if copies == 1 else "s"))
@@ -1545,6 +1546,9 @@ def main(args):
         for store, (folder, doc) in live.items():
             for line in listing_live.describe(doc):
                 out.write("  %s\n" % line)
+        for store in [st for st in listing_live.STORES if st not in live]:
+            for line in listing_live.not_pulled(store, m.path, m.data):
+                out.write("%s\n" % line)
         out.write("Next: look at the draft with the user and decide what to keep, then listing.py diff --config %s "
                   "--existing %s shows what a new listing would change; listing.py check --config %s\n"
                   % (_shown(m.path), args.path, _shown(m.path)))

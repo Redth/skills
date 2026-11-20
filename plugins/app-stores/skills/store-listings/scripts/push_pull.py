@@ -1,7 +1,7 @@
 """``push.py pull``: read what's live on a store into ``existing/<store>/``. Read-only, like ``plan``.
 
     python3 push.py pull apple  [--out existing] [--config store-listing.json] [--id BUNDLE_ID] [--public]
-                                [--country us,gb,de]
+                                [--country us,gb,de] [--thumbnails]
     python3 push.py pull google [--out existing] [--config store-listing.json] [--id PACKAGE]
 
 With the store's key (the same environment variables ``plan`` uses) it reads the listing through the store's
@@ -9,7 +9,10 @@ API: App Store Connect's app information and each platform's version words, cate
 App Review's notes (never its contact), and the screenshots and previews per slot and locale; Google Play's
 listings per language, contact details and images (inside an edit it opens and deletes, as ``plan`` does).
 ``--public`` (Apple only, no key) reads Apple's public iTunes Lookup API instead: the name, description,
-release notes, categories, seller and the screenshots' URLs, per storefront country.
+release notes, categories, seller and the screenshots, per storefront country. The lookup names each picture
+at the small size the web page shows (``…/01.png/392x696bb.jpg``); the same address with a bigger box serves it
+at the upload's own size, which is what the pull downloads (``--thumbnails`` keeps the page's small copies). Each
+picture's size is checked against the rules' App Store sizes.
 
 It writes ``existing/<store>/listing.json`` (the store's shape in the contract's ``listing.json`` vocabulary),
 ``existing/<store>/screenshots/<locale>/<slot>/<NN>.<ext>`` (and ``previews/``), and ``existing/<store>/README.md``.
@@ -35,6 +38,15 @@ from appstores_lib import jsonio, locales, png, web  # noqa: E402
 import push  # noqa: E402  (push.py makes this its own module when it runs)
 
 LOOKUP = "https://itunes.apple.com/lookup"
+RULES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "rules")
+
+# An mzstatic picture address ends in the box the page asked for (``392x696bb.jpg``, ``552x0w.png``). Asked for a
+# box bigger than any upload, the image service answers at the upload's own size (it never enlarges).
+_SIZE_SEGMENT = re.compile(r"^\d+x\d+[a-z]*\.(jpe?g|png|webp)$", re.IGNORECASE)
+FULL_SIZE_BOX = "9999x9999bb"
+# The public lookup's device folders -> the App Store platform and slot kind whose sizes they should have
+PUBLIC_KINDS = {"iphone": ("IOS", "phone"), "ipad": ("IOS", "tablet"), "apple-tv": ("TV_OS", "tv"),
+                "mac": ("MAC_OS", "desktop")}
 
 # The hosts a pull may reach: the stores' APIs, Apple's public lookup, and the stores' own image hosts.
 API_HOSTS = ("api.appstoreconnect.apple.com", "oauth2.googleapis.com", "androidpublisher.googleapis.com",
@@ -152,19 +164,20 @@ class Pulled(object):
         if text not in self.notes:
             self.notes.append(text)
 
-    def download(self, url, rel_stem, ext=None):
+    def download(self, url, rel_stem, ext=None, failed=None):
         """GET a picture or video from the stores' hosts into ``<rel_stem>.<ext>``; ``(rel path, bytes)`` or
-        ``(None, None)`` (noted) when it can't be had."""
+        ``(None, None)`` when it can't be had, the reason added to ``failed`` (default: the pull's ``failed``)."""
+        failed = self.failed if failed is None else failed
         if not allowed(url):
-            self.failed.append("%s: not one of the stores' hosts, not fetched (%s)" % (rel_stem, _host(url)))
+            failed.append("%s: not one of the stores' hosts, not fetched (%s)" % (rel_stem, _host(url)))
             return None, None
         try:
             res = push.send("the store's image host", "GET", url, {"Accept": "*/*"}, retry=True, timeout=300)
         except push.Failure as e:
-            self.failed.append("%s: %s" % (rel_stem, e.message))
+            failed.append("%s: %s" % (rel_stem, e.message))
             return None, None
         if res.status >= 400 or 300 <= res.status < 400:
-            self.failed.append("%s: %s answered %d" % (rel_stem, _host(url), res.status))
+            failed.append("%s: %s answered %d" % (rel_stem, _host(url), res.status))
             return None, None
         data = res.body
         ext = _extension(data, res.header("content-type"), url, ext)
@@ -229,6 +242,7 @@ def readme(doc):
     if doc.get("notPublic"):
         lines += ["**Not in the public data:** %s. Pull with the store's key to read them (`references/existing.md`)."
                   % ", ".join(doc["notPublic"]), ""]
+        lines += _public_pictures_readme(doc)
     if doc.get("notes"):
         lines += ["## Notes", ""] + ["- " + n for n in doc["notes"]] + [""]
     if doc.get("failed"):
@@ -445,6 +459,95 @@ def _genres(result):
               ("secondarySubcategories", []))
 
 
+def full_size_url(url):
+    """The same mzstatic picture at the upload's own size (the size box swapped for one bigger than any upload,
+    in the upload's own format), or None when the address doesn't end in a size box."""
+    parts = urllib.parse.urlsplit(url or "")
+    if not (parts.hostname or "").lower().endswith("mzstatic.com"):
+        return None
+    segments = parts.path.split("/")
+    if len(segments) < 3 or not _SIZE_SEGMENT.match(segments[-1]):
+        return None
+    name = _uploaded_name(url)
+    segments[-1] = "%s.%s" % (FULL_SIZE_BOX, "jpg" if name and re.search(r"\.jpe?g$", name, re.IGNORECASE) else "png")
+    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, "/".join(segments), parts.query, ""))
+
+
+def _store_size(size, folder, slots):
+    """The App Store display type a public picture's pixel size fills, for its device folder (or None)."""
+    import listing  # the size rules live with the check
+    if None in size or folder not in PUBLIC_KINDS:
+        return None
+    platform, kind = PUBLIC_KINDS[folder]
+    for key, slot in slots.items():
+        if isinstance(slot, dict) and slot.get("platform") == platform and slot.get("kind") == kind \
+                and listing.fits(size, slot.get("sizes") or [], slot.get("orientation")):
+            return key
+    return None
+
+
+def _public_picture(pulled, url, stem, folder, slots, thumbnails):
+    """Download one public picture: at the upload's size (falling back to the page's copy), else the page's copy.
+    Returns its ``listing.json`` entry."""
+    fetched = None if thumbnails else full_size_url(url)
+    rel = None
+    if fetched:
+        why = []
+        rel, _ = pulled.download(fetched, stem, failed=why)
+        if rel is None:
+            pulled.note("%s: the upload-size copy couldn't be had (%s), so the page's smaller copy was downloaded"
+                        % (stem, "; ".join(w.split(": ", 1)[-1] for w in why)))
+            fetched = None
+    elif not thumbnails:
+        pulled.note("%s: its address doesn't end in a size (%s), so it was downloaded as the page has it"
+                    % (stem, urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1]))
+    if rel is None:
+        rel, _ = pulled.download(url, stem)
+    w, h = pulled.size(rel) if rel else (None, None)
+    entry = od(("file", rel), ("url", url), ("fileName", _uploaded_name(url)), ("width", w), ("height", h))
+    if fetched:
+        entry["fetchedUrl"] = fetched
+    if rel:
+        entry["storeSize"] = _store_size((w, h), folder, slots)
+        entry["reencoded"] = True
+    return entry
+
+
+def _public_pictures_readme(doc):
+    """README lines on what the public pictures are: the store's own re-encoded copies, at which sizes."""
+    items = [i for P in ((doc.get("apple") or {}).get("platforms") or {}).values()
+             for by_slot in (P.get("screenshots") or {}).values() for shots in (by_slot or {}).values()
+             for i in shots or [] if i.get("file")]
+    if not items:
+        return []
+
+    def sizes(group, slot=False):
+        return ", ".join(sorted(set("%sx%s%s" % (i["width"], i["height"], " " + i["storeSize"] if slot else "")
+                                    for i in group)))
+
+    def count(group):
+        return "%d %s" % (len(group), "is" if len(group) == 1 else "are")
+
+    full = [i for i in items if i.get("storeSize")]
+    odd = [i for i in items if not i.get("storeSize") and i.get("fetchedUrl")]
+    small = [i for i in items if not i.get("storeSize") and not i.get("fetchedUrl")]
+    lines = ["**The pictures** are the App Store's own copies, re-encoded by Apple (not the files that were "
+             "uploaded)."]
+    if full:
+        lines.append(" %s at an App Store size (%s): `listing.py import --from live` copies them into the config and "
+                     "lists their slots in `stores.apple.keep`, so a plan leaves the store's pictures as they are. "
+                     "Take a slot out of `keep` once the new set's pictures are in it; never send these copies back."
+                     % (count(full), sizes(full, True)))
+    if odd:
+        lines.append(" %s at the upload's size but no App Store size (%s): kept here as a reference for the "
+                     "current set." % (count(odd), sizes(odd)))
+    if small:
+        lines.append(" %s the web page's smaller copies (%s), kept here as a reference for the current set "
+                     "(`--thumbnails` asks for these; the notes say when an upload-size copy couldn't be had)."
+                     % (count(small), sizes(small)))
+    return ["".join(lines), ""]
+
+
 def _uploaded_name(url):
     """The uploaded file's name an mzstatic URL carries (``…/iPhone_1_Hero.png/320x480bb.jpg``), or None."""
     parts = [urllib.parse.unquote(p) for p in urllib.parse.urlsplit(url or "").path.split("/") if p]
@@ -453,8 +556,11 @@ def _uploaded_name(url):
     return None
 
 
-def pull_public(ident, countries, pulled):
-    """Read Apple's public lookup, one storefront country at a time, into the pulled folder."""
+def pull_public(ident, countries, pulled, thumbnails=False):
+    """Read Apple's public lookup, one storefront country at a time, into the pulled folder. The pictures come at
+    the uploads' own size unless ``thumbnails`` (the web page's small copies)."""
+    from appstores_lib import rules
+    slots = rules.load("apple", RULES_DIR).slots
     out = od(("appId", None), ("bundleId", None if ident.isdigit() else ident), ("primaryLocale", None))
     app = od(("state", "READY_FOR_SALE"), ("categories", od()), ("ageRating", od()), ("localizations", od()))
     platforms = od()
@@ -503,12 +609,8 @@ def pull_public(ident, countries, pulled):
             urls = [u for u in (r.get(key) or []) if isinstance(u, str)]
             if not urls:
                 continue
-            items = []
-            for i, url in enumerate(urls, 1):
-                rel, data = pulled.download(url, "screenshots/%s/%s/%02d" % (code, slot, i))
-                w, h = pulled.size(rel) if rel else (None, None)
-                items.append(od(("file", rel), ("url", url), ("fileName", _uploaded_name(url)), ("width", w),
-                                ("height", h)))
+            items = [_public_picture(pulled, url, "screenshots/%s/%s/%02d" % (code, slot, i), slot, slots, thumbnails)
+                     for i, url in enumerate(urls, 1)]
             target = platforms.setdefault(plat, od(("version", r.get("version")), ("state", "READY_FOR_SALE"),
                                                    ("copyright", None), ("localizations", od()), ("screenshots", od()),
                                                    ("previews", od())))
@@ -516,8 +618,17 @@ def pull_public(ident, countries, pulled):
     if out["appId"] is None:
         raise push.Failure("Apple's public lookup has no app %s in %s: it may not be live, or not in those "
                            "storefronts (try --country)." % (ident, ", ".join(c for c, _ in countries)))
-    pulled.note("The public pictures are the App Store web page's copies, at the size that page shows (often smaller "
-                "than the uploads), so they're a reference for the current set, not files to send again")
+    shots = [i for P in platforms.values() for by_slot in P["screenshots"].values() for items in by_slot.values()
+             for i in items if i.get("file")]
+    if thumbnails:
+        pulled.note("The public pictures are the App Store web page's small copies (--thumbnails), so they're a "
+                    "reference for the current set, not files to send again")
+    elif shots:
+        odd = sorted(set("%sx%s (%s)" % (i["width"], i["height"], i["file"].split("/")[-2]) for i in shots
+                         if not i.get("storeSize")))
+        pulled.note("The public pictures were downloaded at the uploads' own size, as the App Store re-encoded them: "
+                    "the current set (import keeps their slots as the store has them), not files to send again%s"
+                    % ("; at no App Store size: " + ", ".join(odd) if odd else ""))
     pulled.note("The public data doesn't say which display type a picture fills: its slot folders are by device "
                 "(iphone, ipad, apple-tv, mac)")
     if app["categories"].get("primary"):
@@ -584,6 +695,9 @@ def cmd_pull(args):
                          "Play Console into the config by hand.")
     if args.country and not (store == "apple" and args.public):
         raise push.Usage("--country is for pull apple --public (a storefront's public words).")
+    if getattr(args, "thumbnails", False) and not (store == "apple" and args.public):
+        raise push.Usage("--thumbnails is for pull apple --public (the web page's small copies of the pictures).")
+    args.thumbnails = bool(getattr(args, "thumbnails", False))
     ident = args.id or ((ids.get("apple") or {}).get("bundleId") or (ids.get("apple") or {}).get("appId")
                         if store == "apple" else (ids.get("google") or {}).get("package"))
     if not ident:
@@ -607,7 +721,7 @@ def cmd_pull(args):
         web.REDIRECT_ALLOWED = allowed
         if store == "apple" and args.public:
             say("Reading the App Store's public pages (%s; %s)..." % (ident, ", ".join(c for c, _ in countries)))
-            doc = pull_public(ident, countries, pulled)
+            doc = pull_public(ident, countries, pulled, thumbnails=args.thumbnails)
         elif store == "apple":
             client = push.AppleClient.from_env(auth)
             say("Reading the store (%s, App Store Connect)..." % ident)

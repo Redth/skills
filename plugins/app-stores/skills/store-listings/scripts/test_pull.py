@@ -44,12 +44,19 @@ def jpeg_bytes(width, height):
     return b"\xff\xd8" + app0 + sof + b"\xff\xd9"
 
 
-def drawn(path):
-    """What an image host serves for a path naming ``WxHbb.png`` (a PNG) or ``.jpg`` (a JPEG); None otherwise."""
+def drawn(path, originals=None):
+    """What an image host serves for a path naming ``WxHbb.png`` (a PNG) or ``.jpg`` (a JPEG); None otherwise. A
+    box at least as big as the upload's own size (``originals``: the path before the box -> ``[w, h]``) is served
+    at the upload's size, as Apple's image service does; a box over 4000 px with no upload recorded is None."""
     m = re.search(r"/(\d+)x(\d+)bb\.(png|jpg)$", path)
     if not m:
         return None
     w, h = int(m.group(1)), int(m.group(2))
+    original = (originals or {}).get(path.rsplit("/", 1)[0])
+    if original and w >= original[0] and h >= original[1]:
+        w, h = original
+    elif max(w, h) > 4000:
+        return None
     if m.group(3) == "jpg":
         return jpeg_bytes(w, h)
     colour = PALETTE[int(hashlib.md5(path.rsplit("/", 1)[0].encode()).hexdigest(), 16) % len(PALETTE)]
@@ -61,9 +68,12 @@ class FakeNet(object):
 
     def __init__(self, *fixtures):
         self.routes = {}
+        self.originals = {}
         for name in fixtures:
             with open(os.path.join(FIXTURES, name), encoding="utf-8") as f:
-                self.routes.update(json.load(f)["routes"])
+                data = json.load(f)
+            self.routes.update(data["routes"])
+            self.originals.update((k, v) for k, v in (data.get("originals") or {}).items() if not k.startswith("$"))
         self.requests = []
         self.unknown = []
 
@@ -83,7 +93,7 @@ class FakeNet(object):
         if method == "GET" and (host.endswith("mzstatic.com") or host.endswith("googleusercontent.com")):
             if parts.path.endswith(".mp4"):
                 return web.Response(200, {"Content-Type": "video/mp4"}, b"\x00\x00\x00\x18ftypmp42synthetic")
-            data = drawn(parts.path)
+            data = drawn(parts.path, self.originals)
             if data is None:
                 return web.Response(404, {}, b"")
             return web.Response(200, {"Content-Type": "image/png" if data[:4] == b"\x89PNG" else "image/jpeg"},
@@ -300,6 +310,22 @@ class AppleKeys(PullCase):
         self.assertIsNone(web.REDIRECT_ALLOWED)
 
 
+class FullSizeUrl(unittest.TestCase):
+    def test_the_size_box_becomes_the_uploads_own(self):
+        base = "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/aa/bb/"
+        cases = {base + "01.png/320x480bb.jpg": base + "01.png/9999x9999bb.png",
+                 base + "shot.jpg/392x696bb.jpg": base + "shot.jpg/9999x9999bb.jpg",
+                 base + "pr_source.png/552x0w.webp": base + "pr_source.png/9999x9999bb.png",
+                 base + "no-name/406x228bb.jpg": base + "no-name/9999x9999bb.png"}
+        for url, full in cases.items():
+            self.assertEqual(push_pull.full_size_url(url), full)
+
+    def test_an_address_with_no_size_box_or_elsewhere_isnt_changed(self):
+        for url in ("https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/aa/01.png",
+                    "https://example.com/image/01.png/320x480bb.jpg", "", None):
+            self.assertIsNone(push_pull.full_size_url(url))
+
+
 class Hosts(unittest.TestCase):
     def test_only_the_stores_hosts(self):
         for url in ("https://api.appstoreconnect.apple.com/v1/apps", "https://itunes.apple.com/lookup?id=1",
@@ -337,10 +363,71 @@ class ApplePublic(PullCase):
         ios = A["platforms"]["IOS"]
         self.assertEqual(ios["localizations"]["de-DE"]["description"], "Plane eine Woche voller Mahlzeiten in Minuten.")
         shots = ios["screenshots"]["en-US"]["iphone"]
-        self.assertEqual([s["file"] for s in shots], ["screenshots/en-US/iphone/01.jpg", "screenshots/en-US/iphone/02.jpg"])
+        self.assertEqual([s["file"] for s in shots], ["screenshots/en-US/iphone/01.png", "screenshots/en-US/iphone/02.png"])
         self.assertEqual([s["fileName"] for s in shots], ["01_week.png", "02_recipe.png"])
-        self.assertEqual((shots[0]["width"], shots[0]["height"]), (392, 696))
         self.assertEqual(d["public"]["us"]["sellerName"], "Example Studio")
+
+    def test_public_pictures_come_at_the_uploads_size(self):
+        """The lookup names 392x696 copies; the same addresses with a bigger box serve the uploads' own size, which
+        is what's downloaded, checked against the rules' App Store sizes and marked as the store's copies."""
+        code, text = self.push("pull", "apple", "--public", "--id", "com.example.samplerecipes")
+        self.assertEqual(code, 0, text)
+        d = self.pulled()
+        ios = d["apple"]["platforms"]["IOS"]["screenshots"]["en-US"]
+        week = ios["iphone"][0]
+        self.assertEqual(week["url"], "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/p1/01_week.png/392x696bb.jpg")
+        self.assertEqual(week["fetchedUrl"],
+                         "https://is1-ssl.mzstatic.com/image/thumb/Example/v4/p1/01_week.png/9999x9999bb.png")
+        self.assertEqual((week["width"], week["height"], week["storeSize"]), (1290, 2796, "APP_IPHONE_67"))
+        self.assertTrue(week["reencoded"])
+        ipad = ios["ipad"][0]
+        self.assertEqual((ipad["width"], ipad["height"], ipad["storeSize"]), (2064, 2752, "APP_IPAD_PRO_3GEN_129"))
+        from appstores_lib import png
+        info = png.info(os.path.join(self.tmp, "existing", "apple", week["file"]))
+        self.assertEqual((info.format, info.width, info.height), ("png", 1290, 2796))
+        self.assertTrue(all(urllib.parse.urlsplit(u).hostname in ("itunes.apple.com", "is1-ssl.mzstatic.com")
+                            for _, u, _, _ in self.net.requests))
+        self.assertFalse(any(u.endswith("392x696bb.jpg") for _, u, _, _ in self.net.requests),
+                         "the small copies aren't fetched when the full size comes")
+        self.assertTrue(any("uploads' own size" in n for n in d["notes"]), d["notes"])
+        with open(os.path.join(self.tmp, "existing", "apple", "README.md"), encoding="utf-8") as f:
+            readme = f.read()
+        self.assertIn("re-encoded by Apple", readme)
+        self.assertIn("1290x2796 APP_IPHONE_67", readme)
+        self.assertIn("stores.apple.keep", readme)
+
+    def test_thumbnails_keeps_the_pages_small_copies(self):
+        code, text = self.push("pull", "apple", "--public", "--id", "com.example.samplerecipes", "--thumbnails")
+        self.assertEqual(code, 0, text)
+        shot = self.pulled()["apple"]["platforms"]["IOS"]["screenshots"]["en-US"]["iphone"][0]
+        self.assertEqual((shot["file"], shot["width"], shot["height"]), ("screenshots/en-US/iphone/01.jpg", 392, 696))
+        self.assertIsNone(shot["storeSize"])
+        self.assertNotIn("fetchedUrl", shot)
+        self.assertFalse(any("9999x9999" in u for _, u, _, _ in self.net.requests))
+        with open(os.path.join(self.tmp, "existing", "apple", "README.md"), encoding="utf-8") as f:
+            self.assertIn("the web page's smaller copies (392x696, 576x768)", f.read())
+
+    def test_thumbnails_is_only_for_the_public_pull(self):
+        for argv in (("pull", "apple", "--id", "com.example.samplerecipes", "--thumbnails"),
+                     ("pull", "google", "--id", "com.example.samplerecipes", "--thumbnails")):
+            code, text = self.push(*argv)
+            self.assertEqual(code, 3, text)
+            self.assertIn("--thumbnails is for pull apple --public", text)
+        self.assertEqual(self.net.requests, [])
+
+    def test_an_upload_size_copy_that_cant_be_had_falls_back_to_the_pages(self):
+        del self.net.originals["/image/thumb/Example/v4/t1/ipad-week.png"]
+        code, text = self.push("pull", "apple", "--public", "--id", "com.example.samplerecipes")
+        self.assertEqual(code, 0, text)
+        d = self.pulled()
+        ipad = d["apple"]["platforms"]["IOS"]["screenshots"]["en-US"]["ipad"][0]
+        self.assertEqual((ipad["width"], ipad["height"], ipad["storeSize"]), (576, 768, None))
+        self.assertNotIn("fetchedUrl", ipad)
+        self.assertEqual(d["failed"], [])
+        self.assertTrue(any("upload-size copy couldn't be had" in n and "answered 404" in n for n in d["notes"]),
+                        d["notes"])
+        iphone = d["apple"]["platforms"]["IOS"]["screenshots"]["en-US"]["iphone"][0]
+        self.assertEqual(iphone["storeSize"], "APP_IPHONE_67")
 
     def test_google_has_no_public_listing(self):
         code, text = self.push("pull", "google", "--public", "--id", "com.example.samplerecipes")
@@ -468,7 +555,7 @@ class ImportLive(PullCase):
         self.assertEqual(d["stores"]["google"]["slots"]["tablet7"], "android-tablet")
         self.assertEqual(d["stores"]["google"]["slots"]["tablet10"], "android-tablet")
         self.assertEqual(d["stores"]["google"]["graphics"]["icon"], "graphics/icon.png")
-        self.assertIn("App Store Connect's own copies", out)  # a plan would replace the store's with them
+        self.assertIn("the App Store's own copies", out)  # a plan would replace the store's with them
         self.assertIn("TV_OS has only en-US on the store", out)
         self.assertEqual(d["stores"]["apple"]["platforms"]["TV_OS"]["locales"], ["en-US"])
         self.assertNotIn("locales", d["stores"]["apple"]["platforms"]["IOS"])
@@ -500,10 +587,59 @@ class ImportLive(PullCase):
         self.assertIn("Kept what the config already had", out)
         self.assertIn("locales.en-US.apple.subtitle", out)
 
-    def test_public_pictures_stay_as_the_reference(self):
+    def test_public_pictures_come_in_with_their_slots_kept(self):
+        """Full-size public pictures go into the config's layout, and their slots into stores.apple.keep: they're
+        the store's re-encoded copies, so a plan leaves the store's own alone."""
         self.net = FakeNet("itunes-lookup.json")
         with mock.patch.object(web, "TRANSPORT", self.net):
             code, text = self.push("pull", "apple", "--public", "--id", "com.example.samplerecipes")
+        self.assertEqual(code, 0, text)
+        out = self.imp()
+        d = self.data()
+        self.assertEqual([s["id"] for s in d["screenshots"]["shots"]], ["week", "recipe"])
+        self.assertEqual(sorted(d["stores"]["apple"]["keep"]), ["APP_IPAD_PRO_3GEN_129", "APP_IPHONE_67"])
+        self.assertEqual(sorted(d["screens"]), ["ipad", "iphone"])
+        self.assertTrue(os.path.isfile(os.path.join(self.tmp, "screenshots", "en-US", "iphone", "week.png")))
+        self.assertIn("the App Store's own copies", out)
+        self.assertIn("subtitle, keywords, promotionalText", out)
+
+    def test_a_store_not_pulled_is_said_with_what_its_listing_needs(self):
+        """Only the App Store pulled: the summary says Play wasn't, how to read it, and what a Play listing needs
+        (from Play's rules), before the check reports every missing field at once."""
+        self.net = FakeNet("itunes-lookup.json")
+        with mock.patch.object(web, "TRANSPORT", self.net):
+            code, text = self.push("pull", "apple", "--public", "--id", "com.example.samplerecipes")
+        self.assertEqual(code, 0, text)
+        out = self.imp()
+        self.assertIn("Google Play wasn't pulled", out)
+        self.assertIn("push.py pull google", out)
+        block = out.split("Google Play wasn't pulled", 1)[1].split("Next:", 1)[0]
+        for need in ("stores.google (enabled: true", "app.ids.google.package", "locales.en-US.google.title",
+                     "locales.en-US.google.shortDescription", "app.contact.email", "app.urls.privacy",
+                     "stores.google.graphics.icon (512x512)", "stores.google.graphics.featureGraphic (1024x500)",
+                     "locales.en-US.altText.featureGraphic", "stores.google.slots", "at least 2 screenshots"):
+            self.assertIn(need, block)
+        self.assertNotIn("google.fullDescription", block, "the shared description already fills it")
+        self.assertNotIn("App Store wasn't pulled", out)
+
+    def test_the_app_store_not_pulled_is_said_too(self):
+        code, text = self.push("pull", "google", "--id", "com.example.samplerecipes")
+        self.assertEqual(code, 0, text)
+        out = self.imp()
+        self.assertIn("App Store wasn't pulled. If the app is on the App Store, read it first: push.py pull apple", out)
+        block = out.split("App Store wasn't pulled", 1)[1].split("Next:", 1)[0]
+        for need in ("For an App Store listing", "app.ids.apple.bundleId", "app.urls.support",
+                     "stores.apple.categories.primary", "stores.apple.platforms"):
+            self.assertIn(need, block)
+
+    def test_both_stores_pulled_says_nothing_of_the_kind(self):
+        self.pull_both()
+        self.assertNotIn("wasn't pulled", self.imp())
+
+    def test_public_thumbnails_stay_as_the_reference(self):
+        self.net = FakeNet("itunes-lookup.json")
+        with mock.patch.object(web, "TRANSPORT", self.net):
+            code, text = self.push("pull", "apple", "--public", "--id", "com.example.samplerecipes", "--thumbnails")
         self.assertEqual(code, 0, text)
         out = self.imp()
         d = self.data()

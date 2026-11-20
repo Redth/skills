@@ -169,14 +169,15 @@
     {
       "id": 12,
       "prompt": "We don't have App Store Connect API keys or a Play service account set up yet. Get what's on our store pages now for com.example.samplerecipes so we can start from it.",
-      "expected_output": "The agent runs push.py pull apple --public (no key needed), reports what it got and clearly what the public data lacks (subtitle, keywords, promotional text and the rest of notPublic), explains that Google Play has no public listing API (a key is needed, or the user pastes the words), imports the App Store words as a draft, and doesn't ask for or handle secrets in the chat.",
+      "expected_output": "The agent runs push.py pull apple --public (no key needed), reports what it got and clearly what the public data lacks (subtitle, keywords, promotional text and the rest of notPublic), explains that Google Play has no public listing API (a key is needed, or the user pastes the words), imports the App Store words and the full-size screenshots as a draft (their slots kept as the store has them), says what a Play listing still needs, and doesn't ask for or handle secrets in the chat.",
       "files": [],
       "expectations": [
         "The agent runs push.py pull apple --public with the bundle id (optionally --country for other storefronts)",
         "The agent says plainly that the subtitle, keywords and promotional text are not public and weren't read (and that a key would read them)",
         "The agent explains Google Play needs the service account's key for pull google, or the user can paste the words; it doesn't scrape Play's web page or another site",
-        "The agent explains the public screenshots are the store page's smaller copies, a reference for the current set rather than files to send",
+        "The agent explains the public screenshots were downloaded at the uploads' own size but are the App Store's re-encoded copies: the current set, which the import puts in stores.apple.keep so a plan leaves the store's pictures alone, not files to send back as originals",
         "The agent runs listing.py import --from live existing/ (or offers to) and reports the summary of what's live",
+        "The agent passes on the import's note that Google Play wasn't pulled and what a Play listing still needs (title, short description, contact email, privacy URL, icon, feature graphic and its alt text, screenshots for Play's slots), rather than leaving the check to list them all",
         "The agent doesn't ask the user to paste a key, token or password into the chat; keys are set as environment variables",
         "Only Apple's own hosts are reached (itunes.apple.com and its mzstatic.com image CDN); nothing is sent to a store"
       ]
@@ -206,6 +207,20 @@
         "The agent doesn't claim a de-DE Apple TV listing or a copyright change: the diff shows neither (Apple TV has only en-US, stores.apple.platforms.TV_OS.locales)",
         "The agent runs listing.py check and build (or says they come next) and push.py plan apple, and presents the plan",
         "The agent does not run push.py apply: sending waits for the user's go-ahead after the plan"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "listing.py check on evals/files/relax-design/store-listing.json warns about our rules.relax. We relaxed Play's advice against device frames because our designer frames every shot, and the featuring recommendation for now. Are our relaxations right?",
+      "expected_output": "The agent runs listing.py check and reads the relaxations: google.design.frames is a screenshot design rule (store-screenshots' check honours it), listed as relaxed with the user's reason, so it's fine; google.screenshots.featuring.apps exists nowhere in the rules data and the check suggests google.screenshots.featuring.app. The agent proposes correcting the id (the user's relaxation, their choice) and doesn't touch the rules data or add relaxations of its own; it also reports the remaining errors (no Play screenshots, icon, feature graphic or its alt text).",
+      "files": ["evals/files/relax-design/store-listing.json"],
+      "expectations": [
+        "The agent runs listing.py check --config evals/files/relax-design/store-listing.json (optionally --stores google)",
+        "The agent says google.design.frames is recognised: a screenshot design rule (from the rules data's design table) that store-screenshots' check.py honours, listed under the relaxed rules with the user's reason",
+        "The agent says google.screenshots.featuring.apps isn't a rule id anywhere in the rules data, so it relaxes nothing (the featuring warning still shows), and points to google.screenshots.featuring.app as the likely id",
+        "The agent proposes fixing the id in the config's rules.relax (or does it, saying so) rather than removing the warning another way, and keeps the user's reason",
+        "The agent doesn't edit the rules data (rules/google.json) and doesn't add any relaxation the user didn't ask for",
+        "The agent reports the remaining Play errors (no phone screenshots, the icon, the feature graphic and its alt text) as things to fix in the config or pictures"
       ]
     }
   ]

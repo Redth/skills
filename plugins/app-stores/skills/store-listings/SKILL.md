@@ -72,11 +72,13 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
    before writing a word ([references/existing.md](references/existing.md)).
    - **Pull it:** `push.py pull apple` and `push.py pull google` with the keys (`--id` or the config's `app.ids`
      name the app). Without Apple's key, `push.py pull apple --public [--country us,de]` reads what the App Store
-     shows anyone. Say what that lacks: the subtitle, keywords and promotional text aren't public. Google has no
+     shows anyone, its screenshots at the uploads' own size (the App Store's re-encoded copies; `--thumbnails` for the
+     page's small ones). Say what that lacks: the subtitle, keywords and promotional text aren't public. Google has no
      public API: it needs the key, or the user pastes the words. `pull` only reads (on Google it opens an edit and
      deletes it).
    - **Import it as the draft:** `listing.py import --from live existing/`. It never overwrites a value the config
-     already has, and prints a summary of what's live (locales, lengths, pictures per slot).
+     already has, and prints a summary of what's live (locales, lengths, pictures per slot), naming a store it
+     didn't pull and what a listing there still needs.
    - **Look at it with the user and decide what to keep** before changing anything: read the words back, open the
      pictures. The live screenshots (`existing/<store>/screenshots/`) are the current set: hand them to the
      screenshots work as the starting point. The import lists the slots holding the store's own copies in

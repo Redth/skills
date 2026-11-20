@@ -1,5 +1,5 @@
 {
-  "$comment": "Synthetic iTunes Lookup API answers for push.py pull --public's tests (the invented Sample Recipes app). The us and gb storefronts give the same words (no en-GB listing); fr has none. Pictures at *.mzstatic.com are drawn by the test at the size their URL names (WxHbb.jpg is drawn as a JPEG).",
+  "$comment": "Synthetic iTunes Lookup API answers for push.py pull --public's tests (the invented Sample Recipes app). The us and gb storefronts give the same words (no en-GB listing); fr has none. Pictures at *.mzstatic.com are drawn by the test at the size their URL names (WxHbb.jpg is drawn as a JPEG), or at the upload's size in originals when the URL asks for a box at least that big.",
   "routes": {
     "GET itunes.apple.com/lookup?bundleId=com.example.samplerecipes&country=us": {
       "status": 200,
@@ -162,5 +162,20 @@
         "results": []
       }
     }
+  },
+  "originals": {
+    "$comment": "The uploads' own sizes: the fake image host serves a picture at this size when asked for a box at least as big (as Apple's image service does: it never enlarges).",
+    "/image/thumb/Example/v4/p1/01_week.png": [
+      1290,
+      2796
+    ],
+    "/image/thumb/Example/v4/p2/02_recipe.png": [
+      1290,
+      2796
+    ],
+    "/image/thumb/Example/v4/t1/ipad-week.png": [
+      2064,
+      2752
+    ]
   }
 }
