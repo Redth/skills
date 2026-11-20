@@ -41,24 +41,25 @@ from appstores_lib import chrome  # noqa: E402
 from appstores_lib import jsonio  # noqa: E402
 from appstores_lib import png  # noqa: E402
 from appstores_lib import schema  # noqa: E402
+import frames  # noqa: E402
 import styles  # noqa: E402
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILL_DIR = os.path.dirname(SCRIPTS_DIR)
 TEMPLATES_DIR = os.path.join(SKILL_DIR, "templates")
-FRAMES_DIR = os.path.join(SKILL_DIR, "frames")
+FRAMES_PY = os.path.join(SCRIPTS_DIR, "frames.py")
 SCHEMA_PATH = os.path.join(SKILL_DIR, "schema", "store-screenshots.schema.json")
 PAGE = os.path.join(TEMPLATES_DIR, "set.html")
 REPORT_NAME = "render-report.json"
 
 # Bumped when the way a job is built changes, so old renders aren't taken as current.
-RENDERER_VERSION = "1"
+RENDERER_VERSION = "2"
 
 EXIT_OK = 0
 EXIT_ERRORS = 1
 EXIT_USAGE = 3
 
-LAYOUTS = ("fullbleed", "band", "framed", "framed-bleed", "tilt", "pair", "callout", "hero", "gameplay")
+LAYOUTS = ("fullbleed", "band", "framed", "framed-bleed", "tilt", "pair", "callout", "hero", "gameplay", "fold")
 DEFAULT_LAYOUT = "framed-bleed"
 DEFAULT_FRAME = "phone"
 CAPTURE_EXTS = (".png", ".jpg", ".jpeg")
@@ -66,7 +67,12 @@ RTL_LANGUAGES = ("ar", "arc", "ckb", "dv", "fa", "he", "iw", "ks", "ku", "ps", "
 # 9.5u starts a tall slot's caption at about 11 pt in Apple's search row; 7u is about 12 pt on the product page
 # (references/legibility.md, from the screenshot-craft measurements).
 DEFAULT_CAPTION = {"placement": "top", "align": "center", "maxLines": 2, "weight": 800, "sizePct": 9.5,
-                   "floorPct": 7.0, "font": None, "plate": "solid", "case": None}
+                   "floorPct": 7.0, "font": None, "plate": "solid", "case": None, "maxWidthPct": None}
+# A fold's angle between its halves: open (both halves of the inner display seen), and with the outer display
+# shown on the lifted panel's back (under 90, so the back faces the viewer).
+FOLD_ANGLE = 120
+FOLD_ANGLE_OUTER = 70
+
 DEFAULT_PALETTE = {"background": "#101418", "ink": "#FFFFFF", "accent": "#FFC94D"}
 
 
@@ -200,26 +206,34 @@ def semantic_problems(cfg):
         for sid in pano["shots"]:
             if sid not in ids:
                 out.append("panorama names shot %s, which isn't in shots" % sid)
-    for name, spec in list(targets.items()) + [("stores." + k, v) for k, v in (cfg.get("stores") or {}).items()]:
+    places = [(name, spec) for name, spec in targets.items()]
+    places += [("stores." + k, v) for k, v in (cfg.get("stores") or {}).items()]
+    places += [("shot " + s["id"], s) for s in cfg["shots"]]
+    places += [("theme", cfg.get("theme") or {})]
+    for name, spec in places:
         if not isinstance(spec, dict):
             continue
-        frame = spec.get("frame")
-        if isinstance(frame, str) and frame != "none" and not _is_path(frame) and not _builtin_frame(frame):
-            out.append("%s: no frame called %s (drawn frames: %s)" % (name, frame, ", ".join(builtin_frames())))
-    theme_frame = (cfg.get("theme") or {}).get("frame")
-    if isinstance(theme_frame, str) and theme_frame != "none" and not _is_path(theme_frame) \
-            and not _builtin_frame(theme_frame):
-        out.append("theme.frame: no frame called %s (drawn frames: %s)" % (theme_frame, ", ".join(builtin_frames())))
+        problem = frame_problem(spec.get("frame"))
+        if problem:
+            out.append("%s: %s" % (name, problem))
     return out
 
 
+def frame_problem(frame):
+    """What's wrong with a frame setting (a name, a path or an object), or ``None``."""
+    if frame is None or frame == "none":
+        return None
+    if isinstance(frame, dict):
+        if frame.get("art"):
+            return None
+        frame = frame.get("name") or DEFAULT_FRAME
+    if isinstance(frame, str) and not _is_path(frame) and not frames.is_builtin(frame):
+        return "no frame called %s (drawn frames: %s)" % (frame, ", ".join(builtin_frames()))
+    return None
+
+
 def builtin_frames():
-    return sorted(n[:-5] for n in os.listdir(FRAMES_DIR) if n.endswith(".json"))
-
-
-def _builtin_frame(name):
-    return os.path.isfile(os.path.join(FRAMES_DIR, name + ".json")) and \
-        os.path.isfile(os.path.join(FRAMES_DIR, name + ".svg"))
+    return frames.builtin_names()
 
 
 def _is_path(frame):
@@ -286,39 +300,46 @@ class Resolver:
 
     # -- frames
 
-    def frame(self, name, capture_size):
-        """The frame for a capture: ``None`` for none, else a dict for the page. A drawn frame's portrait or
-        landscape variant is picked by the capture's shape."""
-        if name is None or name == "none":
+    def frame(self, spec, capture_size, store=None, device=None, hint=None):
+        """The frame for a capture: ``None`` for none, else a dict for the page. ``spec`` is a drawn frame's name, a
+        path to a maker's device art, or a frame object (``{"name"|"art", ...options}``). A drawn frame is fitted to
+        the capture (frames.py): its screen is the capture's exact size, its class from its name, the capture's
+        shape or the target's ``device``. A maker's art is used as it is, its screen found or read."""
+        if spec is None or spec == "none":
             return None
-        w, h = capture_size
+        options = {}
+        if isinstance(spec, dict):
+            options = dict(spec)
+            if options.get("art"):
+                return self._user_frame(options["art"], options, capture_size)
+            name = options.get("name") or DEFAULT_FRAME
+        else:
+            name = spec
         if _is_path(name):
-            return self._user_frame(name)
-        if w > h and not name.endswith("-landscape") and _builtin_frame(name + "-landscape"):
-            name = name + "-landscape"
-        elif h > w and name.endswith("-landscape") and _builtin_frame(name[: -len("-landscape")]):
-            name = name[: -len("-landscape")]
-        if name not in self._frames:
-            meta = jsonio.load(os.path.join(FRAMES_DIR, name + ".json"))
-            with open(os.path.join(FRAMES_DIR, name + ".svg"), encoding="utf-8") as f:
-                svg = f.read()
-            self._frames[name] = {"name": name, "kind": "svg", "svg": svg, "meta": meta}
-        return self._frames[name]
+            return self._user_frame(name, options, capture_size)
+        w, h = capture_size
+        key = (name, w, h, store, device, hint, jsonio.canonical(options))
+        if key not in self._frames:
+            try:
+                self._frames[key] = frames.fitted(name, w, h, store, device, options, hint)
+            except frames.FrameError as e:
+                raise UnitError(str(e))
+        return self._frames[key]
 
-    def _user_frame(self, rel):
+    def _user_frame(self, rel, options, capture_size):
         path = self.path(rel)
-        meta_path = os.path.splitext(path)[0] + ".json"
         if not os.path.isfile(path):
             raise UnitError("no frame art at %s" % rel)
-        if not os.path.isfile(meta_path):
-            raise UnitError("frame art %s has no JSON beside it (%s) giving its screen"
-                            % (rel, os.path.basename(meta_path)))
-        meta = jsonio.load(meta_path)
-        for key in ("viewBox", "screen"):
-            if key not in meta:
-                raise UnitError("%s: missing %r" % (os.path.basename(meta_path), key))
-        meta.setdefault("drawn", False)
-        return {"name": rel, "kind": "image", "url": file_url(path), "meta": meta, "_files": [path, meta_path]}
+        try:
+            meta = frames.art_meta(path, options)
+        except (frames.FrameError, png.ImageError) as e:
+            raise UnitError(str(e))
+        files = [path]
+        meta_path = os.path.splitext(path)[0] + ".json"
+        if os.path.isfile(meta_path):
+            files.append(meta_path)
+        fit = frames.fit_report(capture_size[0], capture_size[1], meta["screen"])
+        return {"name": rel, "kind": "image", "url": file_url(path), "meta": meta, "fit": fit, "_files": files}
 
     # -- settings
 
@@ -354,7 +375,10 @@ class Resolver:
             style = merged
         if layout == "gameplay":
             words = False
-        return {"layout": layout, "frame": frame, "style": style, "words": words}
+        from_role_store = (target.get("layout") is None and store.get("layout") is None
+                           and role_store.get("layout") is not None and role_store.get("layout") != shot.get("layout"))
+        return {"layout": layout, "frame": frame, "style": style, "words": words,
+                "roleStoreLayout": shot.get("layout") if from_role_store else None}
 
     def shots_for(self, target_id):
         return [s for s in self.cfg["shots"] if s.get("targets") is None or target_id in s["targets"]]
@@ -371,9 +395,25 @@ class Resolver:
         info = png.info(cap_path)
         if cap_fell:
             fallbacks["captures"].append(os.path.relpath(cap_path, self.base))
-        frame = self.frame(st["frame"], (info.width, info.height))
+        notes = []
+        if st.get("roleStoreLayout"):
+            notes.append("the %s role is %s here, not %s: the style gives it that layout on %s (Play wants the app's "
+                         "UI first)" % (shot.get("role") or "shot's", st["layout"], st["roleStoreLayout"],
+                                        target["store"]) if target["store"] == "google" else
+                         "the %s role is %s here, not %s: the style gives it that layout on %s" % (
+                             shot.get("role") or "shot's", st["layout"], st["roleStoreLayout"], target["store"]))
+        frame_spec = st["frame"]
+        if st["layout"] == "fold":
+            frame_spec = self._fold_frame(frame_spec, notes)
+        frame = self.frame(frame_spec, (info.width, info.height), target["store"], target.get("device"),
+                           frames.hint_from_words(target_id, device))
         if frame:
             files.extend(frame.get("_files", []))
+            refused = (frame.get("meta") or {}).get("hardware", {}).get("refused") or []
+            if refused:
+                notes.append("the frame's %s weren't drawn: never on an Apple target (Apple's guidelines forbid "
+                             "simulating its devices' details)" % " and ".join(
+                                 {"buttons": "side buttons", "cutout": "camera cutout"}[r] for r in refused))
         caption = None
         if st["words"]:
             texts = {}
@@ -386,7 +426,8 @@ class Resolver:
                            "placement": style.get("placement"), "align": style.get("align"),
                            "maxLines": style.get("maxLines"), "weight": style.get("weight"),
                            "sizePct": style.get("sizePct"), "floorPct": style.get("floorPct"),
-                           "font": style.get("font"), "plate": style.get("plate"), "case": style.get("case")}
+                           "font": style.get("font"), "plate": style.get("plate"), "case": style.get("case"),
+                           "maxWidthPct": style.get("maxWidthPct")}
         pair = None
         if st["layout"] == "pair" and shot.get("pair"):
             spec = shot["pair"]
@@ -398,19 +439,84 @@ class Resolver:
             if p_fell:
                 fallbacks["captures"].append(os.path.relpath(p_path, self.base))
             p_info = png.info(p_path)
-            p_frame = self.frame(_first(spec.get("frame"), st["frame"]), (p_info.width, p_info.height))
+            p_frame = self.frame(_first(spec.get("frame"), st["frame"]), (p_info.width, p_info.height),
+                                 target["store"], None, frames.hint_from_words(p_device))
             if p_frame:
                 files.extend(p_frame.get("_files", []))
             pair = {"capture": {"url": file_url(p_path), "width": p_info.width, "height": p_info.height},
                     "frame": _page_frame(p_frame)}
+        fold = None
+        if st["layout"] == "fold":
+            fold = self._fold(locale, target, shot, (info.width, info.height), files, fallbacks)
+        tilt, angles = self._tilt(shot, st["layout"])
         return {
             "shot": shot["id"], "layout": st["layout"], "caption": caption,
             "capture": {"url": file_url(cap_path), "width": info.width, "height": info.height},
             "capturePath": os.path.relpath(cap_path, self.base),
             "frame": _page_frame(frame), "pair": pair,
-            "tilt": shot.get("tilt") or ("left" if st["layout"] == "tilt" else None),
+            "tilt": tilt, "tiltAngles": angles,
             "at": shot.get("at"), "callout": shot.get("callout") if st["layout"] == "callout" else None,
+            "fold": fold, "notes": notes,
         }
+
+    def _tilt(self, shot, layout):
+        """A tilt's side and angles: the shot's ``tilt`` (``left``/``right``, or an object with ``side`` and the
+        angles) over the theme's ``tilt`` angles."""
+        if layout != "tilt":
+            return None, None
+        t = shot.get("tilt")
+        side = t.get("side") if isinstance(t, dict) else t
+        angles = {}
+        for layer in ((self.theme.get("tilt") or {}), (t if isinstance(t, dict) else {})):
+            for k in ("y", "x", "z", "perspective"):
+                if isinstance(layer.get(k), (int, float)):
+                    angles[k] = layer[k]
+        return side or "left", angles or None
+
+    @staticmethod
+    def _fold_frame(spec, notes):
+        """A fold draws its own panels from a drawn frame: a foldable's inner display unless the frame object names
+        another class. A maker's art can't be folded (it would be cut and turned), so a fold uses a drawn frame."""
+        if isinstance(spec, dict) and spec.get("art") or (isinstance(spec, str) and _is_path(spec)):
+            notes.append("a maker's device art can't be folded: the fold is drawn in a generic frame")
+            return {"name": "phone", "class": "foldable-inner"}
+        if isinstance(spec, dict):
+            out = dict(spec)
+            out.setdefault("class", "foldable-inner")
+            return out
+        return {"name": spec if isinstance(spec, str) and spec != "none" else "phone", "class": "foldable-inner"}
+
+    def _fold(self, locale, target, shot, size, files, fallbacks):
+        """The fold's settings for the page: the hinge (by the capture's shape unless set), the angle, and the
+        outer display's capture when ``fold.outer`` names one."""
+        spec = dict((self.theme.get("fold") or {}))
+        spec.update(shot.get("fold") or {})
+        w, h = size
+        hinge = spec.get("hinge") or "auto"
+        if hinge == "auto":
+            hinge = "horizontal" if w / float(h) < 0.8 else "vertical"
+        outer = None
+        if spec.get("outer"):
+            o = spec["outer"]
+            if isinstance(o, str):
+                o = {"capture": o}
+            o_path, o_fell = self.find_capture(locale, o.get("device") or target["capture"], o["capture"])
+            files.append(o_path)
+            if o_fell:
+                fallbacks["captures"].append(os.path.relpath(o_path, self.base))
+            o_info = png.info(o_path)
+            o_frame = frames.fitted("phone", o_info.width, o_info.height, options={"class": "foldable-outer"})
+            outer = {"url": file_url(o_path), "width": o_info.width, "height": o_info.height,
+                     "radius": o_frame["meta"]["screenRadius"],
+                     "capturePath": os.path.relpath(o_path, self.base)}
+        angle = spec.get("angle")
+        if not isinstance(angle, (int, float)):
+            angle = FOLD_ANGLE_OUTER if outer else FOLD_ANGLE
+        out = {"hinge": hinge, "angle": angle, "outer": outer}
+        for k in ("turn", "pitch"):
+            if isinstance(spec.get(k), (int, float)):
+                out[k] = spec[k]
+        return out
 
     def theme_job(self, files):
         t = self.theme
@@ -433,7 +539,13 @@ class Resolver:
             p = self.path(t["icon"])
             files.append(p)
             icon = file_url(p)
-        return {"palette": palette, "background": bg, "fonts": fonts, "icon": icon,
+        logo = None
+        hero = t.get("hero") or {}
+        if hero.get("logo"):
+            p = self.path(hero["logo"])
+            files.append(p)
+            logo = {"url": file_url(p), "fit": hero.get("fit") or "wide", "widthPct": hero.get("widthPct")}
+        return {"palette": palette, "background": bg, "fonts": fonts, "icon": icon, "logo": logo,
                 "captionFont": (t.get("caption") or {}).get("font")}
 
     def units(self, locales=None, targets=None, shots=None):
@@ -489,7 +601,8 @@ class Resolver:
                "theme": theme, "panorama": panorama, "slots": slots}
         return {"job": job, "files": sorted(set(files)), "fallbacks": fallbacks,
                 "layout": slots[index]["layout"], "capturePath": slots[index]["capturePath"],
-                "role": shot.get("role"), "tilt": slots[index]["tilt"] if slots[index]["layout"] == "tilt" else None}
+                "role": shot.get("role"), "tilt": slots[index]["tilt"] if slots[index]["layout"] == "tilt" else None,
+                "notes": slots[index].get("notes") or []}
 
     def inputs_hash(self, unit, templates_digest):
         """The hash of everything that goes into one file: the job (with each file's path replaced by its
@@ -500,7 +613,7 @@ class Resolver:
 
         def scrub(v):
             if isinstance(v, dict):
-                return {k: scrub(x) for k, x in v.items() if k != "capturePath"}
+                return {k: scrub(x) for k, x in v.items() if k not in ("capturePath", "notes")}
             if isinstance(v, list):
                 return [scrub(x) for x in v]
             if isinstance(v, str) and v in replace:
@@ -566,6 +679,7 @@ def file_entry(unit, page, out_path, inputs):
         "frame": page.get("frame"),
         "callout": page.get("callout"),
         "captureScale": page.get("captureScale"),
+        "uiShare": page.get("uiShare"),
         "seams": page.get("seams") or [],
         "background": unit.get("background"),
         "lang": page.get("lang"), "dir": page.get("dir"),
@@ -577,6 +691,8 @@ def file_entry(unit, page, out_path, inputs):
     if unit["job"].get("panorama"):
         entry["panorama"] = {"shots": unit["job"]["panorama"]["shots"], "index": unit["job"]["index"],
                              "seam": unit["job"]["panorama"]["seam"]}
+    if unit.get("notes"):
+        entry["notes"] = unit["notes"]
     if page.get("errors"):
         entry["errors"] = page["errors"]
     return entry
@@ -599,7 +715,7 @@ def expected(config_path, style=None, out=None):
     with the render report to tell whether the report is current."""
     cfg = load_config(config_path, style)
     res = Resolver(cfg, config_path, out)
-    templates_digest = sha256_bytes((_dir_digest(TEMPLATES_DIR) + _dir_digest(FRAMES_DIR)).encode("ascii"))
+    templates_digest = sha256_bytes((_dir_digest(TEMPLATES_DIR) + png.sha256(FRAMES_PY)).encode("ascii"))
     found = {}
     for u in res.units():
         found[u["path"]] = None if "error" in u else res.inputs_hash(u, templates_digest)
@@ -629,7 +745,7 @@ def run(config_path, locales=None, targets=None, shots=None, out=None, force=Fal
                 raise UsageError("no %s called %s (the config has: %s)" % (name, w, ", ".join(known)))
     res = Resolver(cfg, config_path, out)
     units = res.units(locales, targets, shots)
-    templates_digest = sha256_bytes((_dir_digest(TEMPLATES_DIR) + _dir_digest(FRAMES_DIR)).encode("ascii"))
+    templates_digest = sha256_bytes((_dir_digest(TEMPLATES_DIR) + png.sha256(FRAMES_PY)).encode("ascii"))
     previous = load_previous(res.out)
 
     todo, entries, errors = [], {}, []
@@ -749,11 +865,14 @@ def _order(cfg):
     locs = list(cfg["locales"])
     tgts = list(cfg["targets"])
     ids = [s["id"] for s in cfg["shots"]]
+    targets = cfg["targets"]
 
     def key(e):
         def idx(seq, v):
             return seq.index(v) if v in seq else len(seq)
-        return (idx(locs, e.get("locale")), idx(tgts, e.get("target")), idx(ids, e.get("shot")), e.get("path", ""))
+        tid = e.get("target")
+        return (idx(locs, e.get("locale")), frames.target_rank(tid, targets.get(tid)), idx(tgts, tid),
+                idx(ids, e.get("shot")), e.get("path", ""))
     return key
 
 

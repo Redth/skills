@@ -60,6 +60,12 @@ in points) and at the product page's size, with its name and traits. The user pi
 words with the calm one's background"). When the user wants the current look kept or evolved, one direction is that
 look written as a style, so they compare like for like.
 
+**Check and sheet an exploration where it is.** `check.py --out design/explore/<name>` and `sheet.py --out
+design/explore/<name> --png` read that folder's render report (its files resolve beside it, and the check uses the
+style it was rendered with); the sheets go in its own `sheets/`. The check looks at the files explored only: counts
+and required sets are the full set's to meet, and the baseline isn't compared. `sheet.py --compare current` sets an
+exploration's shots beside the live set's.
+
 **Drafts.** When the user asks for directions up front, the agent may render them before the brief and storyboard are
 agreed, in the same turn as drafting them from the current set: `sheet.py --directions ... --draft --png` heads the
 page "Drafts for you to correct". Nothing is chosen from drafts until the user answers: no entry in `decisions.md`, no

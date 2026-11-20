@@ -262,6 +262,13 @@ class Pictures(TempDir):
         self.assertIn("Relaxed by the config", out)
         self.assertIn("Two tablet shots for now.", out)
 
+    def test_relaxing_a_screenshot_design_rule_is_not_a_typo(self):
+        config = self.sample()
+        kit.edit_config(config, lambda d: d["rules"]["relax"].append(
+            {"id": "google.design.frames", "reason": "Our frames, by choice."}))
+        _, report = kit.check_json(config)
+        self.assertFalse([f for f in kit.findings(report, "config.relax") if "google.design.frames" in f["message"]])
+
     def test_relaxing_an_unknown_rule_warns(self):
         config = self.sample()
         kit.edit_config(config, lambda d: d["rules"]["relax"].append({"id": "google.no.such_rule", "reason": "x"}))

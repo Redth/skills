@@ -83,6 +83,12 @@ device frame on Play)? Write those in `whatDoesnt`; they're reasons to change, n
   `current.json` exists). With `look: keep`, one direction is the current look written as a style (the nearest
   starting style, its numbers moved to what the set measures), rendered beside the others so the user compares like
   for like; with `replace`, its traits are what to move away from.
+- **Live and new, side by side.** Once something is rendered, `sheet.py --compare current --png` (or `--compare
+  <the live folder>`) puts each new shot beside the live one it replaces: the live set's pictures as they are (no
+  render report needed), the target matched to the live group of its slot or device (a pulled listing's display
+  type, else a folder named for it, else the same kind of device), each shot paired by the screen it shows
+  (`current.json`'s `capture` or `screen`), else by its place. The live words and the user's verdict are under each
+  pair. Groups come App Store first, iPhone before iPad.
 - **Updates later.** None: once a baseline is approved, the baseline is the reference ([baseline.md](baseline.md)).
 
 ## Rules

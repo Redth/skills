@@ -13,6 +13,8 @@
   {"query": "Make the store screenshots for our game: gameplay, no frames, short captions.", "should_trigger": true},
   {"query": "Zoom in on the chart in our stats screenshot so people can read it in the store.", "should_trigger": true},
   {"query": "Is it OK to use Apple's iPhone bezel in our screenshots, tilted?", "should_trigger": true},
+  {"query": "The phone frame on our store screenshots clips the status bar clock. Make the frames fit.", "should_trigger": true},
+  {"query": "Show our app on a foldable, half folded, in the App Store screenshots.", "should_trigger": true},
   {"query": "We have screenshots exported from Figma. Lay them out with captions at every size the App Store needs.", "should_trigger": true},
   {"query": "Make our screenshots match the ones we did last time.", "should_trigger": true},
   {"query": "I like how Headspace's screenshots look. Can ours feel like that?", "should_trigger": true},

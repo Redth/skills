@@ -587,11 +587,12 @@
         "pair",
         "callout",
         "hero",
-        "gameplay"
+        "gameplay",
+        "fold"
       ]
     },
     "role": {
-      "$comment": "What a kind of shot gets: its layout, and optionally its frame, tilt and fullbleed plate side. A shot's own settings win. 'stores' gives the role another layout or frame on one store (a hero that's real UI on Google Play, which wants the app's UI in its first three shots); the config's store and target overrides still beat it.",
+      "$comment": "What a kind of shot gets: its layout, and optionally its frame, tilt (a side, or angles), fold settings and fullbleed plate side. A shot's own settings win. 'stores' gives the role another layout or frame on one store (a hero that's real UI on Google Play, which wants the app's UI in its first three shots); the config's store and target overrides still beat it.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -602,14 +603,30 @@
           "$ref": "#/$defs/layout"
         },
         "frame": {
-          "type": "string",
-          "minLength": 1
+          "$comment": "A drawn frame's name, a path to a maker's art, or a frame object (store-screenshots.schema.json $defs/frame).",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "object"
+            }
+          ]
         },
         "tilt": {
-          "enum": [
-            "left",
-            "right",
-            null
+          "$comment": "left or right, or an object with its side and angles in degrees (y, x, z) and perspective.",
+          "anyOf": [
+            {
+              "enum": [
+                "left",
+                "right",
+                null
+              ]
+            },
+            {
+              "type": "object"
+            }
           ]
         },
         "at": {
@@ -639,8 +656,15 @@
                   "$ref": "#/$defs/layout"
                 },
                 "frame": {
-                  "type": "string",
-                  "minLength": 1
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "object"
+                    }
+                  ]
                 }
               }
             }
@@ -654,6 +678,10 @@
             "null"
           ],
           "minimum": 0
+        },
+        "fold": {
+          "$comment": "fold layout: hinge, angle, outer, turn, pitch (store-screenshots.schema.json $defs/fold).",
+          "type": "object"
         }
       }
     },

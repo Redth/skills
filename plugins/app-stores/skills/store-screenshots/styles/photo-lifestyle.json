@@ -70,6 +70,19 @@
     "pair": {
       "layout": "pair",
       "maxPerSet": 1
+    },
+    "foldable": {
+      "$comment": "A foldable's inner display (an iPhone Duo's, an Android book foldable's) shown partly folded, so the shot says it's made for the device: give the shot targets for those devices only. On Google Play the same capture flat (Play discourages device imagery).",
+      "layout": "fold",
+      "fold": {
+        "angle": 120
+      },
+      "maxPerSet": 2,
+      "stores": {
+        "google": {
+          "layout": "framed-bleed"
+        }
+      }
     }
   },
   "stores": {

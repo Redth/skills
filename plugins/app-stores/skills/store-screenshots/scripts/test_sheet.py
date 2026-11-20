@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_testkit as tk  # noqa: E402
 import sheet  # noqa: E402
 from appstores_lib import chrome  # noqa: E402
+from appstores_lib import jsonio  # noqa: E402
 from appstores_lib import png  # noqa: E402
 
 
@@ -150,6 +151,60 @@ class Pages(SheetCase):
 
 
 @unittest.skipUnless(have_chrome(), "needs Google Chrome or Chromium")
+class Compare(SheetCase):
+    """--compare against the live set (a folder of its pictures, no render report) and sheets for an exploration."""
+
+    def live(self, with_notes=False):
+        root = self.tmp
+        for device, size in (("iphone", (132, 287)), ("android", (108, 192))):
+            for n in (1, 2):
+                tk.write_png(os.path.join(root, "live", device, "Screenshot-%d.png" % n), *size)
+        if with_notes:
+            jsonio.dump({"version": 1, "source": "live", "shots": [
+                {"file": "iphone/Screenshot-1.png", "group": "iphone", "order": 1, "screen": "shopping list",
+                 "capture": "shopping", "caption": "Shop by aisle", "layout": "framed-bleed", "traits": {},
+                 "verdict": "keep", "notes": None},
+                {"file": "iphone/Screenshot-2.png", "group": "iphone", "order": 2, "screen": None, "capture": None,
+                 "caption": None, "layout": None, "traits": {}, "verdict": None, "notes": None}],
+                "summary": {"traits": {}, "look": None, "whatWorks": [], "whatDoesnt": [], "notes": None,
+                            "confirmedByUser": False}}, os.path.join(root, "design", "current.json"))
+
+    def test_the_live_set_needs_no_render_report(self):
+        path = self.set.write()
+        self.live()
+        code, out, err = self.main("--config", path, "--compare", "live")
+        self.assertEqual(code, 0, err)
+        page = self.page("compare-iphone.html")
+        self.assertIn("Live now", page)
+        self.assertIn("../../live/iphone/Screenshot-1.png", page)
+        self.assertIn("paired by its place in the set (#1)", page)
+        self.assertIn("../../live/android/Screenshot-1.png", self.page("compare-android-phone.html"))
+
+    def test_shots_pair_by_the_screen_they_show_from_current_json(self):
+        path = self.set.write()
+        self.live(with_notes=True)
+        code, out, err = self.main("--config", path, "--compare", "current")
+        self.assertEqual(code, 0, err)
+        page = self.page("compare-iphone.html")
+        # "shop" is the third shot but the live set's first: it pairs by its capture, not its place.
+        shop = page.index("<h3>shop")
+        self.assertIn("paired by the same screen (shopping)", page[shop:])
+        self.assertIn("Live now", page[shop:])
+        self.assertIn("live words: &ldquo;Shop by aisle&rdquo;", page)
+        self.assertIn("../../live/iphone/Screenshot-1.png", page[shop:])
+
+    def test_an_explorations_sheets_go_beside_it(self):
+        path = self.set.write()
+        explore = os.path.join(self.tmp, "design", "explore", "a")
+        shutil.copytree(self.set.out, explore)
+        code, out, err = self.main("--config", path, "--out", "design/explore/a")
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.isfile(os.path.join(explore, "sheets", "contact-sheet.html")))
+        with open(os.path.join(explore, "sheets", "contact-sheet.html"), encoding="utf-8") as f:
+            sheet_html = f.read()
+        self.assertLess(sheet_html.index(">iphone "), sheet_html.index(">android-phone "))
+
+
 class Rendering(SheetCase):
     def test_png_sheets(self):
         code, out, err = self.main("--config", self.set.write(), "--png")

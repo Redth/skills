@@ -63,7 +63,10 @@ Framed and cut off by the bottom edge.
 Framed and rotated in 3D (CSS `perspective` with presets), with a soft shadow.
 
 - **Use as an accent:** one shot in a set at most, often the hero, to break a run of identical frames.
-- **Options:** `tilt`: `left` | `right`.
+- **Options:** `tilt`: `left` | `right`, or an object with its `side` and angles in degrees (`y` the turn, `x` the
+  lean back, `z` the roll) and `perspective` (u). The theme's `tilt` sets the angles for the whole set, so a style can
+  match a measured set's angles; a shot's own object varies one shot. Defaults by aspect class are in `tilt.css`
+  (tall: y 20, x 6, z 6, perspective 260).
 - **Cost:** perspective shrinks and skews the UI, which hurts reading at thumbnail size; Play asks that images not
   be "skewed". Never with Apple's own bezel.
 - **Examples:** Calm, Spotify (shots 2 and 3), Todoist and Flighty (one shot each).
@@ -92,17 +95,46 @@ flow).
 
 ### `hero`
 
-The brand and its claim large, a `proof` line, and a sliver of real UI.
+The brand and its claim large, a `proof` line, and real UI: on a tall or mid slot, the app rising from the bottom
+edge under the words; on a wide or square slot (an iPhone Duo's inner display, a landscape tablet), the words in a
+column at the start side and the app beside them, so the shot still shows the app in use rather than a sliver.
 
 - **Use for** shot 1 of a brand visitors already know, or a set whose UI doesn't explain itself.
-- **Options:** `caption` (the claim), `proof` (a short, true, verifiable line), `kicker` (a small line above).
+- **Options:** `caption` (the claim), `proof` (a short, true, verifiable line), `kicker` (a small line above). The
+  brand mark on top is `theme.hero.logo` (`fit`: `wide` draws a wordmark or a logo with words at its own shape, no
+  tile; `tile` as an icon; `widthPct` its widest in u) or else `theme.icon` (a rounded tile).
 - **Rules:** Apple 2.3.3 wants the app in use, not "merely the title art": the sliver of UI is why the layout has
-  one, and more than half the set must still be the app in use (`check.py` counts a `hero` as not in use when it
-  counts). On Play, `check.py` warns about a `hero` among the first three shots: Google asks for UI first there; a
+  one, and more than half the set must still be the app in use (`check.py` counts a `hero` as in use only when
+  its real UI covers 30% of the slot or more, the report's `uiShare`: a side-by-side hero usually does). On Play, `check.py` warns about a `hero` among the first three shots: Google asks for UI first there; a
   style's role can give the hero another layout on Play (`roles.hero.stores.google`, as the starting styles do). `proof` is where unverifiable claims, rankings and
   awards creep in: the check reads it like a caption. Brand art without UI belongs in iOS 27's header or search
   asset, which Apple sanctions for it.
 - **Examples:** Notion ("Your life, beautifully organized."), Headspace and Calm (logo and claim), Uber.
+
+### `fold`
+
+A foldable's inner display shown partly folded: the capture split at the hinge, each half on a panel of the device
+turned about the hinge in 3D, so the halves meet at the seam as one screen. The panels have thickness, a drawn
+generic hinge sits behind the fold, and shading darkens the crease and the far panel. It reads at a glance as "made
+for the foldable".
+
+- **Use for** the shot (or two) of a foldable set that shows the app spread across the inner display: an iPhone
+  Duo's inner display, an Android book foldable's. Give the shot `targets` for those devices only.
+- **Options:** `fold` (or `theme.fold` for the set): `hinge` (`auto`: vertical, left and right halves, unless the
+  capture is clearly portrait, under 0.8, when it folds across; or `vertical` | `horizontal`), `angle` (the angle
+  between the halves: 120 by default, 180 flat), `turn` and `pitch` (the view, degrees), and `outer`: the outer
+  display's capture (a screen id on the same capture device, or `{"capture", "device"}`), shown on the back of a
+  lifted panel; for that the angle must be under 90 (70 by default) so the back faces the viewer, and the inner
+  display shows past it.
+- **Every aspect class:** the words above, the device under them, fitted by its projected size and centred like
+  `framed`; never cut by the slot. The report's frame gives the projected box and `fold` (`hinge`, `angle`, `pose`:
+  `open` | `cover`, `outer`'s box).
+- **Rules:** a drawn frame only (a `foldable-inner` class by default): a maker's art can't be folded. `check.py`
+  warns on a fold of a capture that isn't a foldable's inner display (longer than 1.6:1), and on the outer display
+  at an angle of 90 or more. On Play it's device imagery like any frame: the starting styles' `foldable` role shows
+  the capture flat there.
+- **Examples:** the makers' own foldable marketing (a device half open on its hinge); few app listings use it yet,
+  which is why it stands out in a foldable's slot.
 
 ### `gameplay`
 

@@ -97,10 +97,19 @@ PNGs work renamed into it. A target's `capture` names the device folder, a shot'
   - `floorPct`: the smallest it may shrink to. A caption that won't fit `maxLines` at the floor fails the render.
   - `font`: the family, from `fonts`.
   - `case`: `upper` or `lower` draws the words in that case (the strings stay as written); default as written.
+  - `maxWidthPct`: the caption's widest, as a % of the slot's width (by default the slot less its side margins), to
+    match a measured set's line breaks; the box sits by `align`.
   Sizing: [legibility.md](legibility.md). The defaults are `sizePct` 9.5 and `floorPct` 7 (the size that reads in
   Apple's search row, and about 12 pt on the product page).
-- `frame`: a drawn frame (`phone`, `phone-landscape`, `tablet`, `tablet-landscape`, `laptop`, `desktop`, `tv`,
-  `watch`), `"none"`, or a frame file of the user's own ([frames.md](frames.md)).
+- `frame`: a drawn frame, fitted to each capture (`phone`, `tablet`, `watch`, `tv`, `laptop`, `desktop`, or a class:
+  `phone-classic`, `foldable-outer`, `foldable-inner`; `phone-landscape` and `tablet-landscape` still work),
+  `"none"`, a path to a maker's device art the user brought, or an object with options (`name` or `art`, `class`,
+  `radius`, `bezel`, `buttons`, `cutout`, `finish`, `maker`, `screen`): [frames.md](frames.md).
+- `icon`: the app's icon, a rounded tile on the hero. `hero`: `{ "logo": path, "fit": "wide" | "tile",
+  "widthPct": 56 }`, the brand's own mark on the hero instead (a wordmark at its own shape with `wide`).
+- `tilt`: `{ "y": 14, "x": 4, "z": 3, "perspective": 260 }`, the tilt layout's angles (degrees) for every tilted
+  shot; a shot's `tilt` object overrides them.
+- `fold`: the fold layout's settings for every folded shot (`hinge`, `angle`, `outer`, `turn`, `pitch`).
 
 ## `targets`
 
@@ -112,10 +121,13 @@ Each target is one output screen: one set of files per locale.
 | `store` | whose rules apply: `apple` or `google` |
 | `width`, `height` | its exact pixels: one of the sizes the store takes for that device ([store-rules.md](store-rules.md)) |
 | `capture` | the capture device id whose captures feed it |
+| `device` (optional) | the device class its drawn frames take when the capture's shape doesn't say: `foldable-inner` for a foldable's inner display, `foldable-outer`, `phone-classic`... ([frames.md](frames.md)) |
+| `slot` (optional, Google) | the Play slot it fills when `store-listing.json` doesn't say |
 | `frame`, `layout`, `caption` (optional) | overrides for this target alone: e.g. `"frame": "tablet"` on an iPad, `"caption": false` on Play's tablets |
 
 Which store slot a file fills is decided later by `store-listings`: Apple's by the pixel size, Play's by
-`stores.google.slots`. Two Apple targets at sizes in the same display type would compete for one slot.
+`stores.google.slots`. Once `store-listing.json` gives Play slots, a Google target it puts in none isn't sent, and
+`check.py` counts it in no slot (it guesses a slot only when the listing gives none). Two Apple targets at sizes in the same display type would compete for one slot.
 
 ## `shots`
 
@@ -126,10 +138,11 @@ The set, in order. Each:
 | `id` | **the shot id in `store-listing.json`'s `screenshots.shots`**: the file's name |
 | `capture` | the capture screen id (the file name in each device's folder) |
 | `role` | with a style: one of its roles (`hero`, `feature`, `detail`, `accent`...), which gives the layout when the shot gives none |
-| `layout` | `fullbleed`, `band`, `framed`, `framed-bleed`, `tilt`, `pair`, `callout`, `hero`, `gameplay` ([layouts.md](layouts.md)); beats the role's |
+| `layout` | `fullbleed`, `band`, `framed`, `framed-bleed`, `tilt`, `pair`, `callout`, `hero`, `gameplay`, `fold` ([layouts.md](layouts.md)); beats the role's |
 | `caption`, `kicker`, `proof` | string keys in `strings` (the caption, a small line above it, a proof line under a hero) |
 | `targets` | the target ids it's made for; `null` or absent: all |
-| `tilt` | `left` \| `right`, for `tilt` |
+| `tilt` | `left` \| `right`, for `tilt`; or `{ "side", "y", "x", "z", "perspective" }` with its own angles |
+| `fold` | for `fold`: `{ "hinge", "angle", "outer", "turn", "pitch" }` (over `theme.fold`; [layouts.md](layouts.md)) |
 | `callout` | `{ "rect": [x, y, w, h], "scale": s }`: the part of the capture to enlarge, as fractions of it, and by how much |
 | `pair` | a second capture screen id, for `pair` |
 | `at` | `top` \| `bottom`, where `fullbleed`'s plate sits |
@@ -150,8 +163,9 @@ chooses frames knowing Google's guidance. A target's own overrides win over its 
 
 ## `strings`
 
-`strings.<locale>.<key>`: the words, per locale. A key missing in a locale falls back to the primary locale's, and
-the report marks the file `stringFallback` (`check.py` lists each). No placeholders. Words are checked against each
+`strings.<locale>.<key>`: the words, per locale. `*words*` take the accent colour, `\n` breaks a line, and an accent
+may run across a break (`"Plan your *whole week\nof meals*"`). A key missing in a locale falls back to the primary
+locale's, and the report marks the file `stringFallback` (`check.py` lists each). No placeholders. Words are checked against each
 target store's caption rules (prices, rankings, awards, other platforms): write them for the strictest store a shot
 goes to, or give a store its own key through a separate shot.
 
@@ -163,7 +177,11 @@ goes to, or give a store its own key through a separate shot.
   the picture, the frame's box, fallbacks, seams, a hash). The check and the sheets read it. Rendering is cached on
   the hash of each file's inputs; `render.py --force` renders everything again.
 - `<out>/sheets/*.png` (from `sheet.py --png`): the mock-ups and the contact sheet; `compare-<target>.png` from
-  `sheet.py --compare`.
+  `sheet.py --compare` (against a previous render, the baseline, or the live set's pictures).
+- Per file the report also gives `uiShare` (the share of the slot showing the app's screen), the frame's `class`,
+  `screenRadius` and `corners` (what its rounded corners would have cut, and the radius used), a fold's `fold`, a
+  maker's art's `art` (its scale, its fit, where its screen came from), and `notes` (a hero that's another layout on
+  Play, buttons left off an Apple frame).
 - The report also records the `style` used (path, name, hash, traits), `configSha256`, and per file its `role`,
   `tilt` and `background` (`kind`, `colours`), for the baseline's drift check.
 - `<design>/`: the inspiration, directions, explorations, `decisions.md` and `baseline/` ([baseline.md](baseline.md)).

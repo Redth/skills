@@ -221,6 +221,25 @@ class DecodeTests(PngTestCase):
             png.decode_rgb(self.write("t.png", broken))
 
 
+class AlphaTests(PngTestCase):
+    def test_rgba_and_grey_alpha_give_their_alpha(self):
+        rows = [bytes([1, 2, 3, 0, 4, 5, 6, 128, 7, 8, 9, 255])] * 2
+        path = self.write("a.png", png_bytes(3, 2, 6, rows=rows, filters=[4, 1]))
+        self.assertEqual(png.decode_alpha(path), (3, 2, bytes([0, 128, 255] * 2)))
+        grey = self.write("ga.png", png_bytes(2, 1, 4, rows=[bytes([7, 10, 8, 250])]))
+        self.assertEqual(png.decode_alpha(grey)[2], bytes([10, 250]))
+
+    def test_palette_alpha_comes_from_trns(self):
+        extra = chunk(b"PLTE", bytes([255, 0, 0, 0, 0, 255, 0, 255, 0])) + chunk(b"tRNS", bytes([0, 99]))
+        path = self.write("p.png", png_bytes(3, 1, 3, rows=[bytes([0, 1, 2])], before_idat=extra))
+        self.assertEqual(png.decode_alpha(path)[2], bytes([0, 99, 255]))
+
+    def test_no_alpha_is_opaque(self):
+        self.assertEqual(png.decode_alpha(self.write("rgb.png", png_bytes(2, 2, 2)))[2], b"\xff" * 4)
+        with self.assertRaises(png.ImageError):
+            png.decode_alpha(self.write("a.jpg", jpeg_bytes(2, 2)))
+
+
 class TransparencyTests(PngTestCase):
     def test_an_opaque_alpha_channel_is_not_transparency(self):
         # A 32-bit PNG (what Play asks of an icon) whose every pixel is opaque: an alpha channel, nothing see-through

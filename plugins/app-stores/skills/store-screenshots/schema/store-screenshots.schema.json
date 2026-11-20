@@ -65,11 +65,64 @@
     "path": { "type": "string", "minLength": 1 },
     "pathOrNull": { "anyOf": [ { "type": "null" }, { "type": "string", "minLength": 1 } ] },
     "colour": { "type": "string", "minLength": 3, "maxLength": 64 },
-    "layout": { "enum": ["fullbleed", "band", "framed", "framed-bleed", "tilt", "pair", "callout", "hero", "gameplay"] },
+    "layout": { "enum": ["fullbleed", "band", "framed", "framed-bleed", "tilt", "pair", "callout", "hero", "gameplay", "fold"] },
+    "deviceClass": { "$comment": "A drawn frame's device class (frames.py CLASSES): its bezel and its screen's corner radius.", "enum": ["phone", "phone-classic", "foldable-outer", "foldable-inner", "tablet", "watch", "tv", "laptop", "desktop"] },
     "frame": {
-      "$comment": "A drawn frame (phone, phone-landscape, tablet, tablet-landscape, laptop, desktop, tv, watch: its portrait or landscape variant is picked by the capture's shape), 'none', or a path to a user's own device art (SVG or PNG) with a JSON beside it giving its screen, used as it is.",
-      "type": "string",
-      "minLength": 1
+      "$comment": "A drawn frame, fitted to each capture (phone, tablet, watch, tv, laptop, desktop, or a class: phone-classic, foldable-outer, foldable-inner; phone-landscape and tablet-landscape still work: the orientation follows the capture), 'none', a path to a maker's device art (a PNG whose see-through screen is found, or with a JSON beside it giving its screen), or an object with options.",
+      "anyOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "name": { "$comment": "The drawn frame (default phone).", "type": "string", "minLength": 1 },
+            "art": { "$comment": "A maker's device art instead: a path (relative to the config) to a PNG with a see-through screen, used as it is.", "$ref": "#/$defs/path" },
+            "maker": { "$comment": "Whose art it is (apple, google, samsung...): the check holds it to that maker's terms. Unknown art is held to Apple's on Apple targets.", "type": ["string", "null"] },
+            "drawn": { "$comment": "true only for art of the user's own that copies no maker's device.", "type": ["boolean", "null"] },
+            "screen": { "$comment": "The art's screen in its pixels, when it can't be found from its alpha.", "type": "object", "required": ["x", "y", "width", "height"], "additionalProperties": false, "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "width": { "type": "number", "minimum": 1 }, "height": { "type": "number", "minimum": 1 } } },
+            "screenRadius": { "type": ["number", "null"], "minimum": 0 },
+            "class": { "$ref": "#/$defs/deviceClass" },
+            "radius": { "$comment": "The screen's corner radius as a fraction of its short side (the class's by default). It shrinks by itself where it would cut the capture's content.", "type": ["number", "null"], "minimum": 0, "maximum": 0.5 },
+            "bezel": { "$comment": "The bezel as a fraction of the screen's short side.", "type": ["number", "null"], "minimum": 0.004, "maximum": 0.3 },
+            "buttons": { "$comment": "Generic side buttons (phones and foldables). Never drawn on an Apple target.", "type": ["boolean", "null"] },
+            "cutout": { "$comment": "A neutral camera cutout over the status bar: punch-hole or pill. Off by default; never drawn on an Apple target.", "enum": ["none", "punch-hole", "pill", null] },
+            "finish": { "$comment": "The device's colour: dark (default) or light.", "enum": ["dark", "light", null] }
+          }
+        }
+      ]
+    },
+    "tiltAngles": {
+      "$comment": "A tilt's angles in degrees (y: the turn, x: the lean back, z: the roll) and perspective in u; the layout's own by aspect class where not given.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "side": { "enum": ["left", "right", null] },
+        "y": { "type": "number", "minimum": -60, "maximum": 60 },
+        "x": { "type": "number", "minimum": -40, "maximum": 40 },
+        "z": { "type": "number", "minimum": -30, "maximum": 30 },
+        "perspective": { "type": "number", "minimum": 60, "maximum": 2000 }
+      }
+    },
+    "fold": {
+      "$comment": "The fold layout's settings: the hinge (auto: vertical unless the capture is clearly portrait), the angle between the halves (120 open; 70 with outer, so the lifted half's back shows), the outer display on that back (a capture screen id on the same capture device, or {capture, device}), and the view's turn and pitch in degrees.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "hinge": { "enum": ["auto", "vertical", "horizontal", null] },
+        "angle": { "type": ["number", "null"], "minimum": 30, "maximum": 175 },
+        "outer": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/id" },
+            { "type": "object", "required": ["capture"], "additionalProperties": false, "properties": { "$comment": { "type": "string" }, "capture": { "$ref": "#/$defs/id" }, "device": { "$ref": "#/$defs/id" } } }
+          ]
+        },
+        "turn": { "type": ["number", "null"], "minimum": -45, "maximum": 45 },
+        "pitch": { "type": ["number", "null"], "minimum": -30, "maximum": 30 }
+      }
     },
     "captionStyle": {
       "type": "object",
@@ -84,7 +137,8 @@
         "floorPct": { "$comment": "The smallest it may shrink to fit, on the same scale. A caption that won't fit at the floor fails the render.", "type": ["number", "null"], "minimum": 1, "maximum": 30 },
         "font": { "$comment": "A family from theme.fonts, or null for the system's.", "type": ["string", "null"] },
         "plate": { "$comment": "fullbleed only: solid (a rounded plate), scrim (a fade from the edge) or none.", "enum": ["solid", "scrim", "none", null] },
-        "case": { "$comment": "Drawn as written (none, the default), in capitals (upper) or lower case (lower). The strings stay as written.", "enum": ["none", "upper", "lower", null] }
+        "case": { "$comment": "Drawn as written (none, the default), in capitals (upper) or lower case (lower). The strings stay as written.", "enum": ["none", "upper", "lower", null] },
+        "maxWidthPct": { "$comment": "The caption's widest, as a % of the slot's width (the slot less its side margins by default): to match a measured set's line breaks.", "type": ["number", "null"], "minimum": 20, "maximum": 100 }
       }
     },
     "background": {
@@ -137,7 +191,20 @@
         "background": { "$ref": "#/$defs/background" },
         "caption": { "$ref": "#/$defs/captionStyle" },
         "frame": { "$ref": "#/$defs/frame" },
-        "icon": { "$comment": "The app's icon, shown on the hero.", "$ref": "#/$defs/pathOrNull" }
+        "icon": { "$comment": "The app's icon, shown on the hero.", "$ref": "#/$defs/pathOrNull" },
+        "hero": {
+          "$comment": "The hero's brand mark: logo (a path; any shape, a transparent PNG or SVG), fit wide (drawn at its own shape, no tile: a wordmark or a logo with words) or tile (as the icon), widthPct (its widest, in u; 56 by default). Over theme.icon.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "logo": { "$ref": "#/$defs/pathOrNull" },
+            "fit": { "enum": ["wide", "tile", null] },
+            "widthPct": { "type": ["number", "null"], "minimum": 10, "maximum": 90 }
+          }
+        },
+        "tilt": { "$comment": "The tilt layout's angles for the whole set (a shot's tilt object overrides them).", "$ref": "#/$defs/tiltAngles" },
+        "fold": { "$comment": "The fold layout's settings for the whole set (a shot's fold overrides them).", "$ref": "#/$defs/fold" }
       }
     },
     "overrides": {
@@ -160,6 +227,8 @@
         "width": { "type": "integer", "minimum": 64, "maximum": 8000 },
         "height": { "type": "integer", "minimum": 64, "maximum": 8000 },
         "capture": { "$comment": "The capture device whose captures feed this target.", "$ref": "#/$defs/id" },
+        "device": { "$comment": "The device class its drawn frames take (a foldable's outer or inner display, a 16:9 phone...), where the capture's shape doesn't say.", "$ref": "#/$defs/deviceClass" },
+        "slot": { "$comment": "Google only: the Play slot this target fills, when store-listing.json doesn't say.", "enum": ["phone", "tablet7", "tablet10", "tv", "wear"] },
         "layout": { "$ref": "#/$defs/layout" },
         "frame": { "$ref": "#/$defs/frame" },
         "caption": { "anyOf": [ { "const": false }, { "$ref": "#/$defs/captionStyle" } ] }
@@ -181,7 +250,8 @@
         "proof": { "type": ["string", "null"] },
         "captionStyle": { "$ref": "#/$defs/captionStyle" },
         "targets": { "anyOf": [ { "type": "null" }, { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true } ] },
-        "tilt": { "enum": ["left", "right", null] },
+        "tilt": { "$comment": "left or right, or an object with its side and angles (over theme.tilt).", "anyOf": [ { "enum": ["left", "right", null] }, { "$ref": "#/$defs/tiltAngles" } ] },
+        "fold": { "$comment": "fold layout only: its settings (over theme.fold).", "$ref": "#/$defs/fold" },
         "at": { "enum": ["top", "bottom", null] },
         "callout": {
           "anyOf": [

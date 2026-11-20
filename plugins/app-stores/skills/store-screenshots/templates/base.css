@@ -198,6 +198,9 @@ body[data-aspect="wide"] .slot { --pad-top: 4.6; --pad-side: 5; --pad-bottom: 4.
   filter: drop-shadow(0 calc(var(--u) * 0.6) calc(var(--u) * 1.1) var(--shadow-near))
           drop-shadow(0 calc(var(--u) * 2.6) calc(var(--u) * 4.2) var(--shadow-far));
 }
+.device-wrap.with-art {
+  filter: none !important;   /* a maker's device art goes on as it is: no shadow added */
+}
 .device {
   position: absolute;
   inset: 0;
@@ -304,3 +307,25 @@ body[data-aspect="wide"] .slot { --pad-top: 4.6; --pad-side: 5; --pad-bottom: 4.
   box-shadow: 0 calc(var(--u) * 0.8) calc(var(--u) * 2.4) rgba(0, 0, 0, 0.25);
 }
 .caption-block[data-align="start"] .icon { margin-inline: 0 auto; }
+.caption-block[data-align="end"] .icon { margin-inline: auto 0; }
+/* A brand's own wide mark (theme.hero.logo, fit "wide"): its own shape, no tile or shadow, --logo-w u at most. */
+.logo {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: calc(var(--u) * var(--logo-w, 56));
+  max-height: calc(var(--u) * 24);
+  margin: 0 auto calc(var(--u) * 4);
+}
+.caption-block[data-align="start"] .logo { margin-inline: 0 auto; }
+.caption-block[data-align="end"] .logo { margin-inline: auto 0; }
+body[data-aspect="wide"] .logo, body[data-aspect="square"] .logo { max-height: calc(var(--u) * 12); }
+
+/* A generic camera cutout (frame.cutout), drawn over the capture's status bar: neutral black, no maker's shape. */
+.cutout {
+  position: absolute;
+  z-index: 2;
+  background: #050506;
+  border-radius: 999px;
+  box-shadow: 0 0 0 calc(var(--u) * 0.05) rgba(255, 255, 255, 0.06);
+}

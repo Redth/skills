@@ -1,8 +1,8 @@
 ---
 name: store-screenshots
 description: >
-  Use this skill to design App Store or Google Play screenshots for our app, add captions, a device frame,
-  a tilt, a callout or a panorama, render one design at every iPhone, iPad and Android size and in every
+  Use this skill to design App Store or Google Play screenshots for our app, add captions, a device frame
+  that fits, a tilt, a callout, a panorama or a foldable shown partly folded, render one design at every iPhone, iPad and Android size and in every
   language, fit or translate screenshot captions, check whether our screenshots read in search results, say
   what each store allows in a screenshot, plan which shots go first and what each says, make a game's
   screenshots for the stores, find a look from screenshots we like, redo or refresh the screenshots our
@@ -32,8 +32,11 @@ output is the folder `store-listings` reads.
   a 0.46 iPhone, a 4:3 iPad and a 9:16 Play phone come from the same design.
 - **One set per store:** each store's rules (`rules/<store>.json`, dated and sourced) decide what its set may
   carry: frames, words, awards, prices. Play is frameless by default.
-- **Drawn frames only:** generic phone, tablet, laptop, desktop, TV and watch frames drawn for this skill. No
-  maker's device art is shipped, fetched or modified.
+- **Frames that fit:** generic phone, foldable, tablet, laptop, desktop, TV and watch frames drawn for each capture:
+  the screen is the capture's exact size, its corners rounded by the device class and never cutting a status bar's
+  clock. A maker's device art the user brings goes on as it is, its screen found; none is shipped or fetched.
+- **Foldables partly folded:** the `fold` layout splits a foldable's inner display at the hinge and turns the halves
+  in 3D, so an iPhone Duo or Android foldable shot reads as one.
 - **Taste first, then kept:** the user's examples, two to four rendered directions, one iterated with them, then an
   approved baseline: a locked `screenshot-style.json` that every later update renders in and is checked against.
 - **Judged as a shopper sees it:** `sheet.py` places the rendered files in mock-ups of Apple's search row, the
@@ -73,7 +76,7 @@ output is the folder `store-listings` reads.
 | Fonts | files the config's `theme.fonts` names | the app's own, with the user's right to use them; one that covers every locale's script |
 | Examples the user likes (and one or two they don't) | `design/inspiration/` | any apps' or games' screenshots they saved; for the style only |
 | `screenshot-style.json` | beside the config (its `"style"`) | the look: [references/style.md](references/style.md); starting points in `styles/` |
-| A frame of the user's own (optional) | a file the config points at | Apple's bezels only as they are: [references/frames.md](references/frames.md) |
+| A maker's device art (optional) | a PNG the user downloaded, the config points at | used as it is, its screen found from its alpha; Apple's only on Apple sets: [references/frames.md](references/frames.md) |
 
 Prerequisites: Python 3.8+ (stdlib only) and Google Chrome or Chromium (`CHROME` overrides where it's found).
 No network: nothing is fetched, fonts and frames included.
@@ -122,19 +125,24 @@ goes through all the steps; an update to an approved set is step 8. The design f
    platforms' names or glyphs. If they're missing or wrong, capture first (`store-capture`, or the user's own
    tool) and come back. Then write `store-screenshots.json` ([references/config.md](references/config.md)): the
    targets at each store's exact pixel sizes with ids that are `store-listing.json`'s screen names, the shots in
-   order with roles (`hero`, `feature`, `detail`, `accent`), the captions as string keys per locale.
+   order with roles (`hero`, `feature`, `detail`, `accent`, `foldable`), the captions as string keys per locale. A
+   foldable's inner display gets a `fold` shot (or two) with `targets` for those devices; a target whose shape
+   doesn't say which display it is gets a `device` ([references/frames.md](references/frames.md)). A screen that
+   means nothing on one device (two panes side by side on a foldable make two shots one picture) is left off that
+   target with the shot's `targets`.
 5. **Directions: offer two to four, render only their first shots.** From the confirmed summary, pick 2 to 4
    starting points in `styles/` (or write fresh ones) into `design/directions/<name>/screenshot-style.json`, each
    with the brand's colours and fonts, and render each on one target:
    `render.py --style design/directions/<name>/screenshot-style.json --out design/explore/<name> --shots <first 3>
    --targets <one>`. Show `sheet.py --directions design/explore/a,design/explore/b,... --png`
    (`design/sheets/directions.png`): each direction in the search row with its captions' size in points, and at the
-   product page's size. With a current look the user wants kept or evolved, one direction is that look written as
+   product page's size. `check.py --out design/explore/<name>` checks a direction where it is. With a current look the user wants kept or evolved, one direction is that look written as
    a style. **The user picks** (or mixes); write the choice in `design/decisions.md`.
 6. **Iterate, one change a round.** Copy the chosen style to `screenshot-style.json` beside the config, name it
    there (`"style"`) and take the theme out of the config. Render the whole set: `render.py [--force]`. Each round
    change one thing, render, and show `sheet.py --compare <the previous render> --png` beside the store mocks
-   (`sheet.py --png`). Look at every sheet and every file at full size and go through the visual checklist
+   (`sheet.py --png`); with a live listing, `sheet.py --compare current --png` sets each new shot beside the live
+   one it replaces. Look at every sheet and every file at full size and go through the visual checklist
    ([references/checklist.md](references/checklist.md)); run `check.py` until it has no errors (**a failing check
    means changing the design or the words, not the rule**). Log each decision in `decisions.md`: the date, what,
    and why in the user's own words.
@@ -183,8 +191,9 @@ Exit codes: `render.py` 0, 1 (a render failed or a caption won't fit at its floo
 4. **Fix the design, not the rule.** A caption that doesn't fit gets fewer words, never a floor below the one the
    check enforces. A rule changes only when its store's page says otherwise, upstream, with its source and date;
    relaxing one is the user's choice, with a reason.
-5. **Drawn frames only.** Never ship, download, modify, tilt, crop or overlap a maker's device art. A user's own
-   Apple bezel goes on an Apple set as it is, or not at all; never on Play.
+5. **Drawn frames, or a maker's art as it is.** Never ship, download, modify, tilt, fold, crop or overlap a maker's
+   device art. Art the user brings goes on as it is (Apple's on an Apple set only, never on Play); drawn frames carry
+   no maker's details, and no side buttons or camera cutout on an Apple target.
 6. **Flag others' intellectual property; never decide it.** Names, logos, characters, likenesses, awards, press
    quotes, photos and fonts readable in a shot go to the user, with who owns them.
 7. **Real UI, invented data.** Shots show the app in use with fictional accounts; nobody's real data, no
@@ -248,6 +257,11 @@ Exit codes: `render.py` 0, 1 (a render failed or a caption won't fit at its floo
 | check: Play text share over 20% | the words cover too much of the picture | fewer words, a smaller caption box, or `caption: false` on Play's tablets |
 | check: frame warning on Play | Google discourages device imagery | `stores.google.frame: "none"`, or keep it by the user's choice |
 | check: an Apple bezel tilted, cropped or overlapped | the layout breaks Apple's terms for its art | `framed` with the bezel as it is, or a drawn frame |
+| check: the frame's corners cut the capture | content sits in the very corner even at the smallest radius | a frame with square corners (`frame.radius`: 0) or a capture with that corner clear |
+| check: the device art's screen differs from the capture | the art is for another device | art for the device the capture came from (the capture is cut to fill, never stretched) |
+| check: a fold of a phone's capture | `fold` is for a foldable's inner display | `framed-bleed` for that target, or the shot's `targets` limited to the foldables |
+| check: every exploration file "not on disk" | an older check; or the report moved away from its pictures | `check.py --out design/explore/<name>` (files resolve beside the report) |
+| check: a Play target counted in a slot it isn't sent to | an older check guessing slots | `store-listing.json`'s `stores.google.slots` decides: a target it leaves out is in none |
 | check: a forbidden word in a caption | a price, ranking, award or other platform | rewrite the string; relax only by the user's choice with a reason |
 | report: `captureFallback` / `stringFallback` | a locale showed the primary's capture or caption | capture or translate it, or tell the user it ships that way |
 | A file didn't change after an edit | the cache saw no change in its inputs | `render.py --force` |
@@ -269,7 +283,7 @@ Exit codes: `render.py` 0, 1 (a render failed or a caption won't fit at its floo
 | [principles.md](references/principles.md) | the design principles, each with its evidence grade (A to D) and why |
 | [store-rules.md](references/store-rules.md) | what the App Store, Google Play, Steam and itch.io allow in screenshots, sourced and dated |
 | [layouts.md](references/layouts.md) | each layout, when to use it, its options, who uses the pattern |
-| [frames.md](references/frames.md) | why the frames are drawn; the makers' device art and its licences; a user's own Apple bezels |
+| [frames.md](references/frames.md) | fitted drawn frames and the device classes' corner radii; the makers' device art, where to get it, its licences, and using it as it is |
 | [panoramas.md](references/panoramas.md) | a picture across several slots: when, how it renders, seams, risks |
 | [localisation.md](references/localisation.md) | text expansion, CJK, right-to-left, fallbacks, captures per locale |
 | [legibility.md](references/legibility.md) | thumbnail sizes, the caption-size rule and how to check it, contrast, text share |

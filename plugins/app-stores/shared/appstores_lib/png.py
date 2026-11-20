@@ -1,7 +1,8 @@
 """PNG and JPEG headers, and decoding 8-bit PNGs, with ``struct`` and ``zlib`` only.
 
 ``info`` reads what the stores check (size, alpha, colour space) without decoding pixels. ``decode_rgb``
-decodes a whole 8-bit, non-interlaced PNG for checks that look at pixels (contrast, seams between panels).
+decodes a whole 8-bit, non-interlaced PNG for checks that look at pixels (contrast, seams between panels), and
+``decode_alpha`` its opacity (a device art's see-through screen).
 """
 
 from __future__ import annotations
@@ -227,19 +228,16 @@ def _unfilter(raw, width, height, bpp):
     return out
 
 
-def decode_rgb(path):
-    """Decode an 8-bit, non-interlaced PNG and return ``(width, height, rgb_bytes)``.
-
-    ``rgb_bytes`` holds 3 bytes a pixel, rows top to bottom. RGB and RGBA are the cases this is for; grey,
-    grey+alpha and palette pictures are expanded to RGB too. Alpha is dropped (not blended). Raises
-    ``ImageError`` for a JPEG, a 16-bit or sub-byte depth, or an interlaced PNG.
-    """
+def _decode(path, who):
+    """Parse and unfilter an 8-bit, non-interlaced PNG: ``(width, height, colour type, bpp, pixels, palette,
+    trns)``. ``who`` names the caller in errors."""
     data = _read(path)
     if not data.startswith(PNG_SIGNATURE):
-        raise ImageError("%s: decode_rgb reads PNGs only" % path)
+        raise ImageError("%s: %s reads PNGs only" % (path, who))
     pos = 8
     ihdr = None
     palette = None
+    trns = None
     idat = []
     while pos + 8 <= len(data):
         length, kind = struct.unpack(">I4s", data[pos: pos + 8])
@@ -248,6 +246,8 @@ def decode_rgb(path):
             ihdr = struct.unpack(">IIBBBBB", body[:13])
         elif kind == b"PLTE":
             palette = body
+        elif kind == b"tRNS":
+            trns = body
         elif kind == b"IDAT":
             idat.append(body)
         elif kind == b"IEND":
@@ -257,9 +257,9 @@ def decode_rgb(path):
         raise ImageError("%s: PNG without an IHDR chunk" % path)
     width, height, depth, ctype, _comp, _filt, interlace = ihdr
     if depth != 8:
-        raise ImageError("%s: decode_rgb reads 8-bit PNGs only (this one is %d-bit)" % (path, depth))
+        raise ImageError("%s: %s reads 8-bit PNGs only (this one is %d-bit)" % (path, who, depth))
     if interlace:
-        raise ImageError("%s: decode_rgb doesn't read interlaced PNGs" % path)
+        raise ImageError("%s: %s doesn't read interlaced PNGs" % (path, who))
     if ctype not in _CHANNELS:
         raise ImageError("%s: unknown PNG colour type %d" % (path, ctype))
     try:
@@ -271,6 +271,19 @@ def decode_rgb(path):
         pixels = _unfilter(raw, width, height, bpp)
     except ImageError as e:
         raise ImageError("%s: %s" % (path, e)) from None
+    if ctype == 3 and palette is None:
+        raise ImageError("%s: palette PNG without a PLTE chunk" % path)
+    return width, height, ctype, bpp, pixels, palette, trns
+
+
+def decode_rgb(path):
+    """Decode an 8-bit, non-interlaced PNG and return ``(width, height, rgb_bytes)``.
+
+    ``rgb_bytes`` holds 3 bytes a pixel, rows top to bottom. RGB and RGBA are the cases this is for; grey,
+    grey+alpha and palette pictures are expanded to RGB too. Alpha is dropped (not blended). Raises
+    ``ImageError`` for a JPEG, a 16-bit or sub-byte depth, or an interlaced PNG.
+    """
+    width, height, ctype, bpp, pixels, palette, _trns = _decode(path, "decode_rgb")
     if ctype == 2:
         return width, height, bytes(pixels)
     out = bytearray(width * height * 3)
@@ -284,11 +297,23 @@ def decode_rgb(path):
         out[1::3] = grey
         out[2::3] = grey
     else:  # palette
-        if palette is None:
-            raise ImageError("%s: palette PNG without a PLTE chunk" % path)
         table = [bytes(palette[i * 3: i * 3 + 3]).ljust(3, b"\0") for i in range(256)]
         out = bytearray(b"".join(table[i] for i in pixels))
     return width, height, bytes(out)
+
+
+def decode_alpha(path):
+    """Decode an 8-bit, non-interlaced PNG's opacity: ``(width, height, alpha_bytes)``, one byte a pixel (0 clear,
+    255 opaque), rows top to bottom. RGBA and grey+alpha read their alpha channel; a palette picture its ``tRNS``
+    table; anything else is opaque (every byte 255). For finding a device art's see-through screen. Raises
+    ``ImageError`` as ``decode_rgb`` does."""
+    width, height, ctype, bpp, pixels, _palette, trns = _decode(path, "decode_alpha")
+    if ctype in (4, 6):
+        return width, height, bytes(pixels[bpp - 1::bpp])
+    if ctype == 3 and trns:
+        table = bytes(bytearray(trns[:256]).ljust(256, b"\xff"))
+        return width, height, bytes(pixels).translate(table)
+    return width, height, b"\xff" * (width * height)
 
 
 def has_transparency(path):

@@ -47,8 +47,11 @@ Run on the rendered files and the sheets before handing a set to `store-listings
 12. **look.** Nobody else's names, logos, characters, likenesses, photos or fonts without the rights; other
     platforms' devices, badges or button glyphs out of Apple's set and Apple's devices out of Play's. Flag every
     one to the user with who owns it.
-13. **check.py, then look.** Frames: drawn ones, or the user's Apple bezel as it is (the check fails one tilted,
-    cropped or overlapped); none on Wear OS; Play frameless unless the user chose otherwise (a warning).
+13. **check.py, then look.** Frames: drawn ones, fitted to their captures, or the user's Apple bezel as it is (the
+    check fails one tilted, folded, cropped or overlapped); none on Wear OS; Play frameless unless the user chose
+    otherwise (a warning). At full size, each frame's corners: the status bar's clock and icons whole (the check
+    warns where a corner still cuts content), a camera cutout only where the capture leaves room for one, and a
+    fold's halves meeting at the seam.
 14. **look.** Required fine print present and legible where the app needs it (finance, regional availability, a
     subscription). Version 1's config has no fine-print slot: if one is needed, raise it with the user.
 15. **look.** One visual system across the set (caption style and place, frame, palette); a dark-mode shot if the

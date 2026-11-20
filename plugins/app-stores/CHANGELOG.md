@@ -76,6 +76,36 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   style on one made-up app (`samples.py`, nothing committed) to pick by eye. A style role's `stores` gives it another
   layout or frame on one store; the app starting styles' hero is real UI on Google Play, so shot 1 no longer trips
   Play's UI-first warning.
+- `store-screenshots`: frames that fit (`scripts/frames.py`). Drawn frames are drawn for each capture: the screen
+  opening is its exact size (nothing letterboxed, stretched or cut), even bezels, and the screen's corners rounded by
+  a device class (`phone`, `phone-classic` for 16:9, `foldable-outer`, `foldable-inner`, `tablet`, `watch`, `tv`,
+  `laptop`, `desktop`; fractions of the short side, approximations), picked by the capture's shape, the target's
+  words or its new `device`. The page reads each capture's corners and shrinks a radius that would cut content (a
+  status bar's clock in the corner: the trial's ":41"); the report says what it did (`corners`). The frame object
+  (`class`, `radius`, `bezel`, `buttons`, `cutout`: a neutral punch-hole or pill, `finish`); buttons and cutouts
+  never on Apple targets. The old frame names keep working; `frames/*.svg` are gone.
+- `store-screenshots`: a maker's device art the user brings (`frame: {"art": "...png", "maker": "apple"}`) has its
+  see-through screen found from the PNG's alpha (`appstores_lib.png.decode_alpha`; `frames.py detect --write` saves
+  it), the capture placed under it at the opening's size, the art never stretched and no shadow added; `check.py`
+  warns when the capture is cut to fit, the art is upscaled or its corners hide content, and holds art of no said
+  maker to Apple's terms on Apple targets. `references/frames.md` says where makers' art comes from and what it
+  allows.
+- `store-screenshots`: the `fold` layout: a foldable's inner display split at the hinge (vertical, or across for a
+  portrait capture) and shown partly folded in CSS 3D (`fold.angle`, 120 by default), with panel edges, a drawn
+  hinge, crease and depth shading, the halves continuous at the seam; `fold.outer` lifts one panel past upright with
+  the outer display on its back. Fitted by its projected size in every aspect class, reported with its box and pose;
+  `check.py` warns on a fold of a phone-shaped capture. The app starting styles gain a `foldable` role.
+- `store-screenshots`: the hero beside its words on wide and square slots (real UI, not a sliver; `check.py` counts
+  a hero as in use when its UI covers 30% of the slot, the report's `uiShare`); `theme.hero.logo` (`fit: wide` for a
+  wordmark at its own shape, or `tile`); `theme.tilt` and a shot's tilt object (angles and perspective);
+  `caption.maxWidthPct`; accents across a line break (`*whole week\nof meals*`).
+- `store-screenshots`: `sheet.py --compare current` (or a folder of the live set's pictures, no render report):
+  each new shot beside the live one it replaces, paired by the screen it shows (from `current.json`), else by place;
+  `check.py --out` and `sheet.py --out` for an exploration (files resolve beside its report, its style used, its
+  sheets beside it, counts left to the full set); targets and current-set groups ordered App Store first, iPhone
+  before foldables, iPads and the rest; the report notes a role that takes another layout on Play.
+- `store-listings`: `rules.relax` may name store-screenshots' design rules (`google.design.frames`) without a
+  "not one of the rules" warning.
 - `store-listings`: start from what's live. `push.py pull apple|google` reads the live listing (read-only, like
   `plan`; on Google an edit opened to read and deleted) into `existing/<store>/`: `listing.json` in the contract's
   vocabulary, every screenshot and preview downloaded per locale and slot, and a `README.md` summary. App Review's
@@ -99,6 +129,9 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 
 ### Fixed
 - `pattern` rules skip `""` (a field cleared on purpose): Play's `video: ""` no longer fails the YouTube rule.
+- `store-screenshots`: `check.py` no longer guesses a Play slot for a target `store-listing.json`'s
+  `stores.google.slots` leaves out (it isn't sent, so it's counted in no slot); a render report outside the config's
+  `out` resolves its files beside itself.
 - `store-listings` 0.1.0 (#11): one `store-listing.json` for the App Store and Google Play; the stores' rules as
   dated, sourced data (`rules/apple.json`, `rules/google.json`), checked offline; `listing.py` import (fastlane
   deliver and supply, Gradle Play Publisher, Expo), check, build (fastlane-compatible output) and preview;
