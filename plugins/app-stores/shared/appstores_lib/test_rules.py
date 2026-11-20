@@ -37,6 +37,9 @@ GOOGLE = {
          "sizes": [[1024, 500]], "severity": "error", "source": SOURCE, "checked": "2026-11-14", "status": "verified"},
     ],
     "slots": {"$comment": "Play's image types", "phone": {"imageType": "phoneScreenshots"}},
+    "design": {"$comment": "store-screenshots' design rules",
+               "frames": {"value": "discouraged", "severity": "warning", "status": "verified"},
+               "uiFirst": {"value": 2, "severity": "warning", "status": "verified"}},
 }
 
 APPLE = {
@@ -150,6 +153,26 @@ class RelaxTests(RulesTestCase):
         out = rules.relaxed(self.google, [{"id": "google.title.lenght", "reason": "typo"}])
         self.assertEqual(out.unknown_relaxed, ["google.title.lenght"])
         self.assertEqual(len(out), 7)
+
+    def test_design_entries_can_be_relaxed_and_arent_unknown(self):
+        self.assertEqual(self.google.design_ids, frozenset(["google.design.frames", "google.design.ui_first"]))
+        relax = [{"id": "google.design.frames", "reason": "our frames, by choice"}, "google.design.ui_first",
+                 {"id": "google.design.no_such", "reason": "typo"}]
+        out = rules.relaxed(self.google, relax)
+        self.assertEqual(out.relaxed_design, [("google.design.frames", "our frames, by choice"),
+                                              ("google.design.ui_first", "")])
+        self.assertEqual(out.unknown_relaxed, ["google.design.no_such"])
+        self.assertEqual(out.relaxed_rules, [])
+        self.assertEqual(len(out), 7, "a design entry isn't one of the rules")
+        self.assertTrue(out.known("google.design.frames") and out.known("google.title.length"))
+        self.assertFalse(out.known("google.design.no_such"))
+
+    def test_design_rule_ids_are_snake_case(self):
+        self.assertEqual(rules.design_rule_id("apple", "inUseMajority"), "apple.design.in_use_majority")
+        self.assertEqual(rules.design_rule_id("google", "frames"), "google.design.frames")
+
+    def test_a_file_with_no_design_table_has_no_design_ids(self):
+        self.assertEqual(self.apple.design_ids, frozenset())
 
     def test_nothing_to_relax(self):
         self.assertEqual(len(rules.relaxed(self.google, None)), 7)

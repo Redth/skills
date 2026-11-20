@@ -64,7 +64,10 @@ team wants the record.
   image type.
 - Each picture: `file`, its `width` and `height`, Apple's uploaded `fileName` and `md5` (the upload's checksum) and
   the downloaded file's `downloadedMd5`; Play's `sha256` and `downloadedSha256`. When they differ, the file is the
-  store's re-encoded copy, not the upload.
+  store's re-encoded copy, not the upload. A public pull's pictures carry the lookup's `url`, the `fetchedUrl`
+  actually downloaded (when it asked for the upload's size), `storeSize` (the App Store display type the pixel size
+  fills for its device folder, or `null`) and `reencoded: true` (always the store's copy: there's no checksum to
+  compare).
 - `notes` (what the pull saw: a version in preparation, a storefront with the same words as another), `failed`
   (downloads that didn't come), and for `--public`, `notPublic` and `public` (each storefront's seller, version,
   genres, age rating text, price, languages).
@@ -79,7 +82,7 @@ the store's current one (Play has no versions of a listing).
 falling back to `&entity=macSoftware` for a Mac app), one storefront country at a time (`--country us,gb,de`,
 default `us`). It gets each storefront's app name, description, What's New (release notes), seller and website, the
 version, the genres (as App Store Connect's categories, primary and secondary), the age rating as text, and the
-iPhone, iPad and Apple TV screenshot URLs, which it downloads.
+iPhone, iPad and Apple TV screenshots, which it downloads at the uploads' own size (below).
 
 Say plainly what it lacks. **The subtitle, keywords and promotional text aren't public**, nor are the support and
 privacy URLs, the copyright, the age rating answers, App Review's notes or the previews. They're listed in
@@ -88,9 +91,16 @@ privacy URLs, the copyright, the age rating answers, App Review's notes or the p
 - **A storefront isn't a language.** A country's words are in its language only if the app has a listing in it;
   otherwise the App Store shows another. A storefront whose words are the same as an earlier one's is left out (the
   notes say so). `--country ca:fr-CA` names a storefront's language where the table doesn't know it or guesses wrong.
-- **The pictures are the web page's copies,** usually smaller than the uploads (an iPhone shot at 392×696), with no
-  display type: their folders are by device (`iphone`, `ipad`, `apple-tv`, `mac`). They show the current set; they
-  aren't files to send.
+- **The pictures come at the uploads' own size.** The lookup names the small copies the web page shows
+  (`…/01_week.png/392x696bb.jpg`); the same address with a box bigger than any upload
+  (`…/01_week.png/9999x9999bb.png`, in the upload's own format) is served at the upload's size (1290×2796, 2064×2752),
+  never enlarged, so that's what `pull` downloads. Each picture's size is checked against the rules' App Store sizes
+  for its device (`storeSize`); the notes and README name any that fit none. If the full-size copy can't be had, the
+  page's copy is downloaded instead and the notes say so. `--thumbnails` asks for the page's small copies only.
+- **They're still the App Store's re-encoded copies,** not the files uploaded, with no display type: their folders
+  are by device (`iphone`, `ipad`, `apple-tv`, `mac`). They show the current set; never send them back as if they
+  were the originals. The import (below) copies those at an App Store size into the config and lists their slots in
+  `stores.apple.keep`, so a plan leaves the store's own pictures alone until the new set replaces them.
 - **Google Play has no public API** for a listing: `pull google` needs the service account's key. Without one, the
   user pastes the words from Play Console (or the store page), and the screenshots come from wherever they were made.
 
@@ -115,8 +125,14 @@ it kept, then a summary of what's live: locales, the words' lengths and the pict
   and another locale's pictures on a screen take the primary's ids by position. **A store's copy isn't the upload,**
   and the config's fallback can't say "de-DE has 2 shots where en-US has 3" (or "German has no feature graphic"). So
   the import lists each such slot in `stores.<store>.keep`: still checked and previewed, but `push.py plan` leaves it
-  as the store has it. Take a slot out of `keep` once its pictures are the originals or the new set. Pictures at no
-  store size (the public lookup's) stay in `existing/` as the reference and aren't copied.
+  as the store has it. Take a slot out of `keep` once its pictures are the originals or the new set. A public pull's
+  pictures at an App Store size are copied in the same way, their slots in `keep`; pictures at no store size (the
+  page's small copies, `--thumbnails`) stay in `existing/` as the reference and aren't copied.
+- **A store that wasn't pulled** (the App Store only, say) is named at the end of the summary, with how to read it
+  and what a listing there still needs before `listing.py check --stores <store>` passes, from its rules: for Play
+  the store's section and package, the title and short description, the contact email, the privacy URL, the icon
+  (512×512), the feature graphic (1024×500) and its alt text, and screens for `stores.google.slots` (at least 2
+  screenshots). The draft's `screens` are only what was live: add the new set's screens (and Play's slots) to it.
 - **The live screenshots are the current set** for the screenshots work (the `store-screenshots` skill, or any
   tool): `existing/<store>/screenshots/` shows what each shot features today, in order. New screenshots start
   from it: which moments to keep, which to replace, in what order.

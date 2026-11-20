@@ -268,6 +268,28 @@ class Pictures(TempDir):
         _, report = kit.check_json(config)
         self.assertTrue(kit.findings(report, "config.relax", "warning"))
 
+    def test_relaxing_a_screenshot_design_rule_isnt_unknown(self):
+        """``store-screenshots`` relaxes its design rules (the rules data's ``design`` tables) through the same
+        ``rules.relax``: the listing check knows those ids, lists them as relaxed and warns only for an id the
+        rules data has nowhere."""
+        config = self.sample()
+        kit.edit_config(config, lambda d: d["rules"]["relax"].extend([
+            {"id": "google.design.frames", "reason": "Our framed set, by choice."},
+            {"id": "apple.design.in_use_majority", "reason": "Two feature shots."},
+            {"id": "google.design.framez", "reason": "typo"}]))
+        _, report = kit.check_json(config)
+        unknown = [f["message"] for f in kit.findings(report, "config.relax", "warning")]
+        self.assertEqual(len(unknown), 1, unknown)
+        self.assertIn("google.design.framez", unknown[0])
+        self.assertIn("did you mean google.design.frames?", unknown[0])
+        self.assertIn({"store": "google", "id": "google.design.frames", "reason": "Our framed set, by choice.",
+                       "for": "store-screenshots"}, report["relaxed"])
+        self.assertIn({"store": "apple", "id": "apple.design.in_use_majority", "reason": "Two feature shots.",
+                       "for": "store-screenshots"}, report["relaxed"])
+        code, out, _ = kit.run(["check", "--config", config])
+        self.assertIn("google.design.frames: Our framed set, by choice. (a screenshot design rule", out)
+        self.assertNotIn("relaxes google.design.frames", out)
+
     def test_play_needs_two_screenshots_across_slots(self):
         config = self.sample(pictures=True)
         kit.edit_config(config, lambda d: d["stores"]["google"]["slots"].update(phone=None, tablet10=None))

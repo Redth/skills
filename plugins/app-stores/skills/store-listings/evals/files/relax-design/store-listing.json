@@ -1,0 +1,140 @@
+{
+  "$comment": "Synthetic eval fixture: rules.relax names a screenshot design rule (google.design.frames, the user's choice to keep framed Play shots), which both checks know, and a misspelt Play rule id (google.screenshots.featuring.apps), which exists nowhere in the rules data.",
+  "version": 1,
+  "app": {
+    "name": "Sample Recipes",
+    "ids": {
+      "apple": {
+        "bundleId": "com.example.samplerecipes",
+        "appId": null
+      },
+      "google": {
+        "package": "com.example.samplerecipes"
+      }
+    },
+    "copyright": "2026 Example Studio",
+    "contact": {
+      "email": "support@example.com",
+      "phone": null,
+      "website": "https://example.com"
+    },
+    "urls": {
+      "marketing": "https://example.com",
+      "support": "https://example.com/support",
+      "privacy": "https://example.com/privacy",
+      "privacyChoices": null
+    }
+  },
+  "primaryLocale": "en-US",
+  "locales": {
+    "en-US": {
+      "description": "Plan a week of meals in minutes. Pick recipes you like, and Sample Recipes builds the grocery list for you.\n\nSample Recipes is free to download and plan with. Sample Recipes Plus adds shared shopping lists and nutrition details: it starts with a 7-day free trial, then renews monthly unless cancelled.",
+      "apple": {
+        "name": null,
+        "subtitle": "Weekly meal plans",
+        "keywords": [
+          "recipes",
+          "meal plan",
+          "grocery list",
+          "cooking"
+        ],
+        "promotionalText": "New this month: plan a whole week from what's already in your fridge.",
+        "whatsNew": null,
+        "description": null
+      },
+      "google": {
+        "title": "Sample Recipes: Meal Planner",
+        "shortDescription": "Plan a week of meals in minutes.",
+        "fullDescription": null,
+        "video": null,
+        "releaseNotes": null
+      }
+    }
+  },
+  "screenshots": {
+    "folder": "screenshots",
+    "shots": []
+  },
+  "screens": {
+    "iphone": {
+      "kind": "phone"
+    },
+    "android-phone": {
+      "kind": "phone"
+    }
+  },
+  "stores": {
+    "apple": {
+      "enabled": true,
+      "categories": {
+        "primary": "FOOD_AND_DRINK",
+        "primarySubcategories": [],
+        "secondary": null,
+        "secondarySubcategories": []
+      },
+      "platforms": {
+        "IOS": {
+          "screens": [
+            "iphone"
+          ],
+          "previews": {}
+        },
+        "MAC_OS": null,
+        "TV_OS": null,
+        "VISION_OS": null
+      },
+      "ageRating": {},
+      "review": {
+        "notes": "",
+        "contact": {
+          "firstNameEnv": "APPLE_REVIEW_FIRST_NAME",
+          "lastNameEnv": "APPLE_REVIEW_LAST_NAME",
+          "phoneEnv": "APPLE_REVIEW_PHONE",
+          "emailEnv": "APPLE_REVIEW_EMAIL"
+        },
+        "demoAccount": null
+      },
+      "tvPrivacyText": null
+    },
+    "google": {
+      "enabled": true,
+      "defaultLanguage": "en-US",
+      "slots": {
+        "phone": "android-phone",
+        "tablet7": null,
+        "tablet10": null,
+        "tv": null,
+        "wear": null
+      },
+      "graphics": {
+        "icon": "graphics/icon-512.png",
+        "featureGraphic": "graphics/feature-1024x500.png",
+        "tvBanner": null
+      },
+      "dataSafetyCsv": null
+    },
+    "amazon": {
+      "enabled": false
+    },
+    "steam": {
+      "enabled": false
+    },
+    "itch": {
+      "enabled": false
+    }
+  },
+  "forms": {},
+  "rules": {
+    "extraForbiddenWords": [],
+    "relax": [
+      {
+        "id": "google.design.frames",
+        "reason": "We keep a device frame on Play's phone shots to match the App Store set; Play recommends against it but doesn't require it (support.google.com/googleplay/android-developer/answer/9866151, read 2026-11-14)."
+      },
+      {
+        "id": "google.screenshots.featuring.apps",
+        "reason": "Fewer than four featuring-sized phone shots for now."
+      }
+    ]
+  }
+}

@@ -160,8 +160,8 @@ Limits and what each field may say: [words.md](words.md).
   checked, built and sent for it.
 - `keep`: slots whose pictures stay as the App Store has them, by display type (`["APP_IPHONE_61"]`). They're still
   checked and previewed; `push.py plan` leaves them alone. `listing.py import --from live` sets it for the slots it
-  filled with App Store Connect's own copies (re-encoded, not the uploads), or whose pictures differ by locale in a
-  way the fallback can't say. Take a slot out once its pictures are the originals or the new set.
+  filled with the App Store's own copies (re-encoded, not the uploads: everything a public pull downloaded, and App
+  Store Connect's when its checksum differs), or whose pictures differ by locale in a way the fallback can't say. Take a slot out once its pictures are the originals or the new set.
 - `ageRating`: App Store Connect's own attribute names and values (`NONE`, `INFREQUENT_OR_MILD`,
   `FREQUENT_OR_INTENSE`, booleans for capabilities). Sent only with `push.py plan apple --age-rating`, so it's
   sent once settled. Definitions: [forms.md](forms.md).
@@ -252,7 +252,8 @@ For an Android-only app with no screenshots yet (the check will say what's missi
 
 - `check --json` prints `{"findings": [...], "fallbacks": [...], "relaxed": [...]}` plus `checklist`, `notChecked`,
   `notes`, `summary`, `stores` and `config`; each finding has `rule_id`, `severity`, `where`, `message`, `source`,
-  `status` and `store`.
+  `status` and `store`. Each `relaxed` entry has `store`, `id` and `reason`, and `"for": "store-screenshots"` when
+  the id is a screenshot design rule (a rules file's `design` entry, [rules-data.md](rules-data.md)).
 - Findings about the config itself (a screen named but not defined, a file that isn't there, a locale a store
   doesn't have) use `config.*` ids. They can't be relaxed: fix the config.
 - `preview` works from `out/` (run `build` first), so it shows what was built, not the config as it is now.

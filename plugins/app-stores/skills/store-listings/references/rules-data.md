@@ -68,6 +68,11 @@ believe the store no longer enforces), it goes in the config with a reason:
 ```
 
 - `relax` turns that rule's findings off (`check` lists what was relaxed, so it stays visible).
+- The same list relaxes the `store-screenshots` skill's design rules: each entry of a rules file's `design` table
+  has the id `<store>.design.<entry in snake case>` (`google.design.frames`, `google.design.ui_first`,
+  `apple.design.in_use_majority`). `listing.py check` knows them, lists them as relaxed ("a screenshot design rule:
+  store-screenshots' check.py honours it") and warns only for an id the store's rules data has nowhere (a typo, or
+  a rule since renamed).
 - `extraForbiddenWords` adds the user's own words to every field: an old product name, a competitor, test words.
 - The agent proposes a relaxation; the user makes it. Never add one to get past a check on your own.
 

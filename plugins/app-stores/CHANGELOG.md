@@ -98,6 +98,21 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   platform's App Review notes.
 
 ### Fixed
+- `store-listings`: `push.py pull apple --public` downloads the screenshots at the uploads' own size (the lookup's
+  mzstatic address with a box bigger than any upload, which Apple serves at the upload's size, never enlarged)
+  instead of the web page's 320x480 to 392x696 copies, checks each against the rules' App Store sizes
+  (`storeSize`), falls back to the page's copy (noted) when the full size can't be had, and keeps the old behaviour
+  with `--thumbnails`. The pictures are marked `reencoded` and the README says they're the App Store's re-encoded
+  copies; `import --from live` copies those at a store size into the config and lists their slots in
+  `stores.apple.keep`.
+- `store-listings`: `listing.py check` no longer warns that a `rules.relax` id "isn't one of <store>'s rules" when
+  it's a screenshot design rule (a rules file's `design` entry, e.g. `google.design.frames`, which
+  `store-screenshots`' check honours): it lists it as relaxed for `store-screenshots` and warns only for ids the
+  rules data has nowhere. `appstores_lib.rules`: `RuleSet.design_ids`, `.known()`, `relaxed_design`,
+  `design_rule_id()` (which `store-screenshots`' check now uses for its design findings' ids).
+- `store-listings`: `listing.py import --from live` with one store pulled names the other, how to read it, and what
+  a listing there still needs before the check passes (from its rules: required fields and graphics, the least
+  screenshots, screens for its slots), instead of leaving the check to report them all at once.
 - `pattern` rules skip `""` (a field cleared on purpose): Play's `video: ""` no longer fails the YouTube rule.
 - `store-listings` 0.1.0 (#11): one `store-listing.json` for the App Store and Google Play; the stores' rules as
   dated, sourced data (`rules/apple.json`, `rules/google.json`), checked offline; `listing.py` import (fastlane
