@@ -54,6 +54,7 @@ everywhere.
 | `flatten` | `#RRGGBB` | `#000000` | the colour a picture with alpha is flattened onto (black, as a device's masked corners are) |
 | `posture` | `folded`, `open` (or `unfolded`), `half-open` | as it is | a foldable's posture before the steps (below, [Foldables](#foldables)) |
 | `staging` | object | | how the app is signed in, seeded and set up for the screens, agreed with the user ([staging.md](staging.md)); below |
+| `appSource` | `{ "repo": "…", "paths": […] }` | `repo`: the plan's folder | the app's git checkout (`repo`, relative to the plan) and the folders and files that draw the staged screens (`paths`, relative to `repo`): the report records the revision each shot was taken at, and `capture.py --changes` lists what changed there since ([Updating](staging.md#7-updating-when-the-app-changed)) |
 | `devices` | array, at least 1 | required | below |
 | `screens` | array, at least 1 | required | below |
 
@@ -113,7 +114,8 @@ Each driver's reference is the authority for its `target`; unknown fields are re
 | `id` | `[a-z0-9][a-z0-9_.-]*` | the file name; what `store-screenshots` calls the capture screen |
 | `state` | string | what the screen must show, in plain words; in `staging.md`, the report and a wrong state's reason |
 | `steps` | array | how to reach it, run in order; then the screenshot |
-| `verify` | an element, `{ "keyboard": … }`, or a list | must be so before the shot (`timeout`, default 5 s), else the shot is `missed` ("wrong state"); the report's `stateCheck`. The keyboard: below |
+| `verify` | an element (with `contains`, optionally), `{ "keyboard": … }`, or a list | must be so before the shot (`timeout`, default 5 s), else the shot is `missed` ("wrong state"); the report's `stateCheck`. `contains` and the keyboard: below |
+| `sources` | array of paths | the app's files (or folders, or globs) that draw this screen, relative to `appSource.repo`: `capture.py --changes` names the screen when one changed |
 | `staging` | `false` | leave the staging's seed and launch values out of this screen |
 | `devices` | array of device ids | only these devices (default: all) |
 | `platforms` | array of platforms | only devices of these platforms |
@@ -129,14 +131,14 @@ a tablet, the menu button outside the navigation bar on a cover display), an ove
 ```json
 { "id": "servings",
   "steps": [ { "launch": {} },
-             { "tap": { "xpath": "//XCUIElementTypeNavigationBar/XCUIElementTypeButton[not(@name)]" }, "name": "menu" },
+             { "tap": { "xpath": "//XCUIElementTypeNavigationBar/XCUIElementTypeButton[normalize-space(@name)='']" }, "name": "menu" },
              { "tap": { "text": "Scale servings" } },
              { "type": { "id": "servings-field", "text": "12" } },
              { "hideKeyboard": true } ],
   "verify": [ { "id": "ingredients" }, { "keyboard": "hidden" } ],
   "overrides": {
     "android":   { "stepsPatch": [ { "replace": "menu", "with": [ { "tap": { "label": "Open navigation drawer" } } ] } ] },
-    "duo-outer": { "stepsPatch": [ { "replace": "menu", "with": [ { "tap": { "xpath": "//XCUIElementTypeButton[not(@name)]" } } ] } ] } } },
+    "duo-outer": { "stepsPatch": [ { "replace": "menu", "with": [ { "tap": { "xpath": "//XCUIElementTypeButton[normalize-space(@name)='']" } } ] } ] } } },
 { "id": "history",
   "steps": [ { "launch": {} }, { "tap": { "id": "tab-history" }, "name": "open-tab" }, { "wait": { "id": "history-list" } } ],
   "overrides": { "wide": { "stepsPatch": [ { "remove": "open-tab" } ] },
@@ -156,6 +158,10 @@ a tablet, the menu button outside the navigation bar on a cover display), an ove
   of the device's set in `store-screenshots` (the shot's `targets`).
 - **Device `layout`**: devices that lay out alike (`"layout": "wide"` on an open iPhone Duo and an unfolded Pixel
   Fold) share one override keyed by the layout.
+- **An unnamed button** (a hamburger menu with no accessibility label): match "no name" with
+  `normalize-space(@name)=''`, never `not(@name)`. A newer build that gives it a name of one space (`name=" "`)
+  breaks `not(@name)`; `normalize-space` covers both. Better: ask the user to give it an id (`AutomationId`,
+  `accessibilityIdentifier`), which no redesign of its label moves.
 
 ### Foldables
 
@@ -217,7 +223,7 @@ One kind a step: `{ "<kind>": <value> }`.
 | `url` | a URL or path | web: resolved against `app.web.url` |
 | `tap` | an element, or `{ "x": …, "y": … }` | coordinates are a last resort: they differ per device size |
 | `type` | `{ "text": "…", <finder> }` | types into the focused field, or one found by `id`, `label`, `xpath`, `css`, or `into` (its placeholder text) |
-| `wait` | a number (ms), `{ "ms": … }`, or an element | an element waits for it to appear, up to its `timeout` (seconds, default 10). A driver that can't see elements waits and warns |
+| `wait` | a number (ms), `{ "ms": … }`, or an element (with `contains`, optionally) | an element waits for it to appear (and, with `contains`, to show that text), up to its `timeout` (seconds, default 10). A driver that can't see elements waits and warns |
 | `scroll` | `{ "to": <element> }` or `{ "direction": "up"\|"down"\|"left"\|"right", "times": n }` | wait for scroll bars to fade after (`settle`) |
 | `back` | `true` | the system back (Android), the agent's or Appium's back |
 | `swipe` | `{ "from": [x, y], "to": [x, y], "ms": … }` or `{ "direction": … }` | |
@@ -226,7 +232,7 @@ One kind a step: `{ "<kind>": <value> }`.
 | `appFile` | `{ "file": "seed/app.db", "into": "Library/Caches/app.db" }` (`into` may be `{ "ios": …, "android": … }`) | copies a file into the app's own data, the app stopped first and the old file (and a database's `-wal`/`-shm`) removed: the simulator's data container, Android's `/data/data/<package>` through `run-as` (debug builds). Done by the `simctl` and `adb` drivers, and through them by the agents and Appium |
 | `settle` | `true` or `{ "timeout": s, "ignore": [[x, y, w, h], …] }` | waits until two screenshots in a row are identical (outside the `ignore` rectangles, in the picture's pixels: an illustration that never stops moving); a screen that never settles is a warning |
 | `posture` | `"folded"`, `"open"`, `"half-open"` | folds the device in the middle of the steps ([Foldables](#foldables)); `simctl`, `adb`, and the drivers they host |
-| `hideKeyboard` | `true`, or `{ "tap": <element> }` | closes the on-screen keyboard if it's up: Android (`adb`, and the agents on it) presses back only while `dumpsys input_method` says it's up; Appium uses `mobile: hideKeyboard` (on iOS the keyboard's Done or Return key, then a Done button above it). Never a navigation back. `{ "tap": … }` taps that element instead (a title or label outside the field), on any driver that taps: the way on an iOS device driven by an in-app agent, which can't see the keyboard |
+| `hideKeyboard` | `true`, or `{ "tap": <element> }` | closes the on-screen keyboard if it's up: Android (`adb`, and the agents on it) presses back only while `dumpsys input_method` says it's up (a full-screen landscape keyboard too: [adb.md](adb.md#the-keyboard)); Appium uses `mobile: hideKeyboard` (on iOS the keyboard's Done or Return key, then a Done button above it). Never a navigation back. `{ "tap": … }` taps that element instead (a title or label outside the field), on any driver that taps: the way on an iOS device driven by an in-app agent, which can't see the keyboard |
 
 Any step may carry a **`name`** (`{ "tap": { "id": "tab-history" }, "name": "open-tab" }`) for an override's
 `stepsPatch` to refer to it; names are unique within a screen's steps.
@@ -257,6 +263,22 @@ and finders it supports (`capabilities()`); a screen with a step it can't do is 
 | `macos` | the whole of a name, description, title or value (AppleScript's `is` ignores case), then a part of one | no |
 | `maestro` | Maestro's own text match (a regular expression of the whole text; this driver escapes it) | no |
 
+**"This element shows this text": `contains`.** A `wait` or `verify` element may add `contains`: the element
+`id` (or `text`, `label`, `xpath`, `css`) finds must show that text, itself or anything under it, ignoring case and
+runs of space. `{ "id": "servings", "contains": "24" }` passes on iOS, where 24 is the chip's own label, and on
+Android, where it's a child's text, with no hand-written xpath naming both platforms' attributes and a
+descendant. When several elements match (a list of chips with one id), any one that shows it passes. A miss is
+"wrong state: id 'servings' containing '24' wasn't on screen".
+
+| Driver | What `contains` reads |
+|---|---|
+| `adb`, `uiautomator` | the dump: the element's and its descendants' `text` and `content-desc` |
+| `devflow`, `ailoha` | the agent's tree: the element's and its children's text and value (`css`: the element's own) |
+| `appium` | the page source, once: iOS's `label` and `value`, Android's `text` and `content-desc`, a Mac's `title`, Windows' `Name`, the element's and its descendants' |
+| `chrome` | `innerText`, `textContent`, the value, `aria-label`, `title`, `alt` |
+| `macos` | the name, description, title and value of the element and everything in it |
+| `maestro` | can't: a `wait` with `contains` skips the screen (wait for the `text` itself); `verify` is `unchecked` on a flow driver anyway |
+
 **XPath on the tree-reading drivers** (`adb`, `uiautomator`, the agents' tree): paths with `/` and `//`, `*`, `.`,
 `..`, `@attr`, positions (`[2]`, `[last()]`, `(//node)[2]`), `=`, `!=`, `<`, `>`, `and`, `or`, and the functions
 `contains`, `starts-with`, `ends-with`, `not`, `normalize-space`, `translate`, `lower-case`, `upper-case`, `string`,
@@ -283,10 +305,12 @@ Written to `<out>/capture-report.json` after every run.
     { "locale": "en-US", "device": "iphone-6.9", "screen": "plan", "status": "taken",
       "path": "en-US/iphone-6.9/plan.png", "width": 1320, "height": 2868, "sha256": "…",
       "driver": "simctl", "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2" },
-      "statusBar": "verified", "fixes": [], "warnings": [] },
+      "statusBar": "verified", "fixes": [], "warnings": [], "appRevision": "3f2c…" },
     { "locale": "de-DE", "device": "android-phone", "screen": "search", "status": "missed",
       "reason": "tap: id 'search' didn't appear in 10 s", "kept": "previous" }
-  ] }
+  ],
+  "app": { "revision": "3f2c…", "describe": "v2.1-14-g3f2c1a0", "committed": "2026-11-19T16:05:00+01:00",
+           "dirty": false, "repo": ".", "builds": { "ios": { "version": "2.1", "build": "214" } } } }
 ```
 
 | Field | Meaning |
@@ -298,11 +322,14 @@ Written to `<out>/capture-report.json` after every run.
 | `fixes` | lossless repairs made: `alpha-flattened`, `converted-to-srgb`, `16-bit-to-8-bit`. Never a resize. Simulators and emulators write an alpha channel that's all opaque: those are flattened quietly (still in `fixes`) and counted once in the report's `notes`; see-through pixels get a warning |
 | `warnings` | what a person should look at (a screen that didn't settle, a wait that couldn't see elements) |
 | `source` | what produced it (device type and runtime, AVD and API level, browser) |
+| `appRevision` | the app's commit when this shot was taken (a taken shot, when the app is in a git checkout): what `--changes` starts from |
 
 Each PNG is exactly its device's `width`×`height`, 8-bit RGB (no alpha, no `tRNS`), sRGB, not interlaced. Files are
 written to a temporary folder and moved into place at the end, so a failed run never leaves a mix.
 
-The report also has `devices` (each device's source and warnings) and `notes` (said once a run, like the count of
+The report also has `app`, the app this run captured: git's `revision`, `describe`, `committed`, `dirty` (the
+screens' paths had changes not committed), `repo`, and `builds` (an iOS-family `.app`'s version and build number
+from its `Info.plist`); `devices` (each device's source and warnings) and `notes` (said once a run, like the count of
 quietly flattened pictures). A run keeps earlier entries for what it didn't run this time (`--screens`,
 `--devices`, `--locales`), and drops those the plan no longer has (a screen, device or locale removed, or omitted
 on a device), naming them in `notes`.
@@ -314,6 +341,11 @@ on a device), naming them in `notes`.
 - `capture.py --inspect`: also save each screen's UI tree (after its steps, or where they stopped) to
   `<out>/.inspect/<locale>/<device>/<screen>.txt`, for writing steps and `verify`.
 - `capture.py --write-staging`: write `staging.md` from the plan, and stop.
+- `capture.py --changes [revision]`: what changed in the app since the last capture (the oldest `appRevision` the
+  report keeps, or `revision`: a commit, tag or branch), in `appSource.paths` and the screens' `sources`
+  (uncommitted changes included): the commits, the files, and the screens to re-check, each with why (its
+  `sources` changed; a step's or `verify`'s id or text is on a changed line, or was removed). Exit 3 when the app
+  isn't in a git checkout or no revision is known. A run warns when the app moved since the shots it keeps.
 - `capture.py --current [folder]`: list the current store screenshots (`existing/<store>/screenshots/`,
   `store-screenshots.json`'s shots, `design/current.json`, or the folder), to start the screens from; and stop.
   `design/current.json`'s shots come by group (store, locale and slot: App Store and phones first), in order, each

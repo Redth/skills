@@ -166,6 +166,46 @@ The staging is the expensive part, and it changes rarely. On a later capture (a 
 language): read `staging.md`, ask only what's new (a new screen's `state` and `verify`, a new permission or flag),
 update the plan and `staging.md`, and run. `capture.py` warns when `staging.md` no longer matches the plan. A
 `verify` that now fails says the app changed under the steps: fix the steps (or the app's ids), never the check.
+When the app itself changed since the last capture, start with §7.
+
+## 7. Updating: when the app changed
+
+A newer app breaks steps written for the old one: a redesign replaces a typed field with chips, a button's name
+changes, a sheet appears. The staging usually survives (the seed, the sign-in, the skips); the steps and `verify`
+are what move. So before recapturing a newer app:
+
+1. **Find what changed, and show the user.** `capture.py --changes` reads the revision the report's shots were
+   taken at (each taken shot's `appRevision`, the report's `app`) and lists, for the paths the plan's `appSource`
+   and screens' `sources` name: the commits since, the files changed (uncommitted changes included: the next build
+   is made from them), and **the screens to re-check**, each with why (its `sources` changed; a step's or
+   `verify`'s id or text is on a changed line, or was removed and not added back). `--changes <revision>` starts
+   from a commit, tag or branch instead (a report from before revisions were recorded). Without `appSource` it
+   looks at the whole checkout: set `appSource.paths` (the pages, views and controls the screens use) and each
+   screen's `sources` to narrow it. By hand: `git log --oneline <then>..HEAD -- <paths>` and
+   `git diff --stat <then> -- <paths>`. Tell the user what changed and which screens it may touch, and ask whether
+   anything new deserves a shot or a shot is gone (§1) before running.
+2. **Build clean.** Stale build output can fail to link or run old code after a big update (a .NET MAUI iOS build
+   failed to link until its `obj/` was gone). Before the first capture after an update: .NET, delete the target
+   framework's `obj/` and `bin/` (or `dotnet clean` with the same `-f` and `-c`); Xcode, clean the build folder
+   (`xcodebuild clean`); Gradle, `./gradlew clean`; Flutter, `flutter clean`. Then build the same way as before
+   ([devflow.md](devflow.md#building-for-capture) for MAUI). The plan points at the build; it doesn't make it.
+3. **Dry run, then one screen per screen to re-check.** `capture.py --dry-run`, then `--screens <one> --devices
+   <one>` (with `--inspect`) for each screen `--changes` named. A step that no longer fits is reported as it was
+   before: `missed`, with the step and the element that failed ("step 5 (type {id: servings-field}): … didn't
+   appear"), or "wrong state: id 'ingredients' wasn't on screen" from `verify`; the previous picture is kept and
+   called stale. Read the `.inspect` tree for the new ids.
+4. **Repair the steps, never the check.** Change the base steps where the app changed everywhere; where it changed
+   on one platform, device or layout only, patch that layer (`stepsPatch`: `replace` the named step `with` the
+   new ones, `before`/`after` to insert one) rather than copying the steps. Keep step names stable so the patches
+   keep finding them; a patch whose step was renamed is a plan error, not a silent no-op. Prefer ids the app owns
+   (ask for one) over xpaths, `contains` over an xpath that names each platform's attributes, and
+   `normalize-space(@name)=''` over `not(@name)` ([config.md](config.md#steps)). Update `state`, `verify` and
+   `sources` with them, then `capture.py --write-staging`, so the plan, `staging.md` and the app stay in step.
+5. **Run the rest, and look at every picture.** A newer build can draw text over text or clip it while every check
+   passes (SKILL.md's step 7): report it to the user as the app's bug, don't ship that picture.
+
+The report records the revision each shot was taken at, so the next update starts from it; a run warns when the
+app moved since the shots it keeps.
 
 ## .NET MAUI without a screenshot mode
 

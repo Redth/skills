@@ -81,4 +81,4 @@ Notes per tool:
 ## Then
 
 `check_captures.py` (sizes against the plan and the stores' rules), then look at every picture at full size, as for
-any capture (SKILL.md, step 6).
+any capture (SKILL.md, step 7).

@@ -5,6 +5,8 @@
                [--locales en-US,de-DE] [--keep-going] [--cleanup] [--dry-run] [--inspect]
     capture.py --write-staging [--plan …]       write staging.md (the plan's staging, readable) beside the plan
     capture.py --current [FOLDER]               list the current store screenshots to start the screen list from
+    capture.py --changes [REVISION]             what changed in the app since the last capture, and which screens
+                                                to re-check (git, in the plan's appSource)
 
 For each device in the plan (CONTRACT.md 10.2) its driver prepares it (finds or creates and boots a dedicated
 simulator, starts an emulator, opens a browser), then for each locale and each screen runs the screen's steps and
@@ -27,6 +29,12 @@ step, a ``file`` as an ``appFile`` step); its ``permissions`` are granted before
 must be set. A plan with ``staging`` captures more than one screen only once ``staging.confirmed`` says the user
 saw one. Each screen's ``verify`` must be on screen before the shot, or the shot is ``missed`` ("wrong state").
 
+**Updating** (``references/staging.md``, "Updating: when the app changed"): the report records the app's revision
+(``app``: git's commit, whether the checkout had changes, an iOS build's version and build number; each taken
+shot's ``appRevision``). ``--changes`` reads it and lists the commits and files changed since then in the paths the
+plan's ``appSource`` and screens' ``sources`` name, and the screens whose files changed or whose steps' and
+``verify``'s ids and texts are on changed lines; a run warns when the app moved since the shots it keeps.
+
 ``--dry-run`` prints each device's preparation and every step as its driver would run it, and runs nothing.
 ``--inspect`` also saves each screen's UI tree (after its steps, or where they stopped) to
 ``<out>/.inspect/<locale>/<device>/<screen>.txt``, for writing steps.
@@ -43,7 +51,9 @@ from __future__ import annotations
 import argparse
 import copy
 import datetime
+import fnmatch
 import os
+import plistlib
 import re
 import shutil
 import sys
@@ -415,7 +425,7 @@ def _verify_words(verify):
             continue
         q = base.element_query(c) if isinstance(c, dict) else None
         if q:
-            out.append("%s `%s`" % q)
+            out.append("%s `%s`%s" % (q[0], q[1], (" containing `%s`" % c["contains"]) if c.get("contains") else ""))
     return ", ".join(out)
 
 
@@ -601,6 +611,299 @@ def current_screenshots(plan_dir, folder=None):
     return out
 
 
+# -- the app's source: its revision, and what changed since the last capture ---------------------------------
+
+def app_source(plan, plan_dir):
+    """The app's checkout and the paths the staged screens are drawn by: ``(repo, paths)``, ``repo`` absolute
+    (``appSource.repo``, default the plan's folder), ``paths`` relative to it (``appSource.paths``, then every
+    screen's ``sources``; empty: the whole checkout)."""
+    src = plan.get("appSource") or {}
+    repo = src.get("repo") or "."
+    repo = repo if os.path.isabs(repo) else os.path.normpath(os.path.join(plan_dir, repo))
+    wanted = list(src.get("paths") or []) + [p for s in plan["screens"] for p in s.get("sources") or []]
+    paths = []
+    for path in wanted:
+        covered = any(other != path and _under(path, other) for other in wanted)
+        if path not in paths and not covered:
+            paths.append(path)
+    return repo, paths
+
+
+def git(repo, *args):
+    """``git -C <repo> <args>``'s output, stripped; ``None`` when git isn't there, it isn't a checkout or the
+    command failed. Never logged (it isn't the run's)."""
+    try:
+        res = base.run(["git", "-C", repo] + list(args), check=False, quiet=True, timeout=120)
+    except base.DriverError:
+        return None
+    if not res.ok:
+        return None
+    return (res.out or "").strip()
+
+
+def _git_lines(repo, *args):
+    out = git(repo, *args)
+    return [l for l in (out or "").splitlines() if l.strip()]
+
+
+def app_builds(plan, plan_dir):
+    """The version and build number of the builds the plan points at, where a picture's worth of reading tells
+    (an iOS-family ``.app``'s ``Info.plist``): ``{platform: {"version", "build"}}``."""
+    out = {}
+    for platform, entry in sorted((plan.get("app") or {}).items()):
+        if not isinstance(entry, dict) or not entry.get("app"):
+            continue
+        path = entry["app"] if os.path.isabs(entry["app"]) else os.path.join(plan_dir, entry["app"])
+        for info in (os.path.join(path, "Info.plist"), os.path.join(path, "Contents", "Info.plist")):
+            if not os.path.isfile(info):
+                continue
+            try:
+                with open(info, "rb") as f:
+                    data = plistlib.load(f)
+            except Exception:  # noqa: BLE001 - not a plist this can read: say nothing
+                break
+            build = {}
+            if data.get("CFBundleShortVersionString"):
+                build["version"] = str(data["CFBundleShortVersionString"])
+            if data.get("CFBundleVersion"):
+                build["build"] = str(data["CFBundleVersion"])
+            if build:
+                out[platform] = build
+            break
+    return out
+
+
+def app_revision(plan, plan_dir):
+    """The app as this run captures it, for the report's ``app``: git's ``revision`` (the commit), ``describe``,
+    ``committed`` (its date), ``dirty`` (the screens' paths had changes not committed) and ``repo`` (relative to
+    the plan), with ``builds`` (``app_builds``). ``{}`` when the app isn't in a git checkout and no build says."""
+    repo, paths = app_source(plan, plan_dir)
+    out = {}
+    sha = git(repo, "rev-parse", "HEAD")
+    if sha:
+        out["revision"] = sha
+        out["repo"] = os.path.relpath(repo, plan_dir)
+        describe = git(repo, "describe", "--always", "--tags")
+        if describe:
+            out["describe"] = describe
+        committed = git(repo, "log", "-1", "--format=%cI")
+        if committed:
+            out["committed"] = committed
+        status = git(repo, "status", "--porcelain", "--", *(paths or ["."]))
+        out["dirty"] = bool(status)
+    builds = app_builds(plan, plan_dir)
+    if builds:
+        out["builds"] = builds
+    return out
+
+
+def last_revisions(report):
+    """The app revisions a report's taken shots were captured at (``appRevision``, else the report's
+    ``app.revision``), each once."""
+    out = []
+    for e in (report or {}).get("shots") or []:
+        if isinstance(e, dict) and e.get("status") == "taken" and e.get("appRevision") and \
+                e["appRevision"] not in out:
+            out.append(e["appRevision"])
+    if not out and isinstance((report or {}).get("app"), dict) and report["app"].get("revision"):
+        out.append(report["app"]["revision"])
+    return out
+
+
+def _under(path, source):
+    """True when the changed file ``path`` is ``source`` itself, under a folder ``source``, or matches it as a
+    glob."""
+    source = source.rstrip("/")
+    return path == source or path.startswith(source + "/") or fnmatch.fnmatch(path, source)
+
+
+def _element_values(steps, verify):
+    """The ids, texts and labels a screen's steps and ``verify`` look for (an xpath's quoted words too), as
+    ``(value, where)`` (``step "amount" (type)'s id``): what to look for on a changed line."""
+    out = []
+
+    def add(element, where):
+        if not isinstance(element, dict):
+            return
+        for key in ("id", "text", "label", "contains", "into"):
+            v = element.get(key)
+            if isinstance(v, str) and len(v.strip()) >= 3:
+                out.append((v.strip(), "%s's %s" % (where, key)))
+        if isinstance(element.get("xpath"), str):
+            for word in re.findall(r"""['"]([^'"]{3,})['"]""", element["xpath"]):
+                out.append((word.strip(), "%s's xpath" % where))
+
+    for n, step in enumerate(steps or [], 1):
+        if not isinstance(step, dict):
+            continue
+        try:
+            kind, value = base.step_of(step)
+        except ValueError:
+            continue
+        where = "step %s (%s)" % ('"%s"' % step["name"] if step.get("name") else n, kind)
+        if isinstance(value, dict):
+            add(value, where)
+            add(value.get("to"), where)
+            add(value.get("tap"), where)
+    checks = verify if isinstance(verify, list) else [verify] if verify else []
+    for c in checks:
+        add(c, "verify")
+    return out
+
+
+def _screen_layers(screen):
+    """A screen's steps and verify, and each override's, as ``[(label, steps, verify)]``."""
+    layers = [("", screen.get("steps") or [], screen.get("verify"))]
+    for name, o in sorted((screen.get("overrides") or {}).items()):
+        steps = list(o.get("steps") or [])
+        for op in o.get("stepsPatch") or []:
+            for key in ("prepend", "append", "with", "insert"):
+                steps.extend(op.get(key) or [])
+        if steps or o.get("verify"):
+            layers.append((" on %s" % name, steps, o.get("verify")))
+    return layers
+
+
+def changed_lines(diff_text):
+    """A unified diff's changed lines: ``{path: {"-": [lines], "+": [lines]}}`` (a deleted file's under its old
+    path)."""
+    out = {}
+    path = old = None
+    header = False
+    for line in (diff_text or "").splitlines():
+        if line.startswith("diff --git "):
+            header, path, old = True, None, None
+            continue
+        if header and line.startswith("--- "):
+            source = line[4:].strip()
+            old = None if source == "/dev/null" else (source[2:] if source.startswith("a/") else source)
+            continue
+        if header and line.startswith("+++ "):
+            target = line[4:].strip()
+            path = old if target == "/dev/null" else (target[2:] if target.startswith("b/") else target)
+            header = False
+            continue
+        if header or path is None or not line or line[0] not in "+-":
+            continue
+        out.setdefault(path, {"-": [], "+": []})[line[0]].append(line[1:])
+    return out
+
+
+def _on_line(value, line):
+    return re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(value), line) is not None
+
+
+def affected_screens(plan, changed_files, lines):
+    """Which screens the changes may break: ``[(screen id, [reasons])]`` for those whose ``sources`` changed or
+    whose steps' or ``verify``'s ids and texts are on a changed line (removed and not added back anywhere: likely
+    gone or renamed; on both: moved or changed), in the plan's order."""
+    out = []
+    added = [l for d in lines.values() for l in d["+"]]
+    for screen in plan["screens"]:
+        reasons = []
+        for source in screen.get("sources") or []:
+            hit = [f for f in changed_files if _under(f, source)]
+            if hit:
+                reasons.append("its sources changed (%s)" % ", ".join(hit[:4]) + (" and more" if len(hit) > 4 else ""))
+        seen = set()
+        for label, steps, verify in _screen_layers(screen):
+            for value, where in _element_values(steps, verify):
+                key = (value, where + label)
+                if key in seen:
+                    continue
+                for path, d in sorted(lines.items()):
+                    if any(_on_line(value, l) for l in d["-"]):
+                        back = any(_on_line(value, l) for l in added)
+                        reasons.append("%s%s `%s` %s in %s" % (
+                            where, label, value, "is on a changed line" if back else
+                            "was removed (and isn't added back anywhere)", path))
+                        seen.add(key)
+                        break
+        if reasons:
+            out.append((screen["id"], reasons))
+    return out
+
+
+def changes_since(plan_path, since=None):
+    """What changed in the app since the last capture, as lines to print (``capture.py --changes``): the
+    revision then and now, the commits and files changed in the paths the screens use (uncommitted changes
+    included: the next build is made from them), the screens to re-check and why, and what to do next. ``since``
+    (a commit, tag or branch) instead of the report's revision. Raises ``UsageError`` when there's no checkout or
+    no revision to start from."""
+    plan = load_plan(plan_path)
+    plan_dir = os.path.dirname(os.path.abspath(plan_path))
+    repo, paths = app_source(plan, plan_dir)
+    head = git(repo, "rev-parse", "HEAD")
+    if not head:
+        raise UsageError("%s isn't a git checkout (or git isn't installed): set the plan's appSource.repo to the "
+                         "app's checkout" % repo)
+    if since:
+        base_rev = git(repo, "rev-parse", "--verify", "--quiet", since + "^{commit}")
+        if not base_rev:
+            raise UsageError("%s isn't a commit, tag or branch in %s" % (since, repo))
+        revs = [base_rev]
+    else:
+        report_path = os.path.join(out_dir(plan, plan_path), REPORT_NAME)
+        try:
+            report = jsonio.load(report_path)
+        except (jsonio.JsonError, OSError):
+            report = None
+        revs = [r for r in last_revisions(report) if git(repo, "rev-parse", "--verify", "--quiet", r + "^{commit}")]
+        if not revs:
+            raise UsageError("the last capture's report (%s) doesn't say which revision of the app it was taken at "
+                             "(none yet, or a report from before it was recorded): pass --changes <revision>, the "
+                             "commit, tag or branch the captures were taken from" % report_path)
+    # The oldest revision the kept shots were taken at: the most commits behind.
+    counts = dict((r, int(git(repo, "rev-list", "--count", "%s..HEAD" % r) or 0)) for r in revs)
+    base_rev = max(revs, key=lambda r: counts[r])
+    short = lambda r: r[:10]  # noqa: E731
+    spec = ["--"] + (paths or ["."])
+    lines = []
+    when = git(repo, "log", "-1", "--format=%cs", base_rev) or "?"
+    dirty = bool(git(repo, "status", "--porcelain", *spec))
+    lines.append("the app since the last capture: %s (%s) -> %s (HEAD%s), %d commit%s in all" % (
+        short(base_rev), when, short(head), ", with changes not committed" if dirty else "", counts[base_rev],
+        "" if counts[base_rev] == 1 else "s"))
+    if len(revs) > 1:
+        lines.append("  (the kept shots were taken at %d revisions: %s; from the oldest)" % (
+            len(revs), ", ".join(short(r) for r in revs)))
+    lines.append("looking at %s" % (", ".join(paths) if paths else
+                                     "the whole checkout (set appSource.paths and each screen's sources to the files "
+                                     "that draw the screens, to narrow it)"))
+    commits = _git_lines(repo, "log", "--oneline", "--no-decorate", "%s..HEAD" % base_rev, *spec)
+    lines.append("")
+    lines.append("commits there (%d):" % len(commits))
+    for c in commits[:40]:
+        lines.append("  " + c)
+    if len(commits) > 40:
+        lines.append("  ... and %d more (git -C %s log --oneline %s..HEAD)" % (len(commits) - 40, repo, short(base_rev)))
+    stat = _git_lines(repo, "diff", "--stat", base_rev, *spec)
+    changed = _git_lines(repo, "diff", "--name-only", base_rev, *spec)
+    lines.append("")
+    lines.append("files changed (%d):" % len(changed))
+    for l in stat[:60]:
+        lines.append("  " + l.strip())
+    diff = git(repo, "diff", "--unified=0", base_rev, *spec) or ""
+    affected = affected_screens(plan, changed, changed_lines(diff))
+    lines.append("")
+    if affected:
+        lines.append("screens to re-check (their steps or verify may no longer fit the app):")
+        for sid, reasons in affected:
+            lines.append("  %s: %s" % (sid, "; ".join(reasons)))
+    else:
+        lines.append("no screen's sources, ids or texts are on a changed line")
+    rest = [s["id"] for s in plan["screens"] if s["id"] not in dict(affected)]
+    if rest:
+        lines.append("the rest (%s): nothing in the diff points at them; a change elsewhere (a shared style, a new "
+                     "sheet) can still move them" % ", ".join(rest))
+    lines.append("")
+    lines.append("next: show this to the user; build the app clean (stale build output can fail to link: .NET, "
+                 "delete the target's obj/ and bin/; Xcode, clean the build folder; Gradle, clean); capture.py "
+                 "--dry-run; capture one screen (--screens <first> --devices <one>) and look at it; repair a step "
+                 "that no longer fits (a stepsPatch for one device or layout), never the check")
+    return lines
+
+
 # -- checking a picture ---------------------------------------------------------------------------------------
 
 _BROWSER = [None]
@@ -780,6 +1083,7 @@ class Run(object):
         self.environment_problem = False
         self.stopped = None
         self.moves = []
+        self.app = {}
 
     # Which shots this run makes, for one device.
 
@@ -838,6 +1142,8 @@ class Run(object):
         try:
             self.check_staging_run()
             if not self.dry_run:
+                self.app = app_revision(self.plan, self.plan_dir)
+                self.check_app_moved()
                 lock = take_lock(self.out)
                 tmp = tempfile.mkdtemp(prefix=".capture-", dir=self.out)
             for device in self.devices():
@@ -896,6 +1202,22 @@ class Run(object):
         if have != want:
             say("warning: %s is %s: capture.py --write-staging" % (os.path.basename(doc),
                                                                   "missing" if have is None else "out of date"))
+
+    def check_app_moved(self):
+        """Warn when the shots the report keeps were taken at another revision of the app: run ``--changes``
+        first, and build the app clean."""
+        now_rev = self.app.get("revision")
+        if not now_rev:
+            return
+        try:
+            old = jsonio.load(os.path.join(self.out, REPORT_NAME))
+        except (jsonio.JsonError, OSError):
+            return
+        others = [r for r in last_revisions(old) if r != now_rev]
+        if others:
+            log("warning: the app changed since the last capture (%s, now %s): capture.py --changes lists what "
+                "changed and the screens to re-check; build it clean before capturing (references/staging.md, "
+                "\"Updating: when the app changed\")" % (", ".join(r[:10] for r in others), now_rev[:10]))
 
     def staged(self, device, screen, first):
         """A screen with the plan's staging put in: the seed before its steps (each screen, or ``once`` before a
@@ -1074,6 +1396,8 @@ class Run(object):
         e.update({"status": "taken", "path": rel, "width": device["width"], "height": device["height"],
                   "sha256": png.sha256(dest), "source": shot.source, "statusBar": shot.status_bar,
                   "fixes": list(shot.fixes) + fixes, "warnings": warnings})
+        if self.app.get("revision"):
+            e["appRevision"] = self.app["revision"]
         if screen.get("state"):
             e["state"] = screen["state"]
         if state_check != "none":
@@ -1109,6 +1433,8 @@ class Run(object):
         out = {"version": 1, "startedAt": _stamp(started), "finishedAt": _stamp(now()),
                "plan": os.path.basename(self.plan_path), "devices": self.device_notes,
                "shots": previous + self.entries}
+        if self.app:
+            out["app"] = dict(self.app)
         if self.notes:
             out["notes"] = list(self.notes)
         return out
@@ -1167,6 +1493,9 @@ def parser():
                    help="also save each screen's UI tree to <out>/.inspect/<locale>/<device>/<screen>.txt")
     p.add_argument("--write-staging", action="store_true",
                    help="write staging.md (the plan's staging and screens, readable) beside the plan, and stop")
+    p.add_argument("--changes", nargs="?", const="", metavar="REVISION",
+                   help="what changed in the app since the last capture (the report's revision, or REVISION) in the "
+                        "paths the screens use, and which screens to re-check; then stop")
     p.add_argument("--current", nargs="?", const="", metavar="FOLDER",
                    help="list the current store screenshots (existing/<store>/screenshots/, store-screenshots.json, "
                         "design/current.json, or FOLDER) to start the screen list from, and stop")
@@ -1191,6 +1520,10 @@ def main(argv=None):
         print("map each to the app screen it shows; those screens, in this order, start the plan's screens")
         return EXIT_OK
     try:
+        if args.changes is not None:
+            for line in changes_since(args.plan, args.changes or None):
+                print(line)
+            return EXIT_OK
         if args.write_staging:
             print(write_staging(args.plan))
             return EXIT_OK

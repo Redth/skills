@@ -854,7 +854,8 @@ technique fits the app. Proposal issue #13. Its output is what `store-screenshot
 skills/store-capture/
   SKILL.md  VERSION
   references/   staging.md (agreeing with the user which screens and how each is staged: sign-in, data, skips,
-                permissions, flags, clock, network, state and verify, confirming on one screen, reuse),
+                permissions, flags, clock, network, state and verify, confirming on one screen, reuse, updating
+                after the app changed),
                 choosing.md (which technique for which app: a decision table), screenshot-mode.md (adding a
                 launch-argument / deep-link screenshot mode to an app, per stack), devflow.md, ailoha.md, appium.md,
                 ui-automation.md (XCUITest, UI Automator, Maestro, macOS Accessibility), simctl.md, adb.md, web.md,
@@ -885,6 +886,7 @@ skills/store-capture/
   "clock": "09:41",
   "statusBar": "clean",
   "seed": "demo",
+  "appSource": { "repo": ".", "paths": ["src/SampleRecipes/Pages"] },
   "staging": {
     "account": { "kind": "demo", "env": ["SAMPLE_DEMO_USER", "SAMPLE_DEMO_PASSWORD"] },
     "seed": { "kind": "command", "run": "./store/seed-demo.sh" },
@@ -932,7 +934,10 @@ skills/store-capture/
   resource id / test id), `text`, `label` or `xpath`; `text` and `label` match exactly, then ignoring case and
   surrounding space, then contained, on every driver that can (Maestro: its own regex); the drivers that read a
   tree themselves (adb, uiautomator, the agents' trees) evaluate XPath 1.0's everyday part (`contains()`, `not()`,
-  `and`/`or`, positions). Each driver says which it supports and reports `skipped` for steps it can't do.
+  `and`/`or`, positions). A `wait` or `verify` element may add `contains`: the element found must show that text,
+  itself or anything under it (ignoring case and runs of space), read from the dump, the agent's tree, Appium's page
+  source, the page or the Accessibility tree; a driver that can't (`maestro`) skips such a `wait` and reports such a
+  `verify` `unchecked`. Each driver says which it supports and reports `skipped` for steps it can't do.
 - `locales`, `appearance` (`light` | `dark`), `clock`, `statusBar` (`clean` | `as-is`), `seed` (passed to the
   app as `ScreenshotSeed` in launch args / extras) and `posture` (a foldable's: `folded`, `open`, `half-open`; each
   posture captured is its own device, with its own id and size) are set per device by the driver before the screens
@@ -955,6 +960,9 @@ skills/store-capture/
   screen before the shot, and `{"keyboard": "hidden"|"shown"|"any"}`; otherwise the shot is `missed`, "wrong
   state"). A screen that types nothing is checked for a hidden keyboard without asking, where the driver can tell
   (adb's `dumpsys input_method`, Appium's `mobile: isKeyboardShown`). Overrides may change both.
+- **The app's source** (`appSource`: `repo`, relative to the plan, default its folder; `paths`, relative to
+  `repo`) and each screen's `sources` (its files, folders or globs): the report records the git revision each shot
+  was taken at, and `capture.py --changes` lists what changed since then in those paths and the screens to re-check.
 - `staging.confirmed` is set only on the user's own answer; an agent that can reach the user only through another
   agent stops after the one screen and asks, with the picture attached.
 
@@ -996,7 +1004,10 @@ physical display in use (`dumpsys display`), sets `wm size`/`wm density` again o
 each is put back in its posture) and re-applies demo mode; `screencap -d` takes the display in use. `simctl` folds
 the iPhone Duo simulator through DevFlow's fold control (`maui devflow device fold set …`, experimental, no agent
 needed) and captures the display it made active (else the built-in screen of the device's size). Hosted drivers
-fold through their host. A CoreSimulator hiccup ("server died") in `simctl` boot, install, launch or capture is
+fold through their host. **The full-screen keyboard**: before every tap on Android (`adb`'s, and Appium's and the
+agents' on a device `adb` hosts) a keyboard that `dumpsys input_method` says is up and `mIsFullscreen=true` (text
+entry in landscape: it covers the app) is closed with back, only while it's up; `hideKeyboard` closes it the same
+way. A CoreSimulator hiccup ("server died") in `simctl` boot, install, launch or capture is
 tried once more.
 
 **Network**: drivers talk only to the local machine (simulators, emulators, devices over adb, a local Appium
@@ -1013,9 +1024,15 @@ device's size — and `<out>/capture-report.json`:
                "path": "en-US/iphone-6.9/plan.png", "width": 1320, "height": 2868, "sha256": "…",
                "driver": "simctl", "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2" },
                "statusBar": "verified" | "overridden" | "unverified" | "none", "fixes": [], "warnings": [],
-               "state": "…", "stateCheck": "passed" | "failed" | "unchecked" },
-             { "…": "status missed: not reached (kept: previous|none, reason); failed: wrong size etc.; skipped: a step or device the driver can't do" } ] }
+               "state": "…", "stateCheck": "passed" | "failed" | "unchecked", "appRevision": "<git commit>" },
+             { "…": "status missed: not reached (kept: previous|none, reason); failed: wrong size etc.; skipped: a step or device the driver can't do" } ],
+  "app": { "revision": "<git commit>", "describe": "…", "committed": "…", "dirty": false, "repo": ".",
+           "builds": { "ios": { "version": "2.1", "build": "214" } } } }
 ```
+
+`app` is the app this run captured (git's, of `appSource.repo`; `builds` from an iOS-family `.app`'s `Info.plist`),
+left out when the app isn't in a git checkout; each taken shot's `appRevision` is the commit it was taken at, so a
+partial run's kept entries keep theirs. A run warns when the app moved since the shots the report keeps.
 
 Adapters write into a temp folder and move files into place at the end. A run keeps the report's earlier entries
 for plan items it didn't run (filters) and drops those the plan no longer has (removed or omitted), naming them in
@@ -1039,6 +1056,12 @@ the plan names them (create and own dedicated ones by default: `appstores-<devic
   [--dry-run] [--inspect]`: `--dry-run` prints each device's preparation and each step as the driver would run it,
   running nothing; `--inspect` saves each screen's UI tree to `<out>/.inspect/`. Exit 3 when a staged plan isn't
   confirmed and the run has more than one screen, or a staging account's variable isn't set.
+- `capture.py --changes [revision]`: what changed in the app since the last capture (the oldest `appRevision` the
+  report keeps, or the revision given), in `appSource.paths` and the screens' `sources`, uncommitted changes
+  included: the commits, the files, and the screens to re-check, each with why (its `sources` changed; a step's or
+  `verify`'s id or text is on a changed line, or removed and not added back), then what to do next (show the user,
+  build clean, one screen at a time, repair the steps, never the check). git through `drivers/base.py`'s `run()`;
+  exit 3 without a checkout or a revision.
 - `capture.py --write-staging` (writes `staging.md`); `capture.py --current [folder]` (lists the current store
   screenshots: `existing/<store>/screenshots/`, `store-screenshots.json`'s shots, `design/current.json` by group
   and order with what each shows, its capture and caption, a folder).

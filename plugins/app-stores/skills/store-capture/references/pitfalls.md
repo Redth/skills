@@ -49,6 +49,13 @@ happen to any app.
 - **Colour profiles.** Simulators of P3 devices and Mac captures can be tagged with the display's profile; Android's
   `--preserve-display-colors` keeps the panel's. Keep captures sRGB (or untagged sRGB), 8 bits a channel, so the
   stores' pages show what was reviewed. Conversions are reported (`converted-to-srgb`, `16-bit-to-8-bit`).
+- **The app's own rendering bugs pass every check.** On a newer build one platform drew a value and its "1 day
+  ago" over each other in a two-column form; the other platform was fine. `verify` passed (the elements were
+  there), the size, alpha and status-bar checks passed, and only looking at the picture at full size caught it.
+  No automated check here sees overlapping, clipped or truncated text ("Ingredi…"), a label cut by its
+  container, or a broken layout: look for them in every picture, and report them to the user as the app's bugs,
+  with the shot's path and what's wrong. Don't hide them (a different screen, a shorter seed value, a crop) and
+  don't hand the picture on: it isn't shippable until the app is fixed, and the user decides what to do meanwhile.
 - **The Dynamic Island and rounded corners.** Rectangular captures show content under the corners and an empty
   space where the island is. That's what the stores expect; keep important content in the safe area, and draw the
   island in a frame, not into the shot.
@@ -105,6 +112,26 @@ happen to any app.
   out of the comparison.
 - **Writing steps blind.** An unnamed button (no id, no label) needs an xpath; `capture.py --inspect` saves each
   screen's tree, so read it rather than opening a session by hand.
+- **"No name" that isn't.** `//XCUIElementTypeButton[not(@name)]` found a menu button until a newer build gave it
+  `name=" "`. Match it with `normalize-space(@name)=''`, or better, ask for an id.
+- **A value on a chip, platform by platform.** iOS puts "24" on the chip itself (`label`), Android on a child
+  (`text`): a cross-platform xpath for it names both attributes and a descendant. Write
+  `{ "id": "amount", "contains": "24" }` instead ([config.md](config.md#steps)).
+- **A newer app breaks steps written for the old one.** Two months of commits later two steps broke: a redesign turned a
+  typed field into chips that open a number sheet, and an unnamed button's `not(@name)` stopped matching. `verify`
+  caught both as `missed` instead of shooting the wrong screen. Before recapturing, run `capture.py --changes`, show
+  the user what changed and which screens it touches, and repair the steps (a `stepsPatch` for one device or
+  layout), never the check ([staging.md](staging.md#7-updating-when-the-app-changed)).
+- **A landscape keyboard swallowing a tap.** On an open foldable, text entry put the keyboard full screen; the
+  number sheet's Done tap landed on the keyboard, and the next `hideKeyboard` closed only the keyboard. The drivers
+  now close a full-screen keyboard before a tap on Android ([adb.md](adb.md#the-keyboard)).
+
+## Builds
+
+- **Stale build output after updating the app.** The first iOS build of a .NET MAUI app after pulling two months
+  of commits failed to link from stale `obj/`; a clean build fixed it. Build clean before the first capture after
+  an update (.NET: delete the target framework's `obj/` and `bin/`; Xcode: Product ▸ Clean Build Folder or
+  `xcodebuild clean`; Gradle: `./gradlew clean`; Flutter: `flutter clean`).
 
 ## Devices and machines
 

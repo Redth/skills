@@ -191,6 +191,18 @@ def keyboard_up(output):
     return None
 
 
+def keyboard_fullscreen(output):
+    """Whether ``dumpsys input_method`` says the keyboard is in full-screen (extract) mode: the input method's own
+    ``mIsFullscreen=true``. Android does it for text entry in landscape on phones, open foldables and some tablets:
+    the keyboard and its own copy of the field cover the whole screen, so a tap meant for the app lands on the
+    keyboard. ``None`` when it doesn't say."""
+    if re.search(r"mIsFullscreen=true", output or ""):
+        return True
+    if re.search(r"mIsFullscreen=false", output or ""):
+        return False
+    return None
+
+
 def parse_size(output, label):
     """``Physical size: 1080x2400`` (or ``density``) from ``wm size``/``wm density`` output, by its label."""
     m = re.search(r"%s (?:size|density): (\S+)" % label, output or "")
@@ -586,20 +598,46 @@ class AdbDriver(base.Driver):
         out = self.shell("dumpsys", "input_method", check=False, quiet=True, timeout=60).out
         return keyboard_up(out)
 
+    def keyboard_state(self):
+        """``(shown, fullscreen)`` from one ``dumpsys input_method`` (each ``None`` when it doesn't say)."""
+        out = self.shell("dumpsys", "input_method", check=False, quiet=True, timeout=60).out
+        return keyboard_up(out), keyboard_fullscreen(out)
+
     def hide_keyboard(self, ctx, value):
         """Close the keyboard: the back key, pressed only while the keyboard is up (with it down, back would
-        navigate)."""
+        navigate). A full-screen (landscape, extract-mode) keyboard closes the same way, with its field."""
         if base.DRY_RUN:
             base.note("  (dry run: the back key would be pressed if dumpsys input_method says the keyboard is up)")
             return
-        shown = self.keyboard_shown(ctx)
+        shown, full = self.keyboard_state()
         if shown is None:
             raise base.StepFailed("step %d: hideKeyboard: dumpsys input_method doesn't say whether the keyboard is "
                                   "up, so back wasn't pressed (it might navigate): give hideKeyboard a tap" % ctx.index)
         if not shown:
             return
+        if full:
+            base.note("  the keyboard is up full screen (landscape text entry): back closes it")
         self.shell("input", "keyevent", "KEYCODE_BACK")
         base.poll(lambda: self.keyboard_shown(ctx) is False, 3, interval=0.3, what="the keyboard to close")
+
+    def clear_fullscreen_keyboard(self, ctx):
+        """Before a tap: a keyboard up full screen (``keyboard_fullscreen``) covers the app, so a tap meant for a
+        button behind it (a sheet's Done) would land on the keyboard. Close it first, with the back key, only
+        while it's up (the field keeps what was typed), and say so. Returns True when it closed one. A keyboard
+        that covers only part of the screen is left as it is (a tap on an input accessory's Done is meant)."""
+        if base.DRY_RUN:
+            return False
+        shown, full = self.keyboard_state()
+        if not (shown and full):
+            return False
+        base.note("  the keyboard is up full screen (landscape text entry): closed first, or the tap would land on it")
+        self.shell("input", "keyevent", "KEYCODE_BACK")
+        try:
+            base.poll(lambda: self.keyboard_shown(ctx) is False, 3, interval=0.3, what="the keyboard to close")
+        except base.StepFailed:
+            ctx.warn("step %d: the full-screen keyboard didn't close before the tap: add a hideKeyboard step before "
+                     "it" % ctx.index)
+        return True
 
     def reset(self, device):
         """Put back everything changed; stop an emulator it started; delete its own AVD with ``--cleanup``."""
@@ -860,6 +898,14 @@ class AdbDriver(base.Driver):
             return base.find_xpath(root, wanted)
         return base.find_element(elements, finder, wanted)
 
+    def find_containing(self, ctx, query, wanted):
+        """An element ``query`` finds that shows ``wanted`` (its ``text`` or ``content-desc``, or a descendant's:
+        a chip whose number is on a child), from one dump; ``None`` when there's none."""
+        if base.DRY_RUN:
+            return self.find(ctx, query)
+        root, elements = self.dump()
+        return base.first_containing(root, elements, query, wanted)
+
     def size(self, device):
         """The screen's size in pixels as ``(width, height)``."""
         m = re.match(r"(\d+)x(\d+)", self.screen_size or "")
@@ -946,7 +992,9 @@ class AdbDriver(base.Driver):
         return el.center
 
     def step_tap(self, ctx, value):
-        """``input tap x y`` at an element's middle (or the given point)."""
+        """``input tap x y`` at an element's middle (or the given point); a keyboard up full screen is closed first
+        (``clear_fullscreen_keyboard``), or the tap would land on it."""
+        self.clear_fullscreen_keyboard(ctx)
         x, y = self._point(ctx, value, "tap")
         self.shell("input", "tap", x, y)
 

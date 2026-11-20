@@ -623,7 +623,10 @@ class AdbTests(AdbCase):
             p + "'pm clear com.example.samplerecipes'",
             p + "'am start -W -S -n com.example.samplerecipes/.MainActivity --es ScreenshotSeed demo --es "
                 "ScreenshotScreen plan --ez Fast true --ei Count 3'",
+            # Each tap looks at the keyboard first: one up full screen (landscape) would take the tap.
+            p + "'dumpsys input_method'",
             p + "'input tap 970 170'",
+            p + "'dumpsys input_method'",
             p + "'input tap 970 170'",
             p + "'input text pasta%sbake'",
             p + "'input keyevent KEYCODE_BACK'",

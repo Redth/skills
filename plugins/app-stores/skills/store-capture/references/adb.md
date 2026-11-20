@@ -181,6 +181,10 @@ What a fold undoes, and what the driver does about it (each seen on an API 36 Pi
   display that's off. The driver passes the display in use, and drops anything printed before a picture.
 - **Demo mode** is applied again after a posture change, entered twice as after a boot (a stray icon beside 9:41
   on the cover display otherwise).
+- **Text entry in landscape takes the whole screen.** On an open foldable (and on landscape tablets and phones) the
+  keyboard goes full screen (extract mode: the keyboard and its own copy of the field, the app hidden behind), so a
+  tap meant for the app (a number sheet's Done) lands on the keyboard. The driver closes a full-screen keyboard
+  before every tap ([The keyboard](#the-keyboard)).
 
 Play has no foldable slot ([sizes.md](sizes.md#foldables)): the cover display's pictures are phone pictures; the
 inner display's ~1:1 shape fits the phone slot as it is, or the tablet slots laid out at 16:9 (`wmSize
@@ -205,3 +209,21 @@ driver started stopped; with `--cleanup`, its own AVD deleted. A person's own de
 `hideKeyboard` presses back only while `dumpsys input_method` says the keyboard is up (`mInputShown=true`; with it
 down, back would navigate). `verify`'s keyboard check reads the same, so a screen that types nothing and ends with
 the keyboard up is `missed`, "wrong state" ([config.md](config.md#verify-and-the-keyboard)).
+
+**The full-screen (extract-mode) keyboard.** Android puts the keyboard full screen for text entry in landscape
+(phones, open foldables, some tablets): the input method draws its own copy of the field over the whole screen and
+the app is hidden behind it. A touch then lands on the keyboard, not on the button behind it: a number sheet's
+Done tapped after typing does nothing, the next `hideKeyboard` closes the keyboard but not the sheet, and `verify`
+misses the screen. So:
+
+- **Before every tap** (the `adb` driver's `input tap`, and Appium's and the agents' taps on a device `adb` hosts),
+  the driver reads `dumpsys input_method` and, when the keyboard is up and the input method says
+  `mIsFullscreen=true`, presses back first (only while it's up: what was typed stays in the field), waits for it
+  to close, and logs it. A keyboard on part of the screen is left alone: a tap on its Done key or an input
+  accessory is meant.
+- **`hideKeyboard`** closes a full-screen keyboard the same way (back, only while it's up).
+- **By hand:** `adb -s <serial> shell dumpsys input_method | grep -E 'mInputShown|mIsFullscreen'` says whether it's
+  up and full screen; `adb -s <serial> shell input keyevent KEYCODE_BACK` closes it (only while it's up). Where
+  `dumpsys` doesn't say (`mIsFullscreen` missing on an unusual input method), put a `hideKeyboard` before the tap
+  for that device or layout in a `stepsPatch` ([config.md](config.md#overrides-when-a-devices-layout-differs)).
+- A screen meant to show the keyboard full screen is rarely one a store wants: capture text entry in portrait.

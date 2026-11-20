@@ -1,16 +1,16 @@
 ---
 name: store-capture
 description: >
-  Use this skill to take our app's App Store or Google Play screenshots on every iPhone, iPad, Android, TV or
-  Mac size the stores need (foldables folded and open too), in every language, with a clean status bar and demo
-  data, staged with the user
-  (which screens, who's signed in, what each shows) and reused on later captures; capture from a simulator,
-  emulator, device, browser, Mac window or game engine; drive the app with its in-app agent (DevFlow for .NET
-  MAUI, Ailoha), Appium, XCUITest, UI Automator, Maestro, simctl or adb; add a screenshot mode (a launch
-  argument or deep link); import fastlane, xcresult, Maestro, Flutter, Detox or Playwright screenshots; check
-  captures' sizes; or record and encode an App Store preview video. Any stack. Do not use for designing,
-  captioning or framing screenshots (store-screenshots), the listing's words or sending it (store-listings),
-  building, signing or uploading the app, or UI testing and videos that aren't for a store listing.
+  Use this skill to take our app's App Store or Google Play screenshots on every iPhone, iPad, Android, TV or Mac
+  size the stores need (foldables folded and open too), in every language, with a clean status bar and demo data,
+  staged with the user (which screens, who's signed in, what each shows), reused later and repaired after an app
+  update; capture from a simulator, emulator, device, browser, Mac window or game engine; drive the app with its
+  in-app agent (DevFlow for .NET MAUI, Ailoha), Appium, XCUITest, UI Automator, Maestro, simctl or adb; add a
+  screenshot mode (a launch argument or deep link); import fastlane, xcresult, Maestro, Flutter, Detox or
+  Playwright screenshots; check captures' sizes; or record and encode an App Store preview video. Any stack. Do
+  not use for designing, captioning or framing screenshots (store-screenshots), the listing's words or sending it
+  (store-listings), building, signing or uploading the app, or UI testing and videos that aren't for a store
+  listing.
 license: MIT
 ---
 
@@ -54,6 +54,7 @@ sends as it is.
 - "Our MAUI app has DevFlow: get the store screens", "use our Appium tests / Maestro flows for the screenshots".
 - "Add a screenshot mode to the app so we can capture without tapping through it."
 - "Retake our store screenshots for the new release, set up like last time", "use a demo account, not mine."
+- "We've updated the app: recapture the screenshots", "what changed since the last capture?"
 - "Import our fastlane snapshot / screengrab / Maestro / Detox / Playwright screenshots."
 - "These screenshots were rejected for their size", "Play says our screenshots are too tall."
 - "Record an App Store preview video", "make this recording fit Apple's preview spec."
@@ -105,8 +106,17 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
    Techniques mix: one device by `devflow`, another by `adb`; keep a device's `id` when you change its driver and
    its captures stay in the same folder. Where none fits and the app can't change, say so and offer the screenshot
    mode as the change that makes it possible.
-2. **Stage it with the user, before any plan runs.** A plan with `staging` already (a later capture)? Read its
-   `staging.md`, ask only what's new, and go to step 3. Otherwise, in one message, propose and ask
+2. **A newer app since the last capture? Find what changed first.** Before re-running a plan on an updated app,
+   `capture.py --changes`: from the revision the report recorded (each taken shot's `appRevision`; or
+   `--changes <revision>`) it lists the commits and files changed in the paths the screens use (the plan's
+   `appSource.paths`, each screen's `sources`) and the screens whose steps or `verify` may no longer fit, with why.
+   Show it to the user. Build the app clean (stale output can fail to link: .NET, delete the target framework's
+   `obj/` and `bin/`). Then re-check the screens it named one at a time (`--screens <one> --devices <one>
+   --inspect`): a broken step is reported `missed` with the step and element that failed; repair it in the plan,
+   in the base steps or a `stepsPatch` for one device or layout, never the check, and write `staging.md` again, so
+   the plan stays in step with the app ([staging.md](references/staging.md#7-updating-when-the-app-changed)).
+3. **Stage it with the user, before any plan runs.** A plan with `staging` already (a later capture)? Read its
+   `staging.md`, ask only what's new, and go to step 4. Otherwise, in one message, propose and ask
    ([references/staging.md](references/staging.md)):
    - **the screens, in order:** start from the current set (`capture.py --current`: the storyboard's shots, the
      live listing's screenshots, a folder of them), mapping each picture to the app screen it shows;
@@ -118,7 +128,7 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
    - **per screen:** what must be visible (`state`, in plain words), how it's reached, and a `verify` element only
      that state shows.
    Clean status bar, locale, appearance and transient UI: [references/clean-state.md](references/clean-state.md).
-3. **Write `capture-plan.json` and `staging.md`.** The devices, each with the exact `width`×`height` a store takes
+4. **Write `capture-plan.json` and `staging.md`.** The devices, each with the exact `width`×`height` a store takes
    and the `driver` and `target` that produce it natively ([references/sizes.md](references/sizes.md)); the
    screens with their steps, `state` and `verify`; the `staging` section; `locales`, `appearance`, `clock`,
    `statusBar`. Every field: [references/config.md](references/config.md). Then `capture.py --write-staging` writes
@@ -131,8 +141,12 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
      what differs per device or `layout` (`stepsPatch`), so a later fix to the base steps reaches it; `omit` a screen
      a device shows inside another. Whole per-device step copies go stale.
    - **The keyboard:** end a typing screen's steps with `hideKeyboard` and add `{"keyboard": "hidden"}` to its
-     `verify`; a screen that types nothing is checked for a closed keyboard anyway.
-4. **Dry run, one screen, then the rest.** `capture.py --dry-run` prints each device's preparation and every step as
+     `verify`; a screen that types nothing is checked for a closed keyboard anyway. On Android a keyboard up full
+     screen (landscape text entry) is closed before every tap ([adb.md](references/adb.md#the-keyboard)).
+   - **A value on an element** (a chip's number): `{"id": "amount", "contains": "24"}` in `verify` or a `wait`
+     reads the element and everything under it on every driver that sees elements, rather than an xpath per
+     platform. Record the app's checkout in `appSource` (and each screen's `sources`) for the next update.
+5. **Dry run, one screen, then the rest.** `capture.py --dry-run` prints each device's preparation and every step as
    its driver would run it, running nothing. Read it with the user (which simulators get created, what's erased,
    which settings change and are put back). Capture **one** screen (`--screens <first> --devices <one>`) and show
    it at full size; when the user agrees, set `staging.confirmed` and write `staging.md` again. Until then
@@ -142,20 +156,24 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
    to narrow; a partial run keeps the report's other entries). It stops at the first shot missed or failed unless
    `--keep-going`; `--cleanup` deletes the simulators and emulators it created when done. Writing steps:
    `--inspect` saves each screen's UI tree to `<out>/.inspect/`.
-5. **Check.** `check_captures.py --plan capture-plan.json --rules apple,google` reads every PNG's header against the plan and the stores'
-   accepted sizes: size, bit depth, alpha, colour profile, interlacing. A wrong size goes back to step 3 with a
+6. **Check.** `check_captures.py --plan capture-plan.json --rules apple,google` reads every PNG's header against the plan and the stores'
+   accepted sizes: size, bit depth, alpha, colour profile, interlacing. A wrong size goes back to step 4 with a
    device that renders the right one, never to a resize.
-6. **Look at every capture at full size.** An exit code of 0 can't see a toast, a keyboard, a spinner, a
+7. **Look at every capture at full size.** An exit code of 0 can't see a toast, a keyboard, a spinner, a
    permission prompt, a debug banner or FPS counter, a scroll bar, a text caret, a half-finished animation, real
    personal data, the wrong locale (the app's, or the system's in an alert or the keyboard), a status bar that
-   wasn't overridden, or a Dynamic Island area that looks broken. Report what you see, screen by screen; retake
-   what's wrong.
-7. **Hand on.** Say which shots were taken, which were missed (and whether the previous picture was kept, so it's
+   wasn't overridden, or a Dynamic Island area that looks broken. Nor can it see **the app's own rendering bugs**:
+   text drawn over other text, text clipped or cut off ("Ingredi…"), a label cut by its container, a layout
+   that's broken on one platform or size. `verify` passes them (the elements are there), so look for them in
+   every picture, platform by platform. Report what you see, screen by screen; retake what the capture got wrong;
+   report what the app draws wrong to the user as the app's bug (the shot's path and what's wrong) and keep that
+   picture out of what's handed on, rather than working around it.
+8. **Hand on.** Say which shots were taken, which were missed (and whether the previous picture was kept, so it's
    stale), which failed and why. Captures to design: `store-screenshots` reads `<out>/<locale>/<device>/<screen>.png`
    as its captures. Captures to send as they are: name the plan's devices as `store-listing.json`'s screens and
    its screens as the shots, and the folder is the listing's screenshots folder; `listing.py check`
    (`store-listings`) is next.
-8. **Video (when asked).** `video.py record --from simctl|adb|chrome` on the dedicated device with the status bar
+9. **Video (when asked).** `video.py record --from simctl|adb|chrome` on the dedicated device with the status bar
    clean, `video.py encode … --slot <display type>` to that slot's preview size (constant 30 fps, H.264, a silent
    stereo track when there's none, trimmed with `--start`/`--end`), and `video.py check` against the rules. Then
    watch it through. Detail: [references/video.md](references/video.md).
@@ -193,13 +211,20 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
    capturing it, is as bad as erasing their simulator.
 8. **Local only.** Drivers talk to this machine: simulators, emulators, devices over adb, a local Appium server,
    in-app agents on loopback ports, the app on `localhost`. Nothing is sent anywhere.
-9. **Look at every picture at full size** before calling a set done, and **watch every video through**.
+9. **Look at every picture at full size** before calling a set done, and **watch every video through**. Look
+   specifically for overlapping, clipped or truncated text and broken layouts. *Why:* the app's own rendering bugs
+   pass every automated check, and a store picture with text over text is worse than none.
 10. **Debug tools stay out of store builds.** An in-app agent or screenshot mode belongs to debug or screenshot
    builds only (`#if DEBUG`, `kDebugMode`, `__DEV__`, `debugImplementation`); flag one that could ship.
 11. **Change the app only with the user.** Adding a screenshot mode, accessibility ids or an agent package is a
    code change: propose it, show it, let them decide.
 12. **Don't commit unless asked.** Say what's ready: the plan, any app changes, the captures folder if they keep
     captures in the repository.
+13. **Report the app's bugs; don't work around them.** A picture the app draws wrong (text over text, clipped or
+    truncated text, a broken layout) goes to the user as an app bug, with the shot's path and what's wrong, and
+    isn't handed on as a capture. Don't hide it by picking another screen, shortening the seed data, cropping or
+    capturing on the platform where it looks fine, unless the user decides to. *Why:* the fix is theirs, and a
+    workaround ships the bug's screen to the store or hides it from the people who'd fix it.
 
 ## Validation
 
@@ -214,7 +239,12 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 - Every `statusBar` in the report is `verified` (iOS: read back from the simulator; Android: the status bar's
   pixels followed demo mode's clock), or `none` where there's no status bar; an `unverified` one is retaken or
   looked at and explained. Either way the status bar's icons were looked at in every picture.
-- Every capture was opened at full size and what was seen is reported.
+- Every capture was opened at full size and what was seen is reported, including whether any text overlaps, is
+  clipped or truncated, or any layout is broken; what the app draws wrong was reported to the user as the app's
+  bug, and those pictures weren't handed on.
+- After the app changed: `capture.py --changes` was run and shown to the user, the app was built clean, every
+  screen it named was re-checked, broken steps were repaired in the plan (not the checks), and the report's
+  `app.revision` is the one captured.
 - `simctl status_bar … list`, `adb shell wm size`, the locale and appearance are back as they were (the drivers'
   reset log says so).
 - Videos: `video.py check` exits 0 and the video was watched through.
@@ -235,6 +265,11 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 | A toast, keyboard, spinner or prompt in the shot | the screen hadn't settled, or a permission wasn't granted | `settle` or `wait` for an element; grant permissions before launch ([clean-state.md](references/clean-state.md)) |
 | `missed`: "wrong state: the keyboard is up" | a screen that types nothing (or asks for it hidden) ended with the keyboard open | end its steps with `hideKeyboard`; never iOS's `back`; an iOS agent: `hideKeyboard` with a `tap` outside the field ([config.md](references/config.md#verify-and-the-keyboard)) |
 | A foldable's launch "didn't appear", or its shot is 1080×2424 | a fold locked the screen, or the size was set on the other display (a fold script's doing) | use the device's `posture`, not a script: the driver unlocks, lays out again and captures the display in use ([adb.md](references/adb.md#foldables)) |
+| `missed` after the app was updated: a step's element "didn't appear", or "wrong state" | the app changed under the steps (a redesign, a renamed button) | `capture.py --changes`; `--inspect` the screen; repair the step in the base steps or a `stepsPatch`, never the check ([staging.md](references/staging.md#7-updating-when-the-app-changed)) |
+| The first build after updating the app fails to link (`_OBJC_CLASS_$_…` undefined) | stale build output | build clean: .NET, delete the target framework's `obj/` and `bin/`; Xcode, clean the build folder; Gradle, `clean` |
+| On a landscape foldable or tablet a tap after typing does nothing, and `hideKeyboard` then closes only the keyboard | Android put the keyboard full screen (extract mode); the tap landed on it | the drivers close a full-screen keyboard before a tap; where `dumpsys input_method` doesn't say, a `hideKeyboard` before the tap in that layout's `stepsPatch` ([adb.md](references/adb.md#the-keyboard)) |
+| Text over text, or clipped, in a picture that passed every check | the app's own rendering bug | report it to the user with the shot's path; don't ship it or work around it |
+| `verify` of a value needs an xpath per platform (iOS's `label`, Android's child `text`) | the value sits on the element on one platform, on a child on the other | `{"id": …, "contains": "24"}` ([config.md](references/config.md#steps)) |
 | Exit 3: "no step named …" in a `stepsPatch` | a base step was renamed or removed under a device's patch | fix the patch's ref; the plan won't run half-patched |
 | The iPhone Duo can't be opened ("maui isn't installed", "not confirmed") | DevFlow's fold control is missing, or the hinge didn't settle | install the DevFlow CLI (the Microsoft.Maui.Cli .NET tool), or open it in Xcode's Device Hub and leave `posture` out ([simctl.md](references/simctl.md#the-iphone-duo)) |
 | Alpha in a PNG | `--mask=alpha`, a window capture's corners, a transparent background | the drivers flatten it and list `alpha-flattened`; fix the source if it recurs |
@@ -249,7 +284,7 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 
 | File | What's in it |
 |---|---|
-| [staging.md](references/staging.md) | agreeing with the user which screens and how each is staged: sign-in, data, skips, permissions, flags, clock, network, `state` and `verify`, confirming on one screen, reuse; seeding a .NET MAUI app without a screenshot mode |
+| [staging.md](references/staging.md) | agreeing with the user which screens and how each is staged: sign-in, data, skips, permissions, flags, clock, network, `state` and `verify`, confirming on one screen, reuse, updating after the app changed (`--changes`, a clean build, repairing steps); seeding a .NET MAUI app without a screenshot mode |
 | [choosing.md](references/choosing.md) | the decision table in full, the questions to ask, mixing techniques |
 | [screenshot-mode.md](references/screenshot-mode.md) | adding a launch-argument / deep-link screenshot mode: SwiftUI, UIKit, Compose, .NET MAUI, Flutter, React Native, web |
 | [devflow.md](references/devflow.md) | .NET MAUI's DevFlow agent: setup, the CLI, finding elements, capturing |
@@ -266,4 +301,4 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 | [clean-state.md](references/clean-state.md) | demo data, the clock, the status bar, locale, appearance, transient UI |
 | [sizes.md](references/sizes.md) | which simulator, emulator or viewport renders which store size natively |
 | [pitfalls.md](references/pitfalls.md) | what went wrong before, and how to avoid it |
-| [config.md](references/config.md) | every field of `capture-plan.json` and `capture-report.json` |
+| [config.md](references/config.md) | every field of `capture-plan.json` and `capture-report.json` (`contains`, `appSource`, the app's revision) |

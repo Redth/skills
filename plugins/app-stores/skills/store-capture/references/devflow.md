@@ -214,6 +214,10 @@ without a host is the app's theme (`theme set … --scope app`). Check the size 
 - **Android:** a Debug build is made for Fast Deployment by default: its assemblies aren't in the APK, so after
   `adb install` it crashes on start. Build with `-p:EmbedAssembliesIntoApk=true` (the `adb` host warns when it sees
   an APK without them); the plan's `app.android.apk` is the `*-Signed.apk`.
+- **After updating the app, build clean.** The first iOS build after pulling a newer app failed to link
+  (`_OBJC_CLASS_$_…` undefined) from stale intermediate output; a clean build fixed it. Before the first capture
+  after an update, delete the target framework's `obj/` and `bin/` folders (or `dotnet clean` with the same `-f`
+  and `-c`, then build), for every platform the plan captures ([staging.md](staging.md#7-updating-when-the-app-changed)).
 - Launch values reach a MAUI app as `NSUserDefaults` (iOS launch arguments), environment variables
   (`SIMCTL_CHILD_` on iOS only) and intent extras (Android): give the plan both `args` and `env` with the same keys
   (best in `staging.launch`) and each platform reads its own.
