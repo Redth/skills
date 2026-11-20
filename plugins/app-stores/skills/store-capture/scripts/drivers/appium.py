@@ -143,13 +143,18 @@ def session_hint(message):
     return message
 
 
+# The names of the button an app shows to close the keyboard (an input accessory's, a floating one), looked for on
+# iOS when the keyboard's own keys didn't close it (a number pad has none).
+ACCESSORY_DONE = ("Done", "Close", "Hide keyboard", "Dismiss keyboard", "Return")
+
+
 class AppiumDriver(HostedDriver):
     """Any app Appium reaches (see the module's docstring)."""
 
     NAME = "appium"
     PLATFORMS = ("ios", "ipados", "tvos", "android", "macos", "windows")
     STEPS = ("launch", "deepLink", "appFile", "tap", "type", "wait", "scroll", "back", "swipe", "settle", "script",
-             "posture", "hideKeyboard")
+             "posture", "hideKeyboard", "fill", "unfocus")
     FINDERS = ("id", "text", "label", "xpath")
     SESSION_TIMEOUT = 600   # the first XCUITest session builds WebDriverAgent
     SCROLLS = 8             # scroll to an element: at most this many swipes
@@ -524,27 +529,26 @@ class AppiumDriver(HostedDriver):
                          "height": height * 3 // 5})
         self.mobile(ctx.device, "scrollGesture" if kind == "scroll" else "swipeGesture", args)
 
-    def step_scroll(self, ctx, value):
-        """``direction`` (default down), ``times`` times; ``to`` an element: scroll until it's there (at most
-        ``times``, default ``SCROLLS``)."""
-        if isinstance(value, str):
-            value = {"direction": value}
-        value = value or {}
-        to = value.get("to")
-        if to:
-            query = base.element_query(to)
-            if query is None:
-                raise base.StepFailed("step %d: scroll to needs an element" % ctx.index)
-            most = int(value.get("times") or self.SCROLLS)
-            for _ in range(most):
-                if self.find(ctx, query):
-                    return
-                self._gesture(ctx, "scroll", value.get("direction", "down"))
-            if not self.find(ctx, query):
-                raise base.StepFailed("step %d: %s %r not found after %d scrolls" % (ctx.index, query[0], query[1], most))
+    def scroll_once(self, ctx, direction, within=None):
+        """One scroll ``direction``, on ``within``'s element (a pane) or the window. iOS: a quick ``mobile: swipe`` the
+        other way (the finger's), never ``mobile: scroll`` with a direction, which first presses half a second at a
+        quarter of the window's width and height: when that lands on a text field it focuses it, and the keyboard
+        just closed comes back while the page doesn't move. Android: ``mobile: scrollGesture``; a Mac: ``mobile:
+        scroll``."""
+        ref = within.attrs.get("ref") if within is not None else None
+        if self.family(ctx.device) == "ios":
+            self._gesture(ctx, "swipe", base.OPPOSITE[direction], ref)
             return
-        for _ in range(int(value.get("times") or 1)):
-            self._gesture(ctx, "scroll", value.get("direction", "down"))
+        self._gesture(ctx, "scroll", direction, ref)
+
+    def scroll_fingerprint(self, ctx, within=None):
+        """The page source (the elements' positions move as the content scrolls)."""
+        if base.DRY_RUN:
+            return None
+        try:
+            return self.inspect_tree(ctx)
+        except base.DriverError:
+            return None
 
     def step_swipe(self, ctx, value):
         """``from``/``to`` points (a W3C pointer drag over ``ms``), or a ``direction`` on the window or an element."""
@@ -575,36 +579,32 @@ class AppiumDriver(HostedDriver):
         return value if isinstance(value, bool) else None
 
     def hide_keyboard(self, ctx, value):
-        """Close the keyboard if it's up: ``mobile: hideKeyboard`` (on iOS tapping its Done or Return key); on iOS,
-        still up, a Done or Return button (an input accessory's) is tapped. Never Appium's back: on iOS that's
-        navigation."""
+        """The driver's own close, once: ``mobile: hideKeyboard`` (on iOS tapping the keyboard's own Done, Return, Go,
+        Search or Next key). Never Appium's back: on iOS that's navigation. The base's ``close_keyboard`` looks at the
+        keyboard after it and goes on to a Done button above the keyboard (``tap_accessory_done``), the plan's
+        ``done`` and ``tap``, and a scroll."""
         fam = self.family(ctx.device)
         if fam not in ("ios", "android"):
             raise base.StepSkipped("step %d: %s apps have no on-screen keyboard to hide" % (ctx.index, fam))
-        if base.DRY_RUN:
-            self.mobile(ctx.device, "hideKeyboard", {"keys": list(IOS_KEYBOARD_KEYS)} if fam == "ios" else {})
-            return
-        if self.keyboard_shown(ctx) is False:
-            return
         try:
             self.mobile(ctx.device, "hideKeyboard", {"keys": list(IOS_KEYBOARD_KEYS)} if fam == "ios" else {})
         except base.DriverError as e:
-            base.note("  mobile: hideKeyboard didn't: %s" % str(e)[:160])
-        if self.keyboard_shown(ctx) is False:
-            return
-        if fam == "ios":
-            names = " OR ".join("name ==[c] %s" % _pred(k) for k in ("Done", "Return", "Go", "Search"))
-            found = self.wd(ctx.device, "POST", self.sid() + "/element", {
-                "using": "-ios predicate string", "value": "type == 'XCUIElementTypeButton' AND (%s)" % names},
-                ok_missing=True)
-            ref = (found or {}).get(W3C_ELEMENT) if isinstance(found, dict) else None
-            if ref:
-                self.wd(ctx.device, "POST", self.sid() + "/element/%s/click" % ref)
-        try:
-            base.poll(lambda: self.keyboard_shown(ctx) is not True, 3, interval=0.5, what="the keyboard to close")
-        except base.StepFailed:
-            raise base.StepFailed("step %d: the keyboard is still up: give hideKeyboard a tap (a label or title "
-                                  "outside the field)" % ctx.index) from None
+            raise base.StepFailed("mobile: hideKeyboard didn't: %s" % str(e)[:160]) from None
+
+    def tap_accessory_done(self, ctx):
+        """iOS: the app's own button that closes the keyboard (``ACCESSORY_DONE``: Done, Close, Hide keyboard…, an
+        input accessory's or a floating one), tapped: a number pad has no Done or Return key, so ``mobile:
+        hideKeyboard`` can't close it ("did not know how to dismiss the keyboard") and this is what does."""
+        if self.family(ctx.device) != "ios":
+            raise base.StepSkipped("only iOS keyboards carry an accessory bar Appium looks for")
+        names = " OR ".join("name ==[c] %s OR label ==[c] %s" % (_pred(k), _pred(k)) for k in ACCESSORY_DONE)
+        found = self.wd(ctx.device, "POST", self.sid() + "/element", {
+            "using": "-ios predicate string", "value": "type == 'XCUIElementTypeButton' AND (%s)" % names},
+            ok_missing=True)
+        ref = (found or {}).get(W3C_ELEMENT) if isinstance(found, dict) else None
+        if not ref:
+            raise base.StepFailed("no Done or Return button above the keyboard")
+        self.wd(ctx.device, "POST", self.sid() + "/element/%s/click" % ref)
 
     def inspect_tree(self, ctx):
         """The page source (``GET /session/<id>/source``: XCUITest's or UiAutomator2's XML), for writing steps."""

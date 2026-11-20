@@ -196,6 +196,20 @@ class HostedDriver(base.Driver):
             return
         base.Driver.hide_keyboard(self, ctx, value)
 
+    def clear_focus(self, ctx):
+        """The host clears a text field's focus when it can (adb: the dump, then Escape); ``None`` otherwise."""
+        h = self.host(ctx.device)
+        if h is not None and getattr(h, "serial", None) and type(h).clear_focus is not base.Driver.clear_focus:
+            return h.clear_focus(ctx)
+        return None
+
+    def focused_field(self, ctx):
+        """The host's view of which text field has the focus (adb's dump), ``None`` when it can't tell."""
+        h = self.host(ctx.device)
+        if h is not None and getattr(h, "serial", None) and type(h).focused_field is not base.Driver.focused_field:
+            return h.focused_field(ctx)
+        return None
+
     def apply_status_bar(self, device, mode, clock, shot):
         """The host cleans the status bar; ``none`` without a host."""
         h = self.host(device)

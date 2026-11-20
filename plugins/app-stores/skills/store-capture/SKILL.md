@@ -125,8 +125,13 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
      app's data before launch, a staging backend with invented data), what's skipped (onboarding, paywalls,
      rating prompts, what's-new sheets), permissions granted first, feature flags, the app's own "now" (fixing
      on-screen times usually needs a screenshot mode: say so) and the network (offline, mocked, a staging server);
-   - **per screen:** what must be visible (`state`, in plain words), how it's reached, and a `verify` element only
-     that state shows.
+   - **per screen:** what must be visible (`state`, in plain words), how it's reached, a `verify` element only
+     that state shows, and **what it looks like in use** (`inUse`): a store picture shows the app mid-task, so a
+     form is partly filled with believable values (proposed by you, fictional, typical for the app's users), a
+     list is populated, nothing is an empty state or a field showing only its placeholder, and nothing is saved
+     unless saving is the point. Ask it for every screen, and when the user gives a rule for all of them ("screens
+     should look filled out, in use"), record it in `staging.inUse` (their words) so every later screen is asked
+     the same way ([staging.md](references/staging.md#looking-in-use)).
    Clean status bar, locale, appearance and transient UI: [references/clean-state.md](references/clean-state.md).
 4. **Write `capture-plan.json` and `staging.md`.** The devices, each with the exact `width`×`height` a store takes
    and the `driver` and `target` that produce it natively ([references/sizes.md](references/sizes.md)); the
@@ -140,9 +145,19 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
    - **A device whose layout differs** (no tab bar when open, a button elsewhere): name the steps and patch only
      what differs per device or `layout` (`stepsPatch`), so a later fix to the base steps reaches it; `omit` a screen
      a device shows inside another. Whole per-device step copies go stale.
-   - **The keyboard:** end a typing screen's steps with `hideKeyboard` and add `{"keyboard": "hidden"}` to its
-     `verify`; a screen that types nothing is checked for a closed keyboard anyway. On Android a keyboard up full
-     screen (landscape text entry) is closed before every tap ([adb.md](references/adb.md#the-keyboard)).
+   - **Forms:** fill them with one `fill` step (`[{"field": "servings", "text": "12"}, …]`): each field brought into view
+     (scrolled to, both ways), typed into, the keyboard closed before the next on Android; then the keyboard closed,
+     the focus cleared (no caret) and, with `"scrollTo": "top"`, the form scrolled back (typing scrolls a long
+     form). Fields in one pane of a two-pane layout: `"in": {"id": <the pane>}` (a plain scroll swipes the screen's
+     middle, the other pane). Add a typed value to `verify` (`{"id": "servings", "contains": "12"}`) and
+     `{"keyboard": "hidden"}`. A keyboard its own keys can't close (a number pad has no Done) is closed by the app's
+     own Done button: `hideKeyboard` (and `fill`'s `keyboard`) tries that (`done`; Appium on iOS looks for one named
+     Done or Close), a scroll, and last a neutral tap (`{"done": …, "scroll": true, "tap": …}`), then fails saying
+     what it tried: find the app's Done (`--inspect`), and only when there's none tell the user it's the app's to
+     fix; never ship the keyboard or quietly drop the typing
+     ([config.md](references/config.md#the-keyboard-focus-and-forms)). A screen that types nothing is checked for a
+     closed keyboard anyway; on Android a keyboard up full screen (landscape text entry) is closed before every tap
+     ([adb.md](references/adb.md#the-keyboard)).
    - **A value on an element** (a chip's number): `{"id": "amount", "contains": "24"}` in `verify` or a `wait`
      reads the element and everything under it on every driver that sees elements, rather than an xpath per
      platform. Record the app's checkout in `appSource` (and each screen's `sources`) for the next update.
@@ -162,7 +177,10 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
 7. **Look at every capture at full size.** An exit code of 0 can't see a toast, a keyboard, a spinner, a
    permission prompt, a debug banner or FPS counter, a scroll bar, a text caret, a half-finished animation, real
    personal data, the wrong locale (the app's, or the system's in an alert or the keyboard), a status bar that
-   wasn't overridden, or a Dynamic Island area that looks broken. Nor can it see **the app's own rendering bugs**:
+   wasn't overridden, a Dynamic Island area that looks broken, or **a screen that doesn't look in use**: an empty
+   form or list, fields showing only their placeholders, a form scrolled mid-way, a value the user wouldn't
+   believe. Ask of every picture "does it look like someone's using this?"; a blank one goes back to its staging
+   (an `inUse` and a `fill`), with the user, not on to the stores. Nor can it see **the app's own rendering bugs**:
    text drawn over other text, text clipped or cut off ("Ingredi…"), a label cut by its container, a layout
    that's broken on one platform or size. `verify` passes them (the elements are there), so look for them in
    every picture, platform by platform. Report what you see, screen by screen; retake what the capture got wrong;
@@ -220,7 +238,12 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
    code change: propose it, show it, let them decide.
 12. **Don't commit unless asked.** Say what's ready: the plan, any app changes, the captures folder if they keep
     captures in the repository.
-13. **Report the app's bugs; don't work around them.** A picture the app draws wrong (text over text, clipped or
+13. **Screens look in use.** Every screen is staged as someone mid-task would see it (forms partly filled with
+    believable, fictional values; lists populated; no empty states or placeholder-only fields; nothing saved
+    unless that's the screen's story), agreed with the user per screen (`inUse`), and an app-wide rule the user
+    gives is recorded in `staging.inUse` and applied to every screen added later. *Why:* a blank form shows what
+    the app asks of people, not what it does for them; the user rejected a set over one.
+14. **Report the app's bugs; don't work around them.** A picture the app draws wrong (text over text, clipped or
     truncated text, a broken layout) goes to the user as an app bug, with the shot's path and what's wrong, and
     isn't handed on as a capture. Don't hide it by picking another screen, shortening the seed data, cropping or
     capturing on the platform where it looks fine, unless the user decides to. *Why:* the fix is theirs, and a
@@ -239,6 +262,9 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 - Every `statusBar` in the report is `verified` (iOS: read back from the simulator; Android: the status bar's
   pixels followed demo mode's clock), or `none` where there's no status bar; an `unverified` one is retaken or
   looked at and explained. Either way the status bar's icons were looked at in every picture.
+- Every screen says what it looks like in use (`inUse`), agreed with the user (and `staging.inUse` holds their
+  rule when they gave one); no picture handed on shows an empty form or list, placeholder-only fields, the keyboard,
+  a caret or a form scrolled mid-way unless the user wanted it.
 - Every capture was opened at full size and what was seen is reported, including whether any text overlaps, is
   clipped or truncated, or any layout is broken; what the app draws wrong was reported to the user as the app's
   bug, and those pictures weren't handed on.
@@ -268,6 +294,11 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 | `missed` after the app was updated: a step's element "didn't appear", or "wrong state" | the app changed under the steps (a redesign, a renamed button) | `capture.py --changes`; `--inspect` the screen; repair the step in the base steps or a `stepsPatch`, never the check ([staging.md](references/staging.md#7-updating-when-the-app-changed)) |
 | The first build after updating the app fails to link (`_OBJC_CLASS_$_…` undefined) | stale build output | build clean: .NET, delete the target framework's `obj/` and `bin/`; Xcode, clean the build folder; Gradle, `clean` |
 | On a landscape foldable or tablet a tap after typing does nothing, and `hideKeyboard` then closes only the keyboard | Android put the keyboard full screen (extract mode); the tap landed on it | the drivers close a full-screen keyboard before a tap; where `dumpsys input_method` doesn't say, a `hideKeyboard` before the tap in that layout's `stepsPatch` ([adb.md](references/adb.md#the-keyboard)) |
+| A form or list in a picture is empty, or its fields show only placeholders | the screen was staged as reached, not as used | ask the user what it looks like in use (`inUse`), propose believable values, `fill` them (nothing saved), add a typed value to `verify`; recapture ([staging.md](references/staging.md#looking-in-use)) |
+| `missed`: "the keyboard is still up after …" | nothing the driver tried closed it (a number pad with no Done, an accessory that doesn't close it) | give `hideKeyboard` a `done` (the Done button by id, or its `{x, y}`) and a `tap` on something neutral; if none works it's likely the app's bug: tell the user, don't ship the keyboard or drop the typing silently ([config.md](references/config.md#the-keyboard-focus-and-forms)) |
+| A caret blinking in a field after typing (Android); `settle` warns "still has the focus" | back closes the keyboard, not the focus | `fill` clears it; after a `type`, an `unfocus` step (Escape while a field has focus, checked), or `unfocus {"tap": …}` |
+| The shot starts mid-form, the title under the navigation bar | typing scrolled the form | `fill`'s `"scrollTo": "top"`, or a `scroll {"to": "top"}` step |
+| On a two-pane layout a scroll moves the other pane, or `scroll {to}` never finds a field above | a scroll swipes the screen's middle; the field was above | `scroll {"in": {"id": <the pane>}}` (and `fill`'s `in`); `scroll {to}` looks both ways |
 | Text over text, or clipped, in a picture that passed every check | the app's own rendering bug | report it to the user with the shot's path; don't ship it or work around it |
 | `verify` of a value needs an xpath per platform (iOS's `label`, Android's child `text`) | the value sits on the element on one platform, on a child on the other | `{"id": …, "contains": "24"}` ([config.md](references/config.md#steps)) |
 | Exit 3: "no step named …" in a `stepsPatch` | a base step was renamed or removed under a device's patch | fix the patch's ref; the plan won't run half-patched |
@@ -284,7 +315,7 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 
 | File | What's in it |
 |---|---|
-| [staging.md](references/staging.md) | agreeing with the user which screens and how each is staged: sign-in, data, skips, permissions, flags, clock, network, `state` and `verify`, confirming on one screen, reuse, updating after the app changed (`--changes`, a clean build, repairing steps); seeding a .NET MAUI app without a screenshot mode |
+| [staging.md](references/staging.md) | agreeing with the user which screens and how each is staged: sign-in, data, skips, permissions, flags, clock, network, `state` and `verify`, what each looks like in use (`inUse`, `fill`), confirming on one screen, reuse, updating after the app changed (`--changes`, a clean build, repairing steps); seeding a .NET MAUI app without a screenshot mode |
 | [choosing.md](references/choosing.md) | the decision table in full, the questions to ask, mixing techniques |
 | [screenshot-mode.md](references/screenshot-mode.md) | adding a launch-argument / deep-link screenshot mode: SwiftUI, UIKit, Compose, .NET MAUI, Flutter, React Native, web |
 | [devflow.md](references/devflow.md) | .NET MAUI's DevFlow agent: setup, the CLI, finding elements, capturing |

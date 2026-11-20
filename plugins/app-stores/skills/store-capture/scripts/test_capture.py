@@ -591,7 +591,7 @@ class StagingTests(CaptureCase):
             text = f.read()
         for words in ("**Confirmed** on `plan` (phone), 2026-11-14", "A debug sign-in bypass", "`./seed-demo.sh`",
                       "before every screen", "rating prompt: UITestMode", "ios: photos",
-                      "| `plan` | this week's plan with five invented recipes | launch {args: ",
+                      "| `plan` | this week's plan with five invented recipes |  | launch {args: ",
                       "id `plan-title`", "(nothing: look at it)"):
             self.assertIn(words, text)
         self.assertEqual(self.main("--plan", path), 0)

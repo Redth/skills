@@ -37,7 +37,9 @@ wrong and fails. The layout is the web's, at that viewport; there are no system 
 - `tap`, `type`, `wait`, `scroll` find elements in the page through `Runtime.evaluate`: `css` (a selector), `id`
   (`data-testid`, then the `id` attribute), `text` (visible text), `label` (`aria-label`, `alt`, `title`) or
   `xpath`. A tap is a real mouse press at the element's middle; typing is `Input.insertText`; `back` is
-  `history.back()`.
+  `history.back()`. `fill` focuses and types each field; `unfocus` (and a `fill`'s end) `blur()`s the focused
+  input, so no caret is drawn; `scroll {"to": "top"}` is `scrollTo(0, 0)`, and `scroll {"in": <element>}` scrolls
+  that element (a pane, a list) instead of the page.
 - Opening a page waits for its load event, its fonts (`document.fonts.ready`) and two animation frames; `settle`
   then waits for two identical screenshots in a row.
 

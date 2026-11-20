@@ -28,6 +28,9 @@ on Monday with live data and the iPad set on Friday.
   guideline 2.3.10), copyrighted art the user hasn't cleared. Flag anything readable to the user.
 - **Content right for every store's audience:** Apple asks every screenshot to suit 4+, whatever the app's rating.
 - **Offline.** Fixtures served locally: no spinners waiting on a network, no rate limits, the same every run.
+- **In use.** Each screen as someone mid-task sees it: forms partly filled with believable values (typed with
+  `fill`, never saved unless that's the point), lists populated, no empty states or placeholder-only fields. Agreed
+  per screen (`inUse`), and the user's rule for all of them in `staging.inUse` ([staging.md](staging.md#looking-in-use)).
 
 ## The clock
 
@@ -83,7 +86,9 @@ default (`content_size large`, `font_scale 1.0`) unless a shot is about accessib
 | Spinners, skeletons | offline fixtures; `wait` for the content's element, then `settle` |
 | Animations mid-way | animations off (`UIView.setAnimationsEnabled(false)`, the animation scales at 0, reduced motion); `settle` |
 | Scroll bars | `settle` after a scroll (they fade) |
-| The keyboard, a text caret | decide per shot; usually a filled, unfocused field looks better: end the steps with `hideKeyboard` (Android: back, only while the keyboard is up; iOS through Appium: the keyboard's Done or Return; an iOS app driven by an agent: `{ "hideKeyboard": { "tap": <a label outside the field> } }`; never iOS's `back`, which navigates) and add `{ "keyboard": "hidden" }` to `verify`. A screen that types nothing is checked for it anyway |
+| The keyboard | decide per shot; usually a filled, unfocused field looks better: fill forms with `fill` (it closes the keyboard and clears the focus), or end the steps with `hideKeyboard` and add `{ "keyboard": "hidden" }` to `verify`. Android: back, only while the keyboard is up; iOS through Appium: the keyboard's Done or Return, then **the app's own Done** (a number pad has no key that closes it: the app's accessory or floating Done/Close button does; give it as `done` when it isn't named Done or Close); a tap outside the field only last (many apps don't close the keyboard for it); an iOS app driven by an agent: `{ "hideKeyboard": { "done": <the app's Done>, "tap": <a label outside the field> } }`; never iOS's `back`, which navigates. A screen that types nothing is checked for it anyway ([config.md](config.md#the-keyboard-focus-and-forms)) |
+| A text caret | closing the keyboard doesn't clear the field's focus (Android's back leaves it focused), and a shot lands with the caret on or off: `unfocus` after typing (`fill` does it): on Android Escape while a field has the focus, checked; else `{ "unfocus": { "tap": … } }` |
+| A form scrolled mid-way | typing scrolls a long form: `fill`'s `"scrollTo": "top"` or a `scroll {"to": "top"}` step after the keyboard is down |
 | Touch indicators | `show_touches 0`, `pointer_location 0` |
 | Focus rings | only where wanted (TV shots want one on a meaningful item) |
 | Notifications arriving | demo mode's `notifications visible false`; the dedicated simulator has none |

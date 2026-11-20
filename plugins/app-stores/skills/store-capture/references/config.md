@@ -113,6 +113,7 @@ Each driver's reference is the authority for its `target`; unknown fields are re
 |---|---|---|
 | `id` | `[a-z0-9][a-z0-9_.-]*` | the file name; what `store-screenshots` calls the capture screen |
 | `state` | string | what the screen must show, in plain words; in `staging.md`, the report and a wrong state's reason |
+| `inUse` | string | what it looks like in use, in plain words (the form part-filled with which values, the list's entries; or why it's empty on purpose): agreed with the user ([staging.md](staging.md#looking-in-use)); in `staging.md` beside the values its `fill` and `type` steps enter. With `staging.inUse` set, a screen without it is warned about |
 | `steps` | array | how to reach it, run in order; then the screenshot |
 | `verify` | an element (with `contains`, optionally), `{ "keyboard": … }`, or a list | must be so before the shot (`timeout`, default 5 s), else the shot is `missed` ("wrong state"); the report's `stateCheck`. `contains` and the keyboard: below |
 | `sources` | array of paths | the app's files (or folders, or globs) that draw this screen, relative to `appSource.repo`: `capture.py --changes` names the screen when one changed |
@@ -121,7 +122,7 @@ Each driver's reference is the authority for its `target`; unknown fields are re
 | `platforms` | array of platforms | only devices of these platforms |
 | `locales` | array | only these of the device's locales |
 | `appearance`, `clock`, `statusBar`, `seed`, `flatten`, `posture` | | this screen's settings |
-| `overrides` | object | keyed by a platform, a device `layout` or a device id (applied in that order): `stepsPatch`, `steps`, `omit`, `state`, `verify` or settings that differ there (below) |
+| `overrides` | object | keyed by a platform, a device `layout` or a device id (applied in that order): `stepsPatch`, `steps`, `omit`, `state`, `inUse`, `verify` or settings that differ there (below) |
 
 ### Overrides: when a device's layout differs
 
@@ -209,6 +210,8 @@ longer matches.
 | `flags` | feature flags: strings or `{ "name", "value", "how" }` |
 | `clock` | the app's own "now": `now`, `how` (the status bar's is the plan's `clock`) |
 | `network` | `kind`: `offline`, `mock`, `staging`, `live`; `how` |
+| `inUse` | how the screens look in use, app-wide, as the user put it: `rule` (their words), `by` (who and when), `values` (what's believable here), `save` (`false`, the default: forms are captured filled, before they're saved). In `staging.md`; a run warns about each screen without its own `inUse` ([staging.md](staging.md#looking-in-use)) |
+| `notes` | house rules that fit no other field (strings), in `staging.md` |
 | `confirmed` | `{ "screen", "device", "on" }`: the user saw this screen captured with this staging and agreed. Until it's set, a run captures one screen only |
 | `doc` | the readable copy's file name (default `staging.md`) |
 
@@ -224,7 +227,7 @@ One kind a step: `{ "<kind>": <value> }`.
 | `tap` | an element, or `{ "x": …, "y": … }` | coordinates are a last resort: they differ per device size |
 | `type` | `{ "text": "…", <finder> }` | types into the focused field, or one found by `id`, `label`, `xpath`, `css`, or `into` (its placeholder text) |
 | `wait` | a number (ms), `{ "ms": … }`, or an element (with `contains`, optionally) | an element waits for it to appear (and, with `contains`, to show that text), up to its `timeout` (seconds, default 10). A driver that can't see elements waits and warns |
-| `scroll` | `{ "to": <element> }` or `{ "direction": "up"\|"down"\|"left"\|"right", "times": n }` | wait for scroll bars to fade after (`settle`) |
+| `scroll` | `{ "to": <element> \| "top" \| "bottom" }` or `{ "direction": "up"\|"down"\|"left"\|"right", "times": n }`, either with `"in": <element>` | `to` an element looks `direction` first (default down) until it's in view or the content stops moving, then the other way; `"top"`/`"bottom"` scroll until the content stops moving; `in` scrolls within that element (a pane, a list) rather than at the screen's middle (on a two-pane layout, the other pane). On iOS through Appium each scroll is a quick swipe ([appium.md](appium.md#scrolling-on-ios)). Wait for scroll bars to fade after (`settle`) |
 | `back` | `true` | the system back (Android), the agent's or Appium's back |
 | `swipe` | `{ "from": [x, y], "to": [x, y], "ms": … }` or `{ "direction": … }` | |
 | `flow` | a string (a Maestro flow's path, a UI test's name) or the flow driver's own object | run by the driver that understands it |
@@ -232,10 +235,67 @@ One kind a step: `{ "<kind>": <value> }`.
 | `appFile` | `{ "file": "seed/app.db", "into": "Library/Caches/app.db" }` (`into` may be `{ "ios": …, "android": … }`) | copies a file into the app's own data, the app stopped first and the old file (and a database's `-wal`/`-shm`) removed: the simulator's data container, Android's `/data/data/<package>` through `run-as` (debug builds). Done by the `simctl` and `adb` drivers, and through them by the agents and Appium |
 | `settle` | `true` or `{ "timeout": s, "ignore": [[x, y, w, h], …] }` | waits until two screenshots in a row are identical (outside the `ignore` rectangles, in the picture's pixels: an illustration that never stops moving); a screen that never settles is a warning |
 | `posture` | `"folded"`, `"open"`, `"half-open"` | folds the device in the middle of the steps ([Foldables](#foldables)); `simctl`, `adb`, and the drivers they host |
-| `hideKeyboard` | `true`, or `{ "tap": <element> }` | closes the on-screen keyboard if it's up: Android (`adb`, and the agents on it) presses back only while `dumpsys input_method` says it's up (a full-screen landscape keyboard too: [adb.md](adb.md#the-keyboard)); Appium uses `mobile: hideKeyboard` (on iOS the keyboard's Done or Return key, then a Done button above it). Never a navigation back. `{ "tap": … }` taps that element instead (a title or label outside the field), on any driver that taps: the way on an iOS device driven by an in-app agent, which can't see the keyboard |
+| `hideKeyboard` | `true`, or `{ "done", "tap", "scroll", "own" }` | closes the on-screen keyboard if it's up, trying each way until it's down ([below](#the-keyboard-focus-and-forms)); never a navigation back |
+| `unfocus` | `true`, or `{ "tap": <element or {x, y}> }` | clears the text field's focus, so no caret blinks in the shot ([below](#the-keyboard-focus-and-forms)) |
+| `fill` | a list of `{ "field": <element, or an id>, "text": "…" }`, or `{ "fields": [...], "in", "keyboard", "unfocus", "scrollTo" }` | types a form's fields in one step, the same on every driver that types ([below](#the-keyboard-focus-and-forms)) |
 
 Any step may carry a **`name`** (`{ "tap": { "id": "tab-history" }, "name": "open-tab" }`) for an override's
 `stepsPatch` to refer to it; names are unique within a screen's steps.
+
+### The keyboard, focus and forms
+
+**`fill`** types into several fields at once, as a person filling the form would: for each `{ "field", "text" }`
+(`field` an element, or a string that's an id), the field is brought into view (`scroll {"to": …}`, both ways,
+within `in`), then typed into (the driver's `type`); on Android the keyboard is closed first (it covers the fields
+below the one just typed into, and `uiautomator` lists only what's on screen). Then the keyboard is closed
+(`keyboard`: `true` by default, `"keep"` to leave it up, or `hideKeyboard`'s object), the focus is cleared
+(`unfocus`, default `true` unless the keyboard's kept) and, with `scrollTo` (`"top"`, `"bottom"` or an element), the
+form is scrolled back: typing into a long form scrolls it, and the shot would start mid-form. Nothing is submitted
+(no Return, no Save). A field that can't be found fails the step naming it ("field 2: id 'salt'"). Fields are typed
+into as they are: a field that already holds text gets the new text after it.
+
+```json
+{ "fill": { "fields": [ { "field": "servings", "text": "12" }, { "field": "minutes", "text": "45" },
+                        { "field": { "text": "Notes" }, "text": "extra lemon" } ],
+            "in": { "id": "scale-form" }, "keyboard": { "done": { "label": "Done" } }, "scrollTo": "top" },
+  "name": "fill" }
+```
+
+On `maestro` a `fill` becomes `scrollUntilVisible` (down only), `tapOn`, `inputText` and `hideKeyboard` per field; it
+can't scroll within a pane (`in`). Give the step a `name` so a device's `stepsPatch` can change it.
+
+**`hideKeyboard`** tries, in order, until the keyboard is down (the driver looks after each try, where it can):
+
+1. the driver's own close (`"own": false` leaves it out): Android's back, only while `dumpsys input_method` says
+   the keyboard is up (a full-screen landscape keyboard too: [adb.md](adb.md#the-keyboard)); Appium's `mobile:
+   hideKeyboard` (on iOS the keyboard's Done, Return, Go, Search or Next key). **A number pad has none of those**,
+   so on iOS this always fails for it ("did not know how to dismiss the keyboard");
+2. the app's own Done: `done` (an element, or `{x, y}` for a round close button with no name); without one, Appium
+   on iOS looks for a button named Done, Close, Hide keyboard or Dismiss keyboard (an input accessory's, or one
+   floating beside the keyboard) by itself. For a number pad this is the way that works;
+3. a scroll: `scroll` (`true` is `up`, or a direction, or `{ "direction", "in" }`): an interactive keyboard closes
+   when its scroll view is dragged;
+4. last, a tap on something neutral: `tap` (a title or label outside the field, or `{x, y}`). Many apps don't close
+   the keyboard for a tap outside a field (iOS doesn't by itself), and a tap or press that lands on a field opens
+   it again.
+
+Still up after all of them, the step fails: "the keyboard is still up after …", naming each try and what's not
+been tried yet. Look for the app's own Done first (`--inspect`'s tree; on iOS a button beside or above the number
+pad); only when the app has no way to close it is it the app's to fix: tell the user, with the device and screen.
+Don't capture it with the keyboard up, and don't drop the screen's typing on that device (a `stepsPatch` that
+removes the `fill`) unless the user decides to, and then say so in its `inUse`. A driver that can't see the
+keyboard (`simctl`, an agent on iOS) does the plan's `done` and `tap` once each; with neither, the step is
+`skipped`.
+
+**`unfocus`** clears the text field's focus after typing: closing the keyboard doesn't (Android's back closes the
+keyboard and leaves the field focused, its caret blinking, and a shot lands with it on or off). With `tap`, that's
+tapped first. Then the driver's own way: on Android (`adb`, `uiautomator`, and the agents and Appium on an adb host)
+the dump is read and, only while a text field has the focus, the keyboard is closed and Escape pressed (newer
+Android versions clear the focus on it); the dump is read again, and if the field is gone (Escape went back, as an
+unhandled Escape does on older versions) the step fails saying to give `unfocus` a tap. On the web, the focused
+element's `blur()`. Elsewhere (an iOS agent) give it a `tap`, or it warns. `settle` after typing with no `unfocus`
+since warns when a field still has the focus (read from the dump or the page) or, where the driver can't tell, when
+the settled screen changes again within a second (a caret's blink).
 
 A `script` step's environment:
 

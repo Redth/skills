@@ -74,6 +74,31 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   every automated check: SKILL.md's look-at-every-picture step and agent rules 9 and 13, the validation checklist
   and pitfalls say to look for them and report them to the user as the app's bugs, never ship or work around them.
   Three evals (an overlapping capture, an updated app, the landscape keyboard).
+- `store-capture`: screens that look in use. Staging asks, for every screen, what it looks like with someone using
+  it (forms partly filled with believable, fictional values; lists populated; no empty states or placeholder-only
+  fields; nothing saved unless that's the point): each screen's `inUse`, and the user's rule for all of them in
+  `staging.inUse` (`rule` in their words, `by`, `values`, `save`), rendered in `staging.md` (a "Looking in use"
+  section and an In use column with the values each screen types) and warned about for any screen without one;
+  `staging.notes` for house rules. SKILL.md's look-at-every-capture step, agent rule 13, validation and failure
+  modes ask "does it look in use?".
+- `store-capture`: the `fill` step: a form's fields typed in one step on every driver that types (a list of
+  `{field, text}`, or `{fields, in, keyboard, unfocus, scrollTo}`): each field scrolled into view both ways within
+  a pane, the keyboard closed before the next on Android, then the keyboard closed, the focus cleared and the form
+  scrolled back (`scrollTo: "top"`); nothing submitted. Maestro writes it as a flow.
+- `store-capture`: `scroll` takes `in` (scroll within a pane: on a two-pane layout a plain scroll swiped the other
+  pane) and `to: "top"`/`"bottom"` (until the content stops moving), and `scroll {to}` looks the other way too when
+  the first direction reaches its end (adb's only looked down). On iOS through Appium a scroll is a quick
+  `mobile: swipe`: a direction-only `mobile: scroll` presses first at a quarter of the window, which on a small
+  display focused a field and reopened the number pad.
+- `store-capture`: `hideKeyboard` tries the driver's own close, the app's own Done (`done`; Appium on iOS looks
+  for a button named Done, Close or Hide keyboard: a number pad has no key `mobile: hideKeyboard` can use), a
+  `scroll`, and last a neutral `tap`, looking at the keyboard after each; still up, it fails naming each try and
+  what's left, rather than shipping the keyboard or dropping the typing quietly.
+- `store-capture`: the `unfocus` step (Android: Escape only while the dump shows a focused text field, then
+  checked, failing if the screen went back instead; the web: `blur()`; a `tap` anywhere), since back closes the
+  keyboard but leaves a caret blinking; `fill` ends with it, and `settle` after typing warns when a field kept the
+  focus or the settled screen blinks. Three evals (a blank form caught at review, the in-use rule reused for a new
+  screen, a number pad that won't close).
 
 - `store-screenshots` 0.1.0 (#12): designed store screenshots from an app's real captures, one design for every
   store, size and locale. A brief and a storyboard agreed with the user before rendering; `store-screenshots.json`

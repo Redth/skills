@@ -2,7 +2,7 @@
 
 A capture is only as good as the state the app is in. Before any plan is written, agree with the user which screens
 tell the story and how the app gets into each one: who's signed in, what data it shows, what's skipped, what's
-granted, which flags are on, what time it thinks it is, and what it talks to. Record it in the plan's `staging`
+granted, which flags are on, what time it thinks it is, what it talks to, and what each screen looks like **in use**. Record it in the plan's `staging`
 section and each screen's `state` and `verify`. `capture.py --write-staging` writes it out as `staging.md` beside
 the plan for people to read. Confirm it on **one** screen with the user before capturing everything, then reuse it
 on every later capture.
@@ -38,6 +38,8 @@ its core value.
 | **Date and time** | the status bar's is the plan's `clock`; the app's own "now" (times, "2 days ago", greetings) | `staging.clock`: `now`, `how` |
 | **Network** | offline fixtures; a mocked local server; a staging server with invented data | `staging.network`: `kind` (`offline`, `mock`, `staging`, `live`), `how` |
 | **Every launch** | the screenshot mode's switch, the sign-in bypass, a fake server's address | `staging.launch`: `args`, `env` |
+| **Looking in use** | screens look mid-task: forms partly filled with believable values, lists populated, no empty states or placeholder-only fields; nothing saved unless that's the point | `staging.inUse`: `rule` (the user's words), `by`, `values`, `save` ([below](#looking-in-use)) |
+| **House rules** | anything else the user wants of every picture ("no real addresses on the map") | `staging.notes`: a list, in `staging.md` (a `$comment` isn't) |
 
 ### Signing in: never a real person's account
 
@@ -86,22 +88,68 @@ be changed for the whole device. Fixing on-screen times **needs a screenshot mod
 
 Write the choice in `staging.clock.how`.
 
+### Looking in use
+
+A store picture sells what the app does for someone, so it shows the app as someone **using** it would see it, not
+as a fresh install reaches it. A blank new-recipe form, an empty history, a search box with only its placeholder
+all show what the app asks of people. Ask about it for **every** screen, and propose the answer:
+
+- **Forms** partly filled, as a user mid-task would have them: the two or three fields that carry the screen's
+  point, with believable values (typical readings, an invented name, a plausible amount), not every field and not
+  "test" or "123". Values are fictional, like all demo data, and read well in each locale.
+- **Lists** populated from the seed (eight entries, not one); a chart with weeks of data.
+- **No empty states, no placeholder-only fields**, unless the empty state is the screen's story (the first-run
+  welcome), and then `inUse` says so.
+- **Nothing saved** unless saving is the point: the form is captured filled, before Save, so the seed and the next
+  screen aren't changed by it. A `fill` never presses Return or Save; on iOS a keyboard's Go or Search key can
+  submit, so a form that submits on Return gets `hideKeyboard {"own": false, "done": …}`.
+- **At its top**, keyboard down, no caret: `fill` does this (`"scrollTo": "top"`, the keyboard closed, the focus
+  cleared).
+
+When the user states a rule for all of them ("generally most screens we capture should look somewhat filled out,
+in use"), record it in `staging.inUse` in their words, with who said it and when, and the kind of values that are
+believable here:
+
+```json
+"inUse": { "rule": "most screens should look somewhat filled out, in use",
+           "by": "the user, in chat, 2026-11-20",
+           "values": "a family cooking for four: everyday dinners, metric amounts, invented names",
+           "save": false }
+```
+
+It's rendered in `staging.md` under "Looking in use", and a run warns about every screen that doesn't say how it
+looks in use (its `inUse`), so a screen added later is asked the same question instead of being captured blank.
+Each screen then says what it means there (§3).
+
 ## 3. Per screen: what it shows, how it's reached, how it's checked
 
 Each screen gets:
 
 - **`state`**: what must be visible, in plain words ("this week's plan with five recipes, Tuesday's open"). It goes
   into `staging.md`, the report, and the reason of a shot that missed it.
-- **its steps**: how it's reached (a launch argument or deep link, else taps by id).
+- **`inUse`**: what it looks like in use, in plain words ("the scaling form part-filled: 12 servings, 45
+  minutes, not saved"; "eight weeks of meals"; "empty on purpose: the first-run welcome"). In `staging.md`
+  beside the values its steps type.
+- **its steps**: how it's reached (a launch argument or deep link, else taps by id), then, for a form, one `fill`
+  step with the values agreed (below).
 - **`verify`**: an element (or a list) that must be on screen before the shot: `{ "id": "plan-title" }`,
   `{ "text": "Lemon Pasta" }`, with an optional `timeout` (seconds, default 5). When it isn't there the shot is
   `missed` with "wrong state" and the previous picture is kept; the report's `stateCheck` says `passed`,
   `failed` or, on a driver that can't see elements (`simctl`, a flow), `unchecked` (look at the picture).
   Choose something only the right state shows: a seeded recipe's name, not the tab bar.
 - `"staging": false` for a screen that mustn't get the seed or the launch values (onboarding on a fresh install).
+- **A form**: one `fill` step types every field (each scrolled into view, both ways, the keyboard closed before the
+  next on Android), then closes the keyboard, clears the focus (no caret) and, with `scrollTo`, scrolls back:
+  `{ "fill": { "fields": [ { "field": "servings", "text": "12" }, { "field": "minutes", "text": "45" } ], "scrollTo": "top" } }`.
+  Fields in one pane of a two-pane layout (an open foldable, a tablet): `"in": { "id": "<the pane>" }`. Add a typed
+  value to `verify` (`{ "id": "servings", "contains": "12" }`) with `{ "keyboard": "hidden" }`. A keyboard that won't
+  close on one device (a number pad with no Done): give its `hideKeyboard` (or the fill's `keyboard`) a `done` and
+  a `tap` to try; when nothing closes it, tell the user (it's likely the app's bug) and let them decide; don't
+  drop the typing on that device yourself ([config.md](config.md#the-keyboard-focus-and-forms)).
 - **The keyboard**: a screen that types something usually looks better with the keyboard closed: end its steps with
-  `hideKeyboard` and add `{ "keyboard": "hidden" }` to `verify`. A screen that types nothing is checked for a closed
-  keyboard without asking, where the driver can tell ([config.md](config.md#verify-and-the-keyboard)).
+  `hideKeyboard` (and `unfocus`, for the caret) and add `{ "keyboard": "hidden" }` to `verify`. A screen that types
+  nothing is checked for a closed keyboard without asking, where the driver can tell
+  ([config.md](config.md#verify-and-the-keyboard)).
 - **Devices that lay out differently** (an open foldable or tablet without the tab bar, a button elsewhere on a
   cover display): name the steps that differ and patch them per device or layout (`stepsPatch`), rather than
   copying the whole list; or `omit` a screen a device shows as part of another
@@ -109,8 +157,16 @@ Each screen gets:
 
 ```json
 { "id": "plan", "state": "this week's plan, five invented recipes, Tuesday open",
+  "inUse": "the week planned, Tuesday's dinner ticked off",
   "steps": [ { "launch": { "args": { "ScreenshotScreen": "plan" } } }, { "wait": { "id": "plan-title" } } ],
-  "verify": [ { "id": "plan-title" }, { "text": "Lemon Pasta" } ] }
+  "verify": [ { "id": "plan-title" }, { "text": "Lemon Pasta" } ] },
+{ "id": "add-recipe", "state": "the new-recipe form", "inUse": "half written: a name, servings, two ingredients; not saved",
+  "steps": [ { "launch": {} }, { "tap": { "id": "add" } },
+             { "fill": { "fields": [ { "field": "recipe-name", "text": "Lemon Pasta" },
+                                     { "field": "servings", "text": "4" },
+                                     { "field": "ingredient-1", "text": "300 g spaghetti" } ],
+                         "scrollTo": "top" }, "name": "fill" } ],
+  "verify": [ { "id": "recipe-name", "contains": "Lemon Pasta" }, { "keyboard": "hidden" } ] }
 ```
 
 `capture.py --inspect` saves each screen's UI tree (the device's XML, the agent's tree, Appium's page source) to
@@ -163,8 +219,10 @@ whatever it says. When the user answers, record who and when (`"confirmed": { "s
 ## 6. Reuse on every later capture
 
 The staging is the expensive part, and it changes rarely. On a later capture (a release, a redesign, a new
-language): read `staging.md`, ask only what's new (a new screen's `state` and `verify`, a new permission or flag),
-update the plan and `staging.md`, and run. `capture.py` warns when `staging.md` no longer matches the plan. A
+language): read `staging.md`, ask only what's new (a new screen's `state`, `inUse` and `verify`, a new permission
+or flag), update the plan and `staging.md`, and run. With `staging.inUse` recorded, a new screen follows the user's
+rule without asking it again: propose what the screen looks like in use and its values, and ask only whether
+they're right. `capture.py` warns when `staging.md` no longer matches the plan. A
 `verify` that now fails says the app changed under the steps: fix the steps (or the app's ids), never the check.
 When the app itself changed since the last capture, start with §7.
 

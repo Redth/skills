@@ -361,7 +361,7 @@ def screens_for(plan, device, omitted=None):
             for key in SETTINGS:
                 if layer.get(key) is not None:
                     resolved[key] = layer[key]
-            for key in ("state", "verify"):
+            for key in ("state", "inUse", "verify"):
                 if layer.get(key) is not None:
                     resolved[key] = copy.deepcopy(layer[key])
             if layer is not screen and "steps" in layer:
@@ -396,8 +396,32 @@ def staging_doc_path(plan, plan_path):
     return rel if os.path.isabs(rel) else os.path.join(os.path.dirname(os.path.abspath(plan_path)), rel)
 
 
+def _describe_step(step):
+    """A step for ``staging.md``: a ``fill`` by its fields (their values are in the In use column)."""
+    try:
+        kind, value = base.step_of(step)
+    except ValueError:
+        return "?"
+    if kind != "fill":
+        return base.describe_step(step)
+    opts = base.fill_options(value)
+    try:
+        fields = ", ".join(q[1] for q, _ in base.fill_fields(opts))
+    except ValueError:
+        return base.describe_step(step)
+    extra = []
+    if opts.get("in") is not None:
+        q = base.element_query(opts["in"])
+        extra.append("in %s" % (q[1] if q else "?"))
+    if opts.get("scrollTo") is not None:
+        to = opts["scrollTo"]
+        q = base.element_query(to) if isinstance(to, dict) else None
+        extra.append("then to %s" % (q[1] if q else to))
+    return "fill %s%s" % (fields, (" (%s)" % ", ".join(extra)) if extra else "")
+
+
 def _describe_steps(steps):
-    return " → ".join(base.describe_step(st) for st in steps or []) or "(no steps)"
+    return " → ".join(_describe_step(st) for st in steps or []) or "(no steps)"
 
 
 def _describe_patch(op):
@@ -427,6 +451,39 @@ def _verify_words(verify):
         if q:
             out.append("%s `%s`%s" % (q[0], q[1], (" containing `%s`" % c["contains"]) if c.get("contains") else ""))
     return ", ".join(out)
+
+
+def typed_values(steps):
+    """What a screen's ``fill`` and ``type`` steps enter, in a few words: ``id `servings` = `12`, id `minutes` = `45```."""
+    out = []
+    for st in steps or []:
+        if not isinstance(st, dict):
+            continue
+        try:
+            kind, value = base.step_of(st)
+        except ValueError:
+            continue
+        if kind == "fill":
+            try:
+                pairs = base.fill_fields(value)
+            except ValueError:
+                continue
+        elif kind == "type" and isinstance(value, dict):
+            query = base.step_element("type", value)
+            pairs = [(query, str(value.get("text", "")))]
+        else:
+            continue
+        for query, text in pairs:
+            out.append("%s = `%s`" % ("%s `%s`" % query if query else "the focused field", text))
+    return out
+
+
+def in_use_missing(plan):
+    """With the app-wide ``staging.inUse`` rule, the screens that don't say how they look in use (their ``inUse``),
+    leaving out those ``"staging": false``."""
+    if not ((plan.get("staging") or {}).get("inUse") or {}).get("rule"):
+        return []
+    return [sc["id"] for sc in plan["screens"] if not sc.get("inUse") and sc.get("staging") is not False]
 
 
 def staging_markdown(plan, plan_name="capture-plan.json"):
@@ -500,11 +557,21 @@ def staging_markdown(plan, plan_name="capture-plan.json"):
     network = st.get("network") or {}
     section("Network", ["- %s" % network["kind"] if network.get("kind") else "",
                         "- How: %s" % network["how"] if network.get("how") else ""])
+    in_use = st.get("inUse") or {}
+    section("Looking in use", [
+        "- The rule: %s%s" % (in_use["rule"], (" (%s)" % in_use["by"]) if in_use.get("by") else "")
+        if in_use.get("rule") else "",
+        "- Believable values: %s" % in_use["values"] if in_use.get("values") else "",
+        ("- Saved: %s" % ("yes, where saving is the screen's story" if in_use.get("save") else
+                          "no: forms are captured filled, before they're saved")) if in_use.get("rule") else "",
+        "- Not said yet for: %s (ask the user what each looks like in use)" % ", ".join(
+            "`%s`" % i for i in in_use_missing(plan)) if in_use_missing(plan) else ""])
+    section("House rules", ["- %s" % n for n in st.get("notes") or []])
     folded = ["- `%s`: %s%s" % (d["id"], d.get("posture") or "as it is",
                                 (", the %s layout" % d["layout"]) if d.get("layout") else "")
               for d in plan["devices"] if d.get("posture") or d.get("layout")]
     section("Postures and layouts", folded)
-    lines += ["## Screens", "", "| Screen | Shows | Reached by | Checked |", "|---|---|---|---|"]
+    lines += ["## Screens", "", "| Screen | Shows | In use | Reached by | Checked |", "|---|---|---|---|---|"]
     for screen in plan["screens"]:
         reached = _describe_steps(screen.get("steps"))
         for name, o in sorted((screen.get("overrides") or {}).items()):
@@ -516,9 +583,12 @@ def staging_markdown(plan, plan_name="capture-plan.json"):
                 reached += "; on %s: %s" % (name, o["posture"])
             if o.get("omit") not in (None, False):
                 reached += "; not on %s%s" % (name, (" (%s)" % o["omit"]) if isinstance(o["omit"], str) else "")
-        lines.append("| `%s` | %s | %s | %s |" % (
-            screen["id"], (screen.get("state") or "").replace("|", "\\|"), reached.replace("|", "\\|"),
-            _verify_words(screen.get("verify")) or "(nothing: look at it)"))
+        entered = typed_values(screen.get("steps"))
+        use = "; ".join(([screen["inUse"]] if screen.get("inUse") else []) +
+                        (["typed: %s" % ", ".join(entered)] if entered else []))
+        lines.append("| `%s` | %s | %s | %s | %s |" % (
+            screen["id"], (screen.get("state") or "").replace("|", "\\|"), use.replace("|", "\\|"),
+            reached.replace("|", "\\|"), _verify_words(screen.get("verify")) or "(nothing: look at it)"))
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -741,10 +811,20 @@ def _element_values(steps, verify):
         except ValueError:
             continue
         where = "step %s (%s)" % ('"%s"' % step["name"] if step.get("name") else n, kind)
+        if kind == "fill":
+            opts = base.fill_options(value)
+            for entry in opts.get("fields") or []:
+                field = entry.get("field") if isinstance(entry, dict) else None
+                add({"id": field} if isinstance(field, str) else field, where)
+            add(opts.get("in"), where)
+            add(opts.get("scrollTo"), where)
+            continue
         if isinstance(value, dict):
             add(value, where)
             add(value.get("to"), where)
+            add(value.get("in"), where)
             add(value.get("tap"), where)
+            add(value.get("done"), where)
     checks = verify if isinstance(verify, list) else [verify] if verify else []
     for c in checks:
         add(c, "verify")
@@ -1192,6 +1272,11 @@ class Run(object):
         for n in staging_vars(self.plan):
             if os.environ.get(n):
                 base.SECRETS.append(os.environ[n])
+        missing_use = in_use_missing(self.plan)
+        if missing_use:
+            say("warning: staging.inUse says the screens look in use, but %s %s say how (inUse): ask the user what "
+                "each looks like in use, and fill it (references/staging.md)" % (
+                    ", ".join(missing_use), "doesn't" if len(missing_use) == 1 else "don't"))
         doc = staging_doc_path(self.plan, self.plan_path)
         want = staging_markdown(self.plan, os.path.basename(self.plan_path))
         try:

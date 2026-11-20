@@ -854,8 +854,8 @@ technique fits the app. Proposal issue #13. Its output is what `store-screenshot
 skills/store-capture/
   SKILL.md  VERSION
   references/   staging.md (agreeing with the user which screens and how each is staged: sign-in, data, skips,
-                permissions, flags, clock, network, state and verify, confirming on one screen, reuse, updating
-                after the app changed),
+                permissions, flags, clock, network, what each looks like in use, state and verify, confirming on
+                one screen, reuse, updating after the app changed),
                 choosing.md (which technique for which app: a decision table), screenshot-mode.md (adding a
                 launch-argument / deep-link screenshot mode to an app, per stack), devflow.md, ailoha.md, appium.md,
                 ui-automation.md (XCUITest, UI Automator, Maestro, macOS Accessibility), simctl.md, adb.md, web.md,
@@ -895,6 +895,8 @@ skills/store-capture/
     "permissions": { "ios": ["photos"], "android": ["android.permission.POST_NOTIFICATIONS"] },
     "clock": { "now": "2026-11-14T09:41", "how": "ScreenshotNow" },
     "network": { "kind": "offline" },
+    "inUse": { "rule": "screens look filled out, in use", "by": "the user, in chat, 2026-11-14", "save": false },
+    "notes": ["no real addresses on the map"],
     "confirmed": { "screen": "plan", "device": "iphone-6.9", "on": "2026-11-14" }
   },
   "devices": [
@@ -906,13 +908,18 @@ skills/store-capture/
       "target": { "deviceType": "iPhone 17 Pro Max" } }
   ],
   "screens": [
-    { "id": "plan", "state": "this week's plan, five invented recipes",
+    { "id": "plan", "state": "this week's plan, five invented recipes", "inUse": "Tuesday's dinner ticked off",
       "steps": [ { "launch": { "args": { "ScreenshotScreen": "plan" } } }, { "wait": { "text": "This week" } } ],
       "verify": { "text": "Lemon Pasta" } },
     { "id": "recipe", "steps": [ { "deepLink": "samplerecipes://recipe/demo" }, { "wait": { "id": "recipe-title" } } ] },
     { "id": "search", "devices": ["iphone-6.9"],
       "steps": [ { "launch": {} }, { "tap": { "id": "search" } }, { "type": { "text": "pasta" } },
                  { "wait": { "ms": 800 } } ] },
+    { "id": "add-recipe", "inUse": "half written, not saved",
+      "steps": [ { "launch": {} }, { "tap": { "id": "add" } },
+                 { "fill": { "fields": [ { "field": "recipe-name", "text": "Lemon Pasta" }, { "field": "servings", "text": "4" } ],
+                             "in": { "id": "recipe-form" }, "scrollTo": "top" }, "name": "fill" } ],
+      "verify": [ { "id": "recipe-name", "contains": "Lemon Pasta" }, { "keyboard": "hidden" } ] },
     { "id": "flow-made", "steps": [ { "flow": "flows/onboarding.yaml" } ] }
   ]
 }
@@ -922,15 +929,25 @@ skills/store-capture/
   `failed`, never resized. `driver` picks the technique; `target` is the driver's own settings.
 - **Screens** are reached by **steps**, run in order, then a screenshot. Step kinds: `launch` (`args`, `env`,
   `clean`: reinstall/clear data first), `deepLink` (a URL), `url` (web), `tap`, `type` (`text`, optional target),
-  `wait` (`ms`, or an element to appear, with `timeout`), `scroll` (`to` an element or `direction`), `back`,
+  `wait` (`ms`, or an element to appear, with `timeout`), `scroll` (`to` an element, looked for one way then the
+  other until the content stops moving, or `"top"`/`"bottom"`; or a `direction`; `in` an element: a pane scrolled
+  within, not the screen's middle; on iOS through Appium a quick `mobile: swipe`, never a direction-only `mobile:
+  scroll`, whose opening press can land on a field and reopen the keyboard), `back`,
   `swipe`, `flow` (a Maestro flow or a UI test name, run by the driver that understands it), `script` (a command
   the user provides, run as is, with `APPSTORES_DEVICE`, `APPSTORES_LOCALE`, `APPSTORES_SCREEN`,
   `APPSTORES_PLATFORM`, `APPSTORES_APP_ID` and the host's `APPSTORES_UDID` or `ANDROID_SERIAL`/`APPSTORES_SERIAL`),
   `appFile` (a file copied into the app's own data: the simulator's data container, Android's data folder through
   `run-as`), `settle` (wait for no animation: two identical frames, optionally ignoring rectangles), `posture`
   (`folded`, `open`, `half-open`: a foldable's posture mid-screen), `hideKeyboard` (close the on-screen keyboard if
-  it's up: Android's back only while it's up, Appium's `mobile: hideKeyboard`; `{"tap": <element>}` taps outside the
-  field instead). Any step may carry a `name`. Elements are found by `id` (accessibility identifier / automation id /
+  it's up, trying in order until it's down: the driver's own (Android's back only while it's up, Appium's `mobile:
+  hideKeyboard`; `own: false` leaves it out), the app's own Done (`done`, an element or `{x, y}`; Appium on iOS
+  looks for a button named Done, Close or Hide keyboard: a number pad has no key that closes it), a `scroll`, and
+  last a `tap` on something neutral; still up, the step fails naming each try), `unfocus` (clear a text field's
+  focus so no caret blinks: `tap` first if given, then Android's Escape only while the dump shows a focused field,
+  failing if the screen changed; the web's `blur()`), `fill` (a form's fields typed in one step: a list of
+  `{field, text}` (`field` an element or an id), or `{fields, in, keyboard, unfocus, scrollTo}`: each field
+  scrolled into view both ways within `in` and typed, the keyboard closed before the next on Android; then the
+  keyboard closed, the focus cleared and, with `scrollTo`, the form scrolled back; nothing submitted). Any step may carry a `name`. Elements are found by `id` (accessibility identifier / automation id /
   resource id / test id), `text`, `label` or `xpath`; `text` and `label` match exactly, then ignoring case and
   surrounding space, then contained, on every driver that can (Maestro: its own regex); the drivers that read a
   tree themselves (adb, uiautomator, the agents' trees) evaluate XPath 1.0's everyday part (`contains()`, `not()`,
@@ -953,13 +970,19 @@ skills/store-capture/
   `appFile` step, `launch`, `backend`, `none`; `when`: `each-screen` or `once`), `launch` (`args` and `env` added
   to every `launch` step; `${NAME}` takes one of `account.env`, from the environment, masked in logs and reports),
   `skip`, `permissions` (by platform: granted before launch, revoked after), `flags`, `clock` (the app's own
-  "now"), `network`, `confirmed` (`{screen, device, on}`: until set, `capture.py` captures one screen at a time),
+  "now"), `network`, `inUse` (how the screens look in use, as the user put it: `rule`, `by`, `values`, `save`,
+  default `false`; a run warns about each screen without its own `inUse`), `notes` (house rules, in `staging.md`),
+  `confirmed` (`{screen, device, on}`: until set, `capture.py` captures one screen at a time),
   `doc` (the readable copy, default `staging.md`, written by `capture.py --write-staging`; a run warns when it no
   longer matches). A screen's `"staging": false` leaves it out.
-- **Per screen**: `state` (what it must show, in plain words) and `verify` (an element, or a list, that must be on
+- **Per screen**: `state` (what it must show, in plain words), `inUse` (what it looks like in use: forms partly
+  filled with believable values, lists populated, or why it's empty on purpose; `staging.md` shows it beside the
+  values its `fill` and `type` steps enter) and `verify` (an element, or a list, that must be on
   screen before the shot, and `{"keyboard": "hidden"|"shown"|"any"}`; otherwise the shot is `missed`, "wrong
   state"). A screen that types nothing is checked for a hidden keyboard without asking, where the driver can tell
-  (adb's `dumpsys input_method`, Appium's `mobile: isKeyboardShown`). Overrides may change both.
+  (adb's `dumpsys input_method`, Appium's `mobile: isKeyboardShown`). `settle` after typing with no `unfocus` since
+  warns when a field still has the focus (adb's dump, the page) or, where the driver can't tell, when the settled
+  screen changes again within a second (a caret). Overrides may change `state`, `inUse` and `verify`.
 - **The app's source** (`appSource`: `repo`, relative to the plan, default its folder; `paths`, relative to
   `repo`) and each screen's `sources` (its files, folders or globs): the report records the git revision each shot
   was taken at, and `capture.py --changes` lists what changed since then in those paths and the screens to re-check.
@@ -1044,7 +1067,9 @@ is a note) and lists what's wrong.
 
 ### 10.5 Rules every driver keeps
 
-One state for every device of a kind, in one pass, same seed and clock; lay out at the target size (pick the device,
+One state for every device of a kind, in one pass, same seed and clock; every screen as someone using the app sees
+it (forms partly filled, lists populated, no placeholder-only fields, nothing saved unless that's the point; no
+keyboard, caret or half-scrolled form unless asked); lay out at the target size (pick the device,
 `wm size`, viewport) and never scale; a clean status bar where there is one, recorded as verified or not; wait for
 the screen to settle (no toasts, spinners, keyboards unless asked); reset everything changed (status bar, demo mode,
 `wm size`, locale, appearance, permissions) in `finally`; never touch the person's own simulators or devices unless

@@ -418,6 +418,54 @@
         "The agent gives a stepsPatch fallback (hideKeyboard before the tap) scoped to the layout or platform, not a full copy of the steps",
         "The agent does not weaken or remove the screen's verify"
       ]
+    },
+    {
+      "id": 26,
+      "prompt": "capture.py exited 0 for the new add-recipe screen (evals/files/blank-form: the plan, the report and en-US/iphone-6.9/add-recipe.png). The user looked at it and said: \"That's no good, it's just an empty form. Generally most screens we capture should look like they're somewhat filled out, in use.\" Fix it so the set shows the form properly, and so it doesn't happen again.",
+      "expected_output": "The agent opens the picture and agrees it's blank: every field shows only its placeholder (Recipe name, Servings, Cooking time, Ingredient, Step 1) and Save is disabled, though verify and stateCheck passed. It records the user's rule app-wide in staging.inUse (their words as rule, who said it and when in by, the kind of believable values in values, save false), not in a $comment or seed.how. For add-recipe it proposes what in use means there (a recipe half written: an invented name such as Lemon Pasta, servings, a cooking time, two ingredients; not saved) as the screen's inUse and asks the user only whether those values are right. It stages it with one fill step (fields by their ids, scrollTo top, the keyboard closed and the focus cleared by the fill, never tapping Save), adds a typed value to verify (contains) with the keyboard hidden, asks or proposes inUse for the plan screen too (a run warns about screens without one), rewrites staging.md with --write-staging, recaptures that one screen and looks at it again before handing anything on. The blank picture isn't handed on.",
+      "files": [
+        "evals/files/blank-form/capture-plan.json",
+        "evals/files/blank-form/captures/capture-report.json",
+        "evals/files/blank-form/captures/en-US/iphone-6.9/add-recipe.png"
+      ],
+      "expectations": [
+        "The agent looks at the picture and says the form is blank (placeholders only), despite the passing checks",
+        "The agent records the user's rule in staging.inUse in their words (not a $comment or seed.how)",
+        "The agent gives add-recipe an inUse and fills it with a fill step of believable, fictional values, without saving",
+        "The agent ends the filling with the keyboard down, no caret and the form scrolled back to the top (the fill step's defaults and scrollTo), and verifies a typed value",
+        "The agent writes staging.md again and recaptures and looks at the screen before handing it on"
+      ]
+    },
+    {
+      "id": 27,
+      "prompt": "Add the shopping list editor (the 'edit-list' screen, reached by tapping tab-shopping then edit-list) to the store set. Plan and staging are in evals/files/in-use-rule.",
+      "expected_output": "The agent reads staging.md and the plan's staging first and finds the user's rule in staging.inUse (screens should look somewhat filled out, in use; believable values for a family cooking for four; nothing saved). It applies it to the new screen without asking the rule again: it proposes what edit-list looks like in use (several invented, everyday items listed, one being typed or added, a couple ticked, nothing saved) as the screen's inUse, and fill steps with those values in the family's metric amounts, scrolled back to the top with the keyboard down and no caret, and asks the user only whether those values are right. It gives the screen a state and a verify that only the filled state shows (contains a typed value, keyboard hidden), adds its sources if appSource is used, notes that the open foldable may lay it out in two panes (fill's in the pane), rewrites staging.md, and captures that one screen to show the user before the whole set.",
+      "files": [
+        "evals/files/in-use-rule/capture-plan.json",
+        "evals/files/in-use-rule/staging.md"
+      ],
+      "expectations": [
+        "The agent finds the recorded in-use rule (staging.inUse / staging.md) and applies it without asking the user the rule again",
+        "The agent proposes the new screen's inUse and believable, fictional values in the style staging.inUse.values describes, and asks only whether they're right",
+        "The agent stages the typing with a fill step (scrollTo top), nothing saved, and a verify of a typed value with the keyboard hidden",
+        "The agent rewrites staging.md and captures the one new screen to show the user first"
+      ]
+    },
+    {
+      "id": 28,
+      "prompt": "On the iPhone Duo's cover display the servings screen keeps missing (evals/files/numpad-stuck: the plan, the report and the .inspect tree). The big iPhone is fine. Should we just leave the form empty on the Duo?",
+      "expected_output": "The agent reads the missed reason and the inspect tree. It explains that a number pad has no Done or Return key, so mobile: hideKeyboard can't close it, and the tap on the title didn't either (many apps don't close the keyboard for a tap outside a field). The tree shows the app's own close button beside the keyboard, an unnamed XCUIElementTypeButton with the id numpad-dismiss, which the driver's search by name (Done, Close, Hide keyboard) can't find: it adds done: {id: numpad-dismiss} to the fill's keyboard (keeping the tap only as a last resort), and leaves the scroll back to the top to the fill's scrollTo, which on iOS is a quick swipe (a direction-only mobile: scroll presses on the screen first, and on the small display that press lands on a field and opens the number pad again). It recaptures that one screen on duo-outer and looks at it. It doesn't leave the form empty on the Duo, ship the keyboard, or remove the fill for that device by itself; if no button closed it, it would tell the user it's the app's to fix and let them decide, recording any decision in the screen's inUse.",
+      "files": [
+        "evals/files/numpad-stuck/capture-plan.json",
+        "evals/files/numpad-stuck/captures/capture-report.json",
+        "evals/files/numpad-stuck/captures/.inspect/en-US/duo-outer/servings.txt"
+      ],
+      "expectations": [
+        "The agent explains that a number pad has no key mobile: hideKeyboard can use, and that a tap outside the field isn't a general way to close a keyboard",
+        "The agent finds the app's own close button (numpad-dismiss) in the inspect tree and names it as the fill's keyboard done",
+        "The agent says the scroll back to the top must be a quick swipe on iOS (the driver does this), not a press-and-drag that can land on a field",
+        "The agent does not leave the Duo's form empty, ship the keyboard, or drop the typing for that device without the user deciding"
+      ]
     }
   ]
 }

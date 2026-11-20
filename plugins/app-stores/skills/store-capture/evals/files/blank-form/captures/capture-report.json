@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-20T10:02:11Z",
+  "finishedAt": "2026-11-20T10:03:40Z",
+  "plan": "capture-plan.json",
+  "app": { "revision": "9c1e2a7f30", "describe": "v2.1-3-g9c1e2a7", "dirty": false, "repo": "." },
+  "shots": [
+    { "locale": "en-US", "device": "iphone-6.9", "screen": "add-recipe", "driver": "appium", "status": "taken",
+      "path": "en-US/iphone-6.9/add-recipe.png", "width": 1320, "height": 2868,
+      "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2", "via": "appium" }, "statusBar": "verified",
+      "fixes": [], "warnings": [], "state": "the new-recipe form", "stateCheck": "passed", "appRevision": "9c1e2a7f30" }
+  ]
+}

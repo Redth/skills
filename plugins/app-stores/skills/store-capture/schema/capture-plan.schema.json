@@ -126,6 +126,7 @@
         "$comment": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
         "state": { "$comment": "What the screen must show, in plain words (whose data, which state): agreed with the user; in staging.md and the report.", "type": "string", "minLength": 1 },
+        "inUse": { "$comment": "What this screen looks like in use, in plain words (the form part-filled: 12 servings, 45 minutes; the list with eight entries; or why it's empty on purpose): agreed with the user, in staging.md beside the values its fill and type steps enter.", "type": "string", "minLength": 1 },
         "verify": { "$ref": "#/$defs/verify" },
         "sources": { "$comment": "The app's files (or folders) that draw this screen, relative to appSource.repo: capture.py --changes names the screen when one changed since the last capture.", "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
         "staging": { "$comment": "false: this screen gets neither the staging's seed nor its launch values (an onboarding screen, say).", "type": "boolean" },
@@ -159,6 +160,7 @@
         "omit": { "$comment": "Leave this screen out here (true, or why: 'the open Duo shows it beside the overview').", "anyOf": [ { "type": "boolean" }, { "type": "string", "minLength": 1 } ] },
         "posture": { "$ref": "#/$defs/posture" },
         "state": { "type": "string", "minLength": 1 },
+        "inUse": { "type": "string", "minLength": 1 },
         "verify": { "$ref": "#/$defs/verify" },
         "locales": { "$ref": "#/$defs/locales" },
         "appearance": { "$ref": "#/$defs/appearance" },
@@ -183,6 +185,13 @@
       },
       "additionalProperties": false
     },
+    "tapTarget": { "$comment": "An element, or a point {x, y} in the picture's pixels.", "anyOf": [ { "$ref": "#/$defs/element" }, { "type": "object", "required": ["x", "y"], "additionalProperties": false, "properties": { "x": { "type": "number" }, "y": { "type": "number" } } } ] },
+    "keyboardTries": { "$comment": "How to close the keyboard, tried in order until it's down: the driver's own (own: false leaves it out), done (the app's own Done or Close button: an element or {x, y}; Appium on iOS looks for one by name itself; a number pad has no key that closes it), scroll (true, a direction, or {direction, in}), then last tap (something neutral: a title or label, or {x, y}; many apps don't close the keyboard for it). Still up after all: the step fails, naming what was tried.", "type": "object", "additionalProperties": false, "properties": {
+      "$comment": { "type": "string" }, "own": { "type": "boolean" }, "done": { "$ref": "#/$defs/tapTarget" }, "tap": { "$ref": "#/$defs/tapTarget" },
+      "scroll": { "anyOf": [ { "type": "boolean" }, { "enum": ["up", "down", "left", "right"] }, { "type": "object", "additionalProperties": false, "properties": { "direction": { "enum": ["up", "down", "left", "right"] }, "in": { "$ref": "#/$defs/element" } } } ] } } },
+    "fillField": { "$comment": "One field and what's typed into it: field is an element, or a string (its id).", "type": "object", "required": ["field", "text"], "additionalProperties": false, "properties": {
+      "$comment": { "type": "string" }, "field": { "anyOf": [ { "type": "string", "minLength": 1 }, { "$ref": "#/$defs/element" } ] }, "text": { "type": "string" } } },
+    "scrollTo": { "$comment": "An element, or an end: top or bottom.", "anyOf": [ { "$ref": "#/$defs/element" }, { "enum": ["top", "bottom"] } ] },
     "elementCheck": {
       "$comment": "An element to wait for or verify: one of id, text, label, xpath or css, and optionally contains (text the element shows, itself or anything under it: an iOS label, an Android child's text; ignoring case and runs of space).",
       "type": "object",
@@ -237,7 +246,14 @@
         "clock": { "$comment": "The app's own 'now' (the status bar's is the plan's clock) and how it's fixed. On-screen times usually need a screenshot mode; without one, pick screens that show none, or say so.", "type": "object", "additionalProperties": false, "properties": {
           "$comment": { "type": "string" }, "now": { "type": "string" }, "how": { "type": "string" } } },
         "network": { "$comment": "offline (fixtures), mock (a local fake server), staging (a staging server with invented data) or live (discouraged).", "type": "object", "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" }, "kind": { "enum": ["offline", "mock", "staging", "live"] }, "how": { "type": "string" } } }
+          "$comment": { "type": "string" }, "kind": { "enum": ["offline", "mock", "staging", "live"] }, "how": { "type": "string" } } },
+        "inUse": { "$comment": "How the screens look in use, app-wide, as the user put it: forms partly filled with believable values, lists populated, no empty states or placeholder-only fields; nothing saved unless that's the point. Each screen's inUse says what it means there; rendered in staging.md and asked about for every new screen.", "type": "object", "required": ["rule"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" },
+          "rule": { "$comment": "The user's own words.", "type": "string", "minLength": 1 },
+          "by": { "$comment": "Who said it and when (the user, in chat, 2026-11-20).", "type": "string" },
+          "values": { "$comment": "What believable values are here (a mid-task user's: typical readings, invented names; never real people's).", "type": "string" },
+          "save": { "$comment": "false (the default): a filled form is captured before it's saved; true: saving is part of a screen's story.", "type": "boolean" } } },
+        "notes": { "$comment": "House rules for the captures that fit no other field, rendered in staging.md (a plan's $comment isn't).", "type": "array", "items": { "type": "string", "minLength": 1 } }
       }
     },
     "step": {
@@ -285,9 +301,12 @@
         { "type": "object", "required": ["scroll"], "additionalProperties": false, "properties": {
           "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "scroll": { "type": "object", "additionalProperties": false, "properties": {
-            "to": { "$ref": "#/$defs/element" },
+            "$comment": { "type": "string" },
+            "to": { "$comment": "An element (looked for in direction, default down, until it's in view or the content stops moving, then the other way), or top or bottom (until the content stops moving).", "$ref": "#/$defs/scrollTo" },
+            "in": { "$comment": "The element to scroll within (a pane of a two-pane layout, a list), else the screen's middle.", "$ref": "#/$defs/element" },
             "direction": { "enum": ["up", "down", "left", "right"] },
-            "times": { "type": "integer", "minimum": 1, "maximum": 50 }
+            "times": { "type": "integer", "minimum": 1, "maximum": 50 },
+            "distance": { "$comment": "In-app agents: each scroll's distance (default 400).", "type": "number", "minimum": 1 }
           } } } },
         { "type": "object", "required": ["back"], "additionalProperties": false, "properties": {
           "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
@@ -321,7 +340,22 @@
           "posture": { "$comment": "Fold, open or half-open the device in the middle of the steps (the device's or screen's posture does it before them).", "$ref": "#/$defs/posture" } } },
         { "type": "object", "required": ["hideKeyboard"], "additionalProperties": false, "properties": {
           "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
-          "hideKeyboard": { "$comment": "Close the on-screen keyboard if it's up (Android: back, only while it's up; iOS through Appium: its Done or Return key). {\"tap\": <element>} taps that element instead: a label outside the field.", "anyOf": [ { "const": true }, { "type": "object", "required": ["tap"], "additionalProperties": false, "properties": { "tap": { "$ref": "#/$defs/element" } } } ] } } },
+          "hideKeyboard": { "$comment": "Close the on-screen keyboard if it's up, trying the driver's own close (Android: back, only while it's up; Appium: mobile: hideKeyboard), the app's Done button, a scroll, then a tap on something neutral, in that order (keyboardTries).", "anyOf": [ { "const": true }, { "$ref": "#/$defs/keyboardTries" } ] } } },
+        { "type": "object", "required": ["unfocus"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
+          "unfocus": { "$comment": "Clear the text field's focus so no caret blinks in the shot: true, or {tap: <element or {x, y}>} tapped first. Android: the keyboard closed, then Escape while a field has focus (checked); web: blur().", "anyOf": [ { "const": true }, { "type": "object", "additionalProperties": false, "properties": { "$comment": { "type": "string" }, "tap": { "$ref": "#/$defs/tapTarget" } } } ] } } },
+        { "type": "object", "required": ["fill"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
+          "fill": { "$comment": "Type into a form's fields in one step: each brought into view (both ways, within in), typed into, the keyboard closed before the next on Android; then the keyboard closed, the focus cleared and, with scrollTo, the form scrolled back. Nothing is submitted.", "anyOf": [
+            { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/fillField" } },
+            { "type": "object", "required": ["fields"], "additionalProperties": false, "properties": {
+              "$comment": { "type": "string" },
+              "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/fillField" } },
+              "in": { "$comment": "The pane the fields are in (scrolled within).", "$ref": "#/$defs/element" },
+              "keyboard": { "$comment": "true (default): closed after, as hideKeyboard; keep: left up (and the focus kept); or hideKeyboard's tries.", "anyOf": [ { "type": "boolean" }, { "const": "keep" }, { "$ref": "#/$defs/keyboardTries" } ] },
+              "unfocus": { "$comment": "Clear the focus after (default true, unless the keyboard's kept).", "type": "boolean" },
+              "scrollTo": { "$comment": "Then scroll back: top, bottom or an element (typing scrolls a long form).", "$ref": "#/$defs/scrollTo" } } }
+          ] } } },
         { "type": "object", "required": ["settle"], "additionalProperties": false, "properties": {
           "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "settle": { "anyOf": [ { "type": "boolean" }, { "type": "null" }, { "type": "object", "additionalProperties": false, "properties": {
