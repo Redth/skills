@@ -931,7 +931,10 @@ skills/store-capture/
   `clean`: reinstall/clear data first), `deepLink` (a URL), `url` (web), `tap`, `type` (`text`, optional target),
   `wait` (`ms`, or an element to appear, with `timeout`), `scroll` (`to` an element, looked for one way then the
   other until the content stops moving, or `"top"`/`"bottom"`; or a `direction`; `in` an element: a pane scrolled
-  within, not the screen's middle; on iOS through Appium a quick `mobile: swipe`, never a direction-only `mobile:
+  within, not the screen's middle: the scroll view or anything inside it, whose nearest scrolling ancestor (a dump's
+  or page source's `scrollable="true"`, a scroll view's type in a tree without that, the page's overflow container)
+  is what's scrolled, else the element itself, said in the report's `panes` and kept for the screen's later scrolls
+  once the element named is out of sight; on iOS through Appium a quick `mobile: swipe`, never a direction-only `mobile:
   scroll`, whose opening press can land on a field and reopen the keyboard), `back`,
   `swipe`, `flow` (a Maestro flow or a UI test name, run by the driver that understands it), `script` (a command
   the user provides, run as is, with `APPSTORES_DEVICE`, `APPSTORES_LOCALE`, `APPSTORES_SCREEN`,
@@ -947,7 +950,8 @@ skills/store-capture/
   failing if the screen changed; the web's `blur()`), `fill` (a form's fields typed in one step: a list of
   `{field, text}` (`field` an element or an id), or `{fields, in, keyboard, unfocus, scrollTo}`: each field
   scrolled into view both ways within `in` and typed, the keyboard closed before the next on Android; then the
-  keyboard closed, the focus cleared and, with `scrollTo`, the form scrolled back; nothing submitted). Any step may carry a `name`. Elements are found by `id` (accessibility identifier / automation id /
+  keyboard closed, the focus cleared and, with `scrollTo`, the form scrolled back, with a warning for each field the
+  screen's `verify` names that's out of sight then (a `verify` sees only what's on screen); nothing submitted). Any step may carry a `name`. Elements are found by `id` (accessibility identifier / automation id /
   resource id / test id), `text`, `label` or `xpath`; `text` and `label` match exactly, then ignoring case and
   surrounding space, then contained, on every driver that can (Maestro: its own regex); the drivers that read a
   tree themselves (adb, uiautomator, the agents' trees) evaluate XPath 1.0's everyday part (`contains()`, `not()`,
@@ -1047,6 +1051,7 @@ device's size — and `<out>/capture-report.json`:
                "path": "en-US/iphone-6.9/plan.png", "width": 1320, "height": 2868, "sha256": "…",
                "driver": "simctl", "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2" },
                "statusBar": "verified" | "overridden" | "unverified" | "none", "fixes": [], "warnings": [],
+               "panes": ["in id 'servings': scrolled its nearest scrolling ancestor, android.widget.ScrollView …"],
                "state": "…", "stateCheck": "passed" | "failed" | "unchecked", "appRevision": "<git commit>" },
              { "…": "status missed: not reached (kept: previous|none, reason); failed: wrong size etc.; skipped: a step or device the driver can't do" } ],
   "app": { "revision": "<git commit>", "describe": "…", "committed": "…", "dirty": false, "repo": ".",
@@ -1059,7 +1064,8 @@ partial run's kept entries keep theirs. A run warns when the app moved since the
 
 Adapters write into a temp folder and move files into place at the end. A run keeps the report's earlier entries
 for plan items it didn't run (filters) and drops those the plan no longer has (removed or omitted), naming them in
-`notes`. `fixes` lists what was changed
+`notes`. `panes` (left out when empty) says what a
+scroll's `in` scrolled where it wasn't the element named. `fixes` lists what was changed
 (`alpha-flattened`, `converted-to-srgb`, `16-bit-to-8-bit`), never a resize; an alpha channel that's all opaque is
 flattened without a per-shot mention and counted once in the report's `notes`. `check_captures.py` reads PNG headers
 against the plan (and, with `--rules`, the stores' accepted sizes; a required App Store display type no device fills

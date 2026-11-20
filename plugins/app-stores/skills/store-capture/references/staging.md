@@ -141,8 +141,13 @@ Each screen gets:
 - **A form**: one `fill` step types every field (each scrolled into view, both ways, the keyboard closed before the
   next on Android), then closes the keyboard, clears the focus (no caret) and, with `scrollTo`, scrolls back:
   `{ "fill": { "fields": [ { "field": "servings", "text": "12" }, { "field": "minutes", "text": "45" } ], "scrollTo": "top" } }`.
-  Fields in one pane of a two-pane layout (an open foldable, a tablet): `"in": { "id": "<the pane>" }`. Add a typed
-  value to `verify` (`{ "id": "servings", "contains": "12" }`) with `{ "keyboard": "hidden" }`. A keyboard that won't
+  Fields in one pane of a two-pane layout (an open foldable, a tablet): `"in": { "id": "<the pane>" }`, or any
+  element inside it (its content's id, one of its own fields: the scroll view around it is what's scrolled, and the
+  report's `panes` says which), so one `in` serves every device. Add a typed value to `verify`
+  (`{ "id": "servings", "contains": "12" }`) with `{ "keyboard": "hidden" }`: one the shot shows. A `verify` sees
+  only what's on screen, so a field typed below the visible part, out of sight once `scrollTo` has scrolled the form
+  back, can't be checked (`fill` warns when a `verify` names one): check the visible fields, per device if a short
+  display shows fewer, or leave `scrollTo` out. A keyboard that won't
   close on one device (a number pad with no Done): give its `hideKeyboard` (or the fill's `keyboard`) a `done` and
   a `tap` to try; when nothing closes it, tell the user (it's likely the app's bug) and let them decide; don't
   drop the typing on that device yourself ([config.md](config.md#the-keyboard-focus-and-forms)).

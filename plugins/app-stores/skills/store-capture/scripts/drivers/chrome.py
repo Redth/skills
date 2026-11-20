@@ -71,13 +71,33 @@ FIND_JS = r"""
   }
   el = cands.filter(function (e) { return e && shows(e); })[0] || null;
   if (!el) return null;
+  // q.pane: what scrolls is the nearest element that is el or holds it and scrolls its overflow (else el itself).
+  var box = el, how = "self";
+  if (q.pane) {
+    var p = el, page = [document.body, document.documentElement];
+    function scrolling(e) {
+      var s = getComputedStyle(e);
+      return /(auto|scroll|overlay)/.test(s.overflowY + " " + s.overflowX) &&
+        (e.scrollHeight > e.clientHeight || e.scrollWidth > e.clientWidth);
+    }
+    while (p && page.indexOf(p) < 0 && !scrolling(p)) p = p.parentElement;
+    if (p && page.indexOf(p) < 0) { box = p; how = p === el ? "self" : "ancestor"; } else how = "none";
+  }
   if (q.scroll) el.scrollIntoView({block: "center", inline: "center"});
-  if (q.scrollBy) el.scrollBy(q.scrollBy[0] * el.clientWidth, q.scrollBy[1] * el.clientHeight);
-  if (q.edge === "top") el.scrollTop = 0;
-  if (q.edge === "bottom") el.scrollTop = el.scrollHeight;
+  if (q.scrollBy) box.scrollBy(q.scrollBy[0] * box.clientWidth, q.scrollBy[1] * box.clientHeight);
+  if (q.edge === "top") box.scrollTop = 0;
+  if (q.edge === "bottom") box.scrollTop = box.scrollHeight;
   if (q.focus && el.focus) el.focus();
   var r = el.getBoundingClientRect();
-  return {x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height};
+  var out = {x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height};
+  if (q.pane) {
+    var testid = box.getAttribute("data-testid");
+    out.pane = how;
+    out.what = box.tagName.toLowerCase() + (box.id ? "#" + box.id : "") +
+      (testid ? '[data-testid="' + testid + '"]' : "") +
+      Array.prototype.slice.call(box.classList || [], 0, 2).map(function (c) { return "." + c; }).join("");
+  }
+  return out;
 })
 """
 
@@ -373,19 +393,24 @@ class ChromeDriver(base.Driver):
     def step_scroll(self, ctx, value):
         """Scroll an element into view (``to``: ``scrollIntoView``, whichever way it is), to the ``"top"`` or
         ``"bottom"``, or ``direction`` by most of a screen (``times``); ``in``: an element (a pane, a list) scrolled
-        instead of the page."""
+        instead of the page: the nearest element that is it or holds it and scrolls its overflow (else the element
+        itself), said in the shot's ``panes`` when it isn't the element named."""
         value = value or {}
         if isinstance(value, str):
             value = {"direction": value}
         within = base.element_query(value["in"]) if value.get("in") else None
         if within is not None:
             self._target(ctx, value["in"], "scroll in")
+            pane = self.evaluate("%s(%s)" % (FIND_JS.strip(), json.dumps({"finder": within[0], "value": within[1],
+                                                                          "pane": True})), dry=None)
+            if isinstance(pane, dict):
+                self.say_pane(ctx, within, pane.get("pane"), pane.get("what") or "?")
         to = value.get("to")
         if isinstance(to, str):
             if to not in base.EDGES:
                 raise base.StepFailed("step %d: scroll to is an element, \"top\" or \"bottom\"" % ctx.index)
             if within is not None:
-                q = {"finder": within[0], "value": within[1], "edge": to}
+                q = {"finder": within[0], "value": within[1], "edge": to, "pane": True}
                 self.evaluate("%s(%s)" % (FIND_JS.strip(), json.dumps(q)), dry=True)
             else:
                 self.evaluate("window.scrollTo(0, %s)" % ("0" if to == "top" else "document.body.scrollHeight"))
@@ -399,7 +424,7 @@ class ChromeDriver(base.Driver):
             dx, dy = {"down": (0, 1), "up": (0, -1), "right": (1, 0), "left": (-1, 0)}[d]
             for _ in range(int(value.get("times") or 1)):
                 if within is not None:
-                    q = {"finder": within[0], "value": within[1], "scrollBy": [dx * 0.8, dy * 0.8]}
+                    q = {"finder": within[0], "value": within[1], "scrollBy": [dx * 0.8, dy * 0.8], "pane": True}
                     self.evaluate("%s(%s)" % (FIND_JS.strip(), json.dumps(q)), dry=True)
                 else:
                     self.evaluate("window.scrollBy(%d * innerWidth * 0.8, %d * innerHeight * 0.8)" % (dx, dy))

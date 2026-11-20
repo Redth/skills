@@ -1091,6 +1091,19 @@ class AdbDriver(base.Driver):
         self.shell("input", "swipe", *(self._swipe_for(ctx, direction, bounds) + (400,)))
         base.sleep(0.4)
 
+    def scroll_pane(self, ctx, query, found):
+        """The nearest view that is ``query``'s element or holds it and is ``scrollable="true"`` in the dump (a
+        ScrollView, a RecyclerView), with its bounds to swipe within."""
+        root, elements = self.dump()
+        hit = base.pane_in_tree(root, elements, query)
+        if hit is None:
+            return None
+        node, how = hit
+        a = node.attrib
+        pane = base.Element(id=a.get("resource-id"), text=a.get("text"), label=a.get("content-desc"),
+                            cls=a.get("class"), bounds=base.parse_bounds(a.get("bounds", "")), attrs=a, node=node)
+        return pane, how, base.describe_node(node)
+
     def scroll_fingerprint(self, ctx, within=None):
         """The dump (what's on screen moves in it as the content scrolls; scroll bars don't)."""
         if base.DRY_RUN:

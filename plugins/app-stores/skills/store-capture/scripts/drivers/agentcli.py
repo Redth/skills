@@ -710,6 +710,34 @@ class AgentCliDriver(HostedDriver):
             args += ["--element", element]
         self.cli(ctx.device, args + [delta[0], "%g" % delta[1]])
 
+    def scroll_pane(self, ctx, query, found):
+        """The nearest view that is ``query``'s element (found as ``found``, by the agent's own id, else by
+        ``query``) or holds it and scrolls, read from the agent's tree: a ``scrollable``/``isScrollable`` flag where
+        the agent gives one, else its type (``ScrollView``, ``CollectionView``, ``ListView``, ``RecyclerView``,
+        ``ScrollViewer``…). ``None`` when the tree doesn't show it."""
+        root, nodes = tree_to_xml(self.tree(ctx.device))
+        wanted = found.attrs.get("elementId")
+        elements, start = [], None
+        for node, item in nodes.items():
+            e = element_from(item)
+            e.node = node
+            elements.append(e)
+            if start is None and wanted not in (None, "") and item.get("id") == wanted:
+                start = node
+        if start is not None:
+            pane = base.nearest_scrolling(root, start)
+            hit = (start, "none") if pane is None else (pane, "self" if pane is start else "ancestor")
+        elif query[0] == "css":
+            return None
+        else:
+            hit = base.pane_in_tree(root, elements, query)
+        if hit is None:
+            return None
+        node, how = hit
+        if how != "ancestor":
+            return found, how, base.describe_node(node)
+        return element_from(nodes[node]), how, base.describe_node(node)
+
     def scroll_fingerprint(self, ctx, within=None):
         """The agent's tree (the elements' bounds move as the content scrolls)."""
         if base.DRY_RUN:

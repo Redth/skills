@@ -148,9 +148,11 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
    - **Forms:** fill them with one `fill` step (`[{"field": "servings", "text": "12"}, …]`): each field brought into view
      (scrolled to, both ways), typed into, the keyboard closed before the next on Android; then the keyboard closed,
      the focus cleared (no caret) and, with `"scrollTo": "top"`, the form scrolled back (typing scrolls a long
-     form). Fields in one pane of a two-pane layout: `"in": {"id": <the pane>}` (a plain scroll swipes the screen's
-     middle, the other pane). Add a typed value to `verify` (`{"id": "servings", "contains": "12"}`) and
-     `{"keyboard": "hidden"}`. A keyboard its own keys can't close (a number pad has no Done) is closed by the app's
+     form). Fields in one pane of a two-pane layout: `"in": {"id": <the pane, or anything in it>}` (a plain scroll
+     swipes the screen's middle, the other pane; what's scrolled is the nearest scroll view around it, named in the
+     report's `panes`). Add a typed value to `verify` (`{"id": "servings", "contains": "12"}`) and
+     `{"keyboard": "hidden"}`: a field the shot shows (a `verify` sees only what's on screen; `fill` warns when one
+     names a field left out of sight after `scrollTo`). A keyboard its own keys can't close (a number pad has no Done) is closed by the app's
      own Done button: `hideKeyboard` (and `fill`'s `keyboard`) tries that (`done`; Appium on iOS looks for one named
      Done or Close), a scroll, and last a neutral tap (`{"done": …, "scroll": true, "tap": …}`), then fails saying
      what it tried: find the app's Done (`--inspect`), and only when there's none tell the user it's the app's to
@@ -298,7 +300,8 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 | `missed`: "the keyboard is still up after …" | nothing the driver tried closed it (a number pad with no Done, an accessory that doesn't close it) | give `hideKeyboard` a `done` (the Done button by id, or its `{x, y}`) and a `tap` on something neutral; if none works it's likely the app's bug: tell the user, don't ship the keyboard or drop the typing silently ([config.md](references/config.md#the-keyboard-focus-and-forms)) |
 | A caret blinking in a field after typing (Android); `settle` warns "still has the focus" | back closes the keyboard, not the focus | `fill` clears it; after a `type`, an `unfocus` step (Escape while a field has focus, checked), or `unfocus {"tap": …}` |
 | The shot starts mid-form, the title under the navigation bar | typing scrolled the form | `fill`'s `"scrollTo": "top"`, or a `scroll {"to": "top"}` step |
-| On a two-pane layout a scroll moves the other pane, or `scroll {to}` never finds a field above | a scroll swipes the screen's middle; the field was above | `scroll {"in": {"id": <the pane>}}` (and `fill`'s `in`); `scroll {to}` looks both ways |
+| On a two-pane layout a scroll moves the other pane, or `scroll {to}` never finds a field above | a scroll swipes the screen's middle; the field was above | `scroll {"in": {"id": <the pane, or anything in it>}}` (and `fill`'s `in`; the report's `panes` says what scrolled); `scroll {to}` looks both ways |
+| A `verify` of a typed field fails "wrong state" though the field was typed; `fill` warns it's out of sight | the field is below the visible part once `scrollTo` scrolled the form back: a `verify` sees only what's on screen | verify only fields the shot shows (per device: `overrides`), or leave `scrollTo` out |
 | Text over text, or clipped, in a picture that passed every check | the app's own rendering bug | report it to the user with the shot's path; don't ship it or work around it |
 | `verify` of a value needs an xpath per platform (iOS's `label`, Android's child `text`) | the value sits on the element on one platform, on a child on the other | `{"id": …, "contains": "24"}` ([config.md](references/config.md#steps)) |
 | Exit 3: "no step named …" in a `stepsPatch` | a base step was renamed or removed under a device's patch | fix the patch's ref; the plan won't run half-patched |

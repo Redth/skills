@@ -541,6 +541,36 @@ class AppiumDriver(HostedDriver):
             return
         self._gesture(ctx, "scroll", direction, ref)
 
+    def scroll_pane(self, ctx, query, found):
+        """The nearest view that is ``query``'s element or holds it and scrolls, read from the page source: Android's
+        ``scrollable="true"``; iOS's and a Mac's ``XCUIElementTypeScrollView``, ``Table``, ``CollectionView`` (and
+        a Mac's ``Outline``). An ancestor is found again by its path in the source (``POST /element``, xpath) for its
+        element id. ``None`` on Windows, or when the source doesn't show the element."""
+        fam = self.family(ctx.device)
+        if fam == "windows":
+            return None
+        try:
+            root = ET.fromstring(self.inspect_tree(ctx))
+        except (ET.ParseError, TypeError, ValueError):
+            return None
+        hit = base.pane_in_tree(root, source_elements(root, fam), query)
+        if hit is None:
+            return None
+        node, how = hit
+        what = base.describe_node(node)
+        if how != "ancestor":
+            return found, how, what
+        path = base.absolute_xpath(root, node)
+        res = self.wd(ctx.device, "POST", self.sid() + "/element", {"using": "xpath", "value": path},
+                      ok_missing=True)
+        ref = (res.get(W3C_ELEMENT) or res.get("ELEMENT")) if isinstance(res, dict) else None
+        if not ref:
+            base.note("  the pane around %s (%s) wasn't found again by its path: scrolling the element itself"
+                      % (base.describe_query(query), what))
+            return None
+        return base.Element(id=node.attrib.get("name") or node.attrib.get("resource-id"),
+                            attrs={"ref": ref, "using": "xpath", "xpath": path}), how, what
+
     def scroll_fingerprint(self, ctx, within=None):
         """The page source (the elements' positions move as the content scrolls)."""
         if base.DRY_RUN:

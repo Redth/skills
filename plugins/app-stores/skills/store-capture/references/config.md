@@ -227,7 +227,7 @@ One kind a step: `{ "<kind>": <value> }`.
 | `tap` | an element, or `{ "x": …, "y": … }` | coordinates are a last resort: they differ per device size |
 | `type` | `{ "text": "…", <finder> }` | types into the focused field, or one found by `id`, `label`, `xpath`, `css`, or `into` (its placeholder text) |
 | `wait` | a number (ms), `{ "ms": … }`, or an element (with `contains`, optionally) | an element waits for it to appear (and, with `contains`, to show that text), up to its `timeout` (seconds, default 10). A driver that can't see elements waits and warns |
-| `scroll` | `{ "to": <element> \| "top" \| "bottom" }` or `{ "direction": "up"\|"down"\|"left"\|"right", "times": n }`, either with `"in": <element>` | `to` an element looks `direction` first (default down) until it's in view or the content stops moving, then the other way; `"top"`/`"bottom"` scroll until the content stops moving; `in` scrolls within that element (a pane, a list) rather than at the screen's middle (on a two-pane layout, the other pane). On iOS through Appium each scroll is a quick swipe ([appium.md](appium.md#scrolling-on-ios)). Wait for scroll bars to fade after (`settle`) |
+| `scroll` | `{ "to": <element> \| "top" \| "bottom" }` or `{ "direction": "up"\|"down"\|"left"\|"right", "times": n }`, either with `"in": <element>` | `to` an element looks `direction` first (default down) until it's in view or the content stops moving, then the other way; `"top"`/`"bottom"` scroll until the content stops moving; `in` scrolls within that element (a pane, a list) rather than at the screen's middle (on a two-pane layout, the other pane): the scroll view itself or anything inside it (the pane's content, one of its fields), whose nearest scrolling ancestor is what's scrolled ([below](#scrolling-in-a-pane)). On iOS through Appium each scroll is a quick swipe ([appium.md](appium.md#scrolling-on-ios)). Wait for scroll bars to fade after (`settle`) |
 | `back` | `true` | the system back (Android), the agent's or Appium's back |
 | `swipe` | `{ "from": [x, y], "to": [x, y], "ms": … }` or `{ "direction": … }` | |
 | `flow` | a string (a Maestro flow's path, a UI test's name) or the flow driver's own object | run by the driver that understands it |
@@ -246,13 +246,14 @@ Any step may carry a **`name`** (`{ "tap": { "id": "tab-history" }, "name": "ope
 
 **`fill`** types into several fields at once, as a person filling the form would: for each `{ "field", "text" }`
 (`field` an element, or a string that's an id), the field is brought into view (`scroll {"to": …}`, both ways,
-within `in`), then typed into (the driver's `type`); on Android the keyboard is closed first (it covers the fields
-below the one just typed into, and `uiautomator` lists only what's on screen). Then the keyboard is closed
-(`keyboard`: `true` by default, `"keep"` to leave it up, or `hideKeyboard`'s object), the focus is cleared
-(`unfocus`, default `true` unless the keyboard's kept) and, with `scrollTo` (`"top"`, `"bottom"` or an element), the
-form is scrolled back: typing into a long form scrolls it, and the shot would start mid-form. Nothing is submitted
-(no Return, no Save). A field that can't be found fails the step naming it ("field 2: id 'salt'"). Fields are typed
-into as they are: a field that already holds text gets the new text after it.
+within `in`: the pane, or anything in it, [below](#scrolling-in-a-pane)), then typed into (the driver's `type`); on
+Android the keyboard is closed first (it covers the fields below the one just typed into, and `uiautomator` lists
+only what's on screen). Then the keyboard is closed (`keyboard`: `true` by default, `"keep"` to leave it up, or
+`hideKeyboard`'s object), the focus is cleared (`unfocus`, default `true` unless the keyboard's kept) and, with
+`scrollTo` (`"top"`, `"bottom"` or an element), the form is scrolled back: typing into a long form scrolls it, and
+the shot would start mid-form. Nothing is submitted (no Return, no Save). A field that can't be found fails the step
+naming it ("field 2: id 'salt'"). Fields are typed into as they are: a field that already holds text gets the new
+text after it.
 
 ```json
 { "fill": { "fields": [ { "field": "servings", "text": "12" }, { "field": "minutes", "text": "45" },
@@ -263,6 +264,13 @@ into as they are: a field that already holds text gets the new text after it.
 
 On `maestro` a `fill` becomes `scrollUntilVisible` (down only), `tapOn`, `inputText` and `hideKeyboard` per field; it
 can't scroll within a pane (`in`). Give the step a `name` so a device's `stepsPatch` can change it.
+
+**Verify only what the shot shows.** A `verify` (and its `contains`) is checked against what the driver sees when
+the shot is taken, which is what's on screen (Android's dump lists nothing else). A field `fill` typed below the visible
+part, out of sight once `scrollTo` has scrolled the form back, can't be checked there: its `verify` fails ("wrong
+state"). `fill` warns when that's so ("fill typed into id 'notes', which is out of sight once the form is scrolled
+back…"). Check the fields the shot shows (on a short display, maybe fewer than on a tall one: a device's
+`overrides` may change its `verify`), or leave `scrollTo` out when the shot should show the lower fields.
 
 **`hideKeyboard`** tries, in order, until the keyboard is down (the driver looks after each try, where it can):
 
@@ -346,6 +354,22 @@ descendant. When several elements match (a list of chips with one id), any one t
 `@text`, `@content-desc`, `@resource-id`; iOS's `@label`, `@name`, `@value`), so a cross-platform xpath names
 both: `//*[contains(@text,'Lemon') or contains(@label,'Lemon')]`.
 
+### Scrolling in a pane
+
+`in` (a `scroll`'s, a `fill`'s, `hideKeyboard`'s `scroll`) names an element: the scroll view itself, or anything
+inside it, often easier to name (an id on the pane's content, or one of the pane's own fields), so one
+`{ "id": "servings" }` serves every device where the scroll view itself has no id. What's scrolled is the nearest
+view that is that element or holds it and scrolls: in `adb`'s and `uiautomator`'s dump, and Appium's Android page
+source, a node with `scrollable="true"`; in Appium's iOS or Mac page source, an `XCUIElementTypeScrollView`,
+`Table`, `CollectionView` (or a Mac's `Outline`), found again by its path for its element id; in an agent's tree, a
+`ScrollView`, `CollectionView`, `ListView`, `RecyclerView` or `ScrollViewer` (or a `scrollable` flag where the agent
+gives one); on the web, the nearest element whose overflow scrolls (`overflow: auto` or `scroll`, with more content
+than room). With nothing around it that scrolls, the element itself is scrolled, as named. When what was scrolled
+isn't the element named, the report's `panes` says so ("in id 'servings': scrolled its nearest scrolling ancestor,
+android.widget.ScrollView [600,200][1080,1920]"); read it when a scroll moved the wrong thing. Once found on a
+screen, the pane serves that screen's later scrolls when the element named has scrolled out of sight (a field at
+the top of the form, once the fill's reached the bottom).
+
 ### `verify` and the keyboard
 
 `verify` holds elements and, optionally, `{ "keyboard": "hidden" | "shown" | "any" }`. **A screen whose steps type
@@ -380,7 +404,8 @@ Written to `<out>/capture-report.json` after every run.
 | `statusBar` | `verified` (iOS: `simctl status_bar list` shows the override; Android: the status bar's pixels changed with demo mode's clock and came back), `overridden` (applied and not checked: `target.statusBarCheck: false`), `unverified` (the override failed or couldn't be confirmed, or an imported picture whose tool didn't say), `none` (no status bar, or `as-is`). The icons are still for a person to look at |
 | `state`, `stateCheck` | the screen's `state` words; its `verify`: `passed`, `failed` (the shot is `missed`, "wrong state"), `unchecked` (the driver can't see elements: look) |
 | `fixes` | lossless repairs made: `alpha-flattened`, `converted-to-srgb`, `16-bit-to-8-bit`. Never a resize. Simulators and emulators write an alpha channel that's all opaque: those are flattened quietly (still in `fixes`) and counted once in the report's `notes`; see-through pixels get a warning |
-| `warnings` | what a person should look at (a screen that didn't settle, a wait that couldn't see elements) |
+| `warnings` | what a person should look at (a screen that didn't settle, a wait that couldn't see elements, a field `fill` typed that's out of sight for its `verify`) |
+| `panes` | what each scroll's `in` scrolled where it wasn't the element named: its nearest scrolling ancestor, or the element itself when nothing around it scrolls ([scrolling in a pane](#scrolling-in-a-pane)); left out when there's nothing to say |
 | `source` | what produced it (device type and runtime, AVD and API level, browser) |
 | `appRevision` | the app's commit when this shot was taken (a taken shot, when the app is in a git checkout): what `--changes` starts from |
 

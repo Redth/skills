@@ -246,6 +246,8 @@ class Shot(object):
       shot is ``missed``, "wrong state"), ``unchecked`` (this driver can't see elements, so a person must look) or
       ``none`` (the screen has no ``verify``).
     - ``tree``: with ``capture.py --inspect``, the file the screen's UI tree was saved to (or ``None``).
+    - ``panes``: what each scroll's ``in`` scrolled, where it wasn't the element named (its nearest scrolling
+      ancestor, or the element itself when nothing around it scrolls), in a few words each.
     """
 
     def __init__(self, status="taken", path=None, reason=None, source=None, status_bar="none", fixes=None,
@@ -266,6 +268,8 @@ class Shot(object):
             raise ValueError("state_check is one of %s, not %r" % (", ".join(STATE_CHECKS), state_check))
         self.state_check = state_check
         self.tree = None
+        self.panes = []
+        self.scrolled_in = {}   # a scroll's in (a query) -> the element it scrolled, for this screen's later steps
 
     def __repr__(self):
         return "Shot(%s%s)" % (self.status, (": " + self.reason) if self.reason else "")
@@ -804,6 +808,84 @@ def first_containing(root, elements, query, wanted):
         if texts_contain(element_texts(e), wanted):
             return e
     return None
+
+
+# The kinds of view that scroll their content, by the end of their class or type in the trees the drivers read
+# (Android's ScrollView, NestedScrollView, RecyclerView, ListView; XCUITest's ScrollView, Table, CollectionView; a
+# Mac's Outline; an agent's ScrollView, CollectionView, ListView; WinUI's ScrollViewer): what a scroll's ``in``
+# resolves to where the tree has no ``scrollable`` flag of its own.
+SCROLLING_TYPES = re.compile(r"(ScrollView|ScrollViewer|RecyclerView|ListView|GridView|CollectionView|TableView|"
+                             r"ElementTypeTable|ElementTypeOutline|ScrollPane)$")
+
+
+def scrolls(node):
+    """True when a tree node is one that scrolls its content: ``scrollable="true"`` (UI Automator's dump, Appium's
+    Android source), or, where the tree has no such flag, its class, type or tag (``SCROLLING_TYPES``)."""
+    a = node.attrib
+    for flag in ("scrollable", "isScrollable"):
+        if flag in a:
+            return str(a[flag]).lower() == "true"
+    kind = a.get("class") or a.get("type") or node.tag or ""
+    return bool(SCROLLING_TYPES.search(str(kind)))
+
+
+def _parents(root):
+    return dict((child, parent) for parent in root.iter() for child in parent)
+
+
+def nearest_scrolling(root, node, scrollable=scrolls):
+    """The nearest of ``node`` and its ancestors in the tree ``root`` that scrolls (``scrollable``), or ``None``."""
+    parents = _parents(root)
+    while node is not None:
+        if scrollable(node):
+            return node
+        node = parents.get(node)
+    return None
+
+
+def pane_in_tree(root, elements, query, scrollable=scrolls):
+    """What a scroll's ``in`` (``query``) scrolls, read from one tree: ``(node, how)``, the nearest scrolling view
+    that is the element or holds it (``how``: ``self`` or ``ancestor``), or, with none, the element's own node
+    (``none``); ``None`` when the tree doesn't show the element."""
+    found = [e for e in matching(root, elements, query) if e.node is not None]
+    if not found:
+        return None
+    node = found[0].node
+    pane = nearest_scrolling(root, node, scrollable)
+    if pane is None:
+        return node, "none"
+    return pane, ("self" if pane is node else "ancestor")
+
+
+def describe_node(node):
+    """A tree node in a few words, for the report: its class or type, its id and where it is
+    (``android.widget.ScrollView id 'pane' [600,200][1080,1920]``)."""
+    a = node.attrib
+    parts = [str(a.get("class") or a.get("type") or node.tag)]
+    for key in ("resource-id", "name", "automationId", "identifier", "AutomationId"):
+        if a.get(key):
+            parts.append("id %r" % a[key].split(":id/")[-1])
+            break
+    if a.get("bounds"):
+        parts.append(a["bounds"])
+    elif all(a.get(k) not in (None, "") for k in ("x", "y", "width", "height")):
+        parts.append("at (%s, %s), %s x %s" % (a["x"], a["y"], a["width"], a["height"]))
+    return " ".join(parts)
+
+
+def absolute_xpath(root, node):
+    """An xpath from ``root`` to ``node`` by tag and position (``/hierarchy/android.widget.FrameLayout[1]/…``), to
+    find it again in the same tree on a server that evaluates XPath over it (Appium's)."""
+    parents = _parents(root)
+    steps = []
+    while node is not None and node is not root:
+        parent = parents.get(node)
+        if parent is None:
+            break
+        same = [c for c in parent if c.tag == node.tag]
+        steps.append("%s[%d]" % (node.tag, same.index(node) + 1))
+        node = parent
+    return "/" + "/".join([root.tag] + list(reversed(steps)))
 
 
 def posture_of(value):
@@ -1787,6 +1869,30 @@ class Driver(object):
                 if within is not None:
                     how["in"] = within
                 self.step_scroll(ctx, how)
+                self.warn_out_of_sight(ctx, fields, opts["scrollTo"])
+
+    def warn_out_of_sight(self, ctx, fields, scroll_to):
+        """After a fill's ``scrollTo``: each field it typed into that the screen's ``verify`` names but that's out of
+        sight now is a warning. A ``verify`` sees only what's on screen, so its check of that field fails (or, with
+        the field's text elsewhere on screen, passes for the wrong reason)."""
+        if DRY_RUN:
+            return
+        checks = ctx.screen.get("verify")
+        checks = [checks] if isinstance(checks, dict) else list(checks or [])
+        named = set(element_query(c) for c in checks if isinstance(c, dict) and "keyboard" not in c)
+        where = ("the %s" % scroll_to) if isinstance(scroll_to, str) else describe_target(scroll_to)
+        for query, _ in fields:
+            if query not in named or query[0] not in self.FINDERS:
+                continue
+            try:
+                seen = self.in_view(ctx, query)
+            except (DriverError, XPathError):
+                continue
+            if not seen:
+                ctx.warn("step %d: fill typed into %s, which is out of sight once the form is scrolled back to %s "
+                         "(scrollTo), and the screen's verify names it: a verify sees only what's on screen, so check "
+                         "only the fields the shot shows, or leave scrollTo out" % (ctx.index, describe_query(query),
+                                                                                    where))
 
     def bring_into_view(self, ctx, query, within=None):
         """Scroll ``query``'s element into view (both ways, within ``within``) unless it's in view already."""
@@ -1836,15 +1942,62 @@ class Driver(object):
             self.scroll_once(ctx, direction or "down", within)
 
     def scroll_container(self, ctx, element):
-        """The element a scroll is ``in`` (waited for), or ``None``."""
+        """The element a scroll is ``in``, or ``None``. The element named may be the scrolling view itself or anything
+        inside it (a pane's content, one of its fields): what's scrolled is the nearest scrolling view that is it or
+        holds it (``scroll_pane``), else the element itself. Where that isn't the element named, the shot's ``panes``
+        say what was scrolled. A pane found once on a screen serves again when the element named has since scrolled
+        out of sight (a field at the top of the form, after a fill reached the bottom)."""
         if element is None:
             return None
         query = element_query(element)
         if query is None:
             raise StepFailed("step %d: scroll's in needs an element (id, text, label, xpath, css)" % ctx.index)
-        found = self.wait_for(ctx, query, element.get("timeout") if isinstance(element, dict) else None)
+        known = ctx.shot.scrolled_in.get(query)
+        found = None if known is None or DRY_RUN else self.find(ctx, query)
+        if found is None and known is not None:
+            note("  %s is out of sight now: scrolling the pane it was in" % describe_query(query))
+            return known
+        if found is None:
+            found = self.wait_for(ctx, query, element.get("timeout") if isinstance(element, dict) else None)
         found.attrs.setdefault("query", query)
-        return found
+        if DRY_RUN:
+            return found
+        try:
+            pane = self.scroll_pane(ctx, query, found)
+        except (DriverError, XPathError) as e:
+            note("  couldn't look for what scrolls around %s: %s" % (describe_query(query), str(e)[:160]))
+            pane = None
+        container = found
+        if pane is not None:
+            element_, how, what = pane
+            if how == "ancestor":
+                container = element_
+            self.say_pane(ctx, query, how, what)
+        container.attrs.setdefault("query", query)
+        ctx.shot.scrolled_in[query] = container
+        return container
+
+    def say_pane(self, ctx, query, how, what):
+        """Put in the shot's ``panes`` (once) what a scroll ``in`` ``query`` scrolled when it wasn't the element
+        named: ``how`` ``ancestor`` (its nearest scrolling ancestor, ``what``) or ``none`` (nothing around it
+        scrolls, so the element itself); ``self`` says nothing."""
+        if how == "ancestor":
+            said = "in %s: scrolled its nearest scrolling ancestor, %s" % (describe_query(query), what)
+        elif how == "none":
+            said = "in %s: nothing that scrolls is it or holds it (it's %s), so it was scrolled itself" % (
+                describe_query(query), what)
+        else:
+            return
+        if said not in ctx.shot.panes:
+            ctx.shot.panes.append(said)
+            note("  " + said)
+
+    def scroll_pane(self, ctx, query, found):
+        """What a scroll ``in`` ``query`` (found as ``found``) scrolls: ``(element, how, what)``: the nearest
+        scrolling view that is the element or holds it (``how``: ``self``, ``ancestor``; ``none`` when there's none,
+        and the element is scrolled itself) and ``what``, it in a few words. ``None`` when this driver can't tell
+        (the base: the element named is scrolled). Drivers that read a tree implement it (``pane_in_tree``)."""
+        return None
 
     def scroll_once(self, ctx, direction, within=None):
         """One scroll gesture ``direction`` (the content's way: ``down`` shows what's below), within the element
@@ -2001,6 +2154,7 @@ __all__ = [
     "mask", "note", "SECRETS", "XPathError", "xpath_all", "xpath_first", "posture_of", "POSTURES",
     "step_of", "describe_step", "element_query", "step_element", "step_elements", "fill_options", "fill_fields",
     "typed", "focus_may_remain", "describe_target", "describe_element", "TYPING_STEPS", "DIRECTIONS", "OPPOSITE",
-    "EDGES", "find_element", "find_xpath", "parse_uiautomator", "parse_bounds", "file_sha256", "STEP_KINDS", "FINDER_KEYS", "RUNNER", "SPAWNER", "SLEEP", "CLOCK", "LOG",
-    "DRY_RUN",
+    "EDGES", "find_element", "find_xpath", "parse_uiautomator", "SCROLLING_TYPES", "scrolls", "nearest_scrolling",
+    "pane_in_tree", "describe_node", "absolute_xpath", "parse_bounds", "file_sha256", "STEP_KINDS", "FINDER_KEYS",
+    "RUNNER", "SPAWNER", "SLEEP", "CLOCK", "LOG", "DRY_RUN",
 ]

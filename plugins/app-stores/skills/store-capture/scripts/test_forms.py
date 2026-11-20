@@ -1,6 +1,8 @@
 """Tests for screens that look in use: the ``fill`` step (a form typed into across drivers), ``unfocus`` (no caret
 left blinking), ``hideKeyboard``'s tries (a keyboard that won't close fails plainly), ``scroll`` within a pane, to
-an element both ways and back to the top, ``settle`` after typing, and the plan's ``inUse`` in ``staging.md``.
+an element both ways and back to the top, ``in`` a pane by anything inside it (its nearest scrolling ancestor, on
+each driver that scrolls), a ``verify`` naming a field ``fill`` left out of sight, ``settle`` after typing, and the
+plan's ``inUse`` in ``staging.md``.
 
 Run from this folder: ``python3 -m unittest discover -s . -p 'test_*.py'``. Nothing here runs a real tool, reaches
 a network or waits: a fake two-pane Android form answers adb's commands.
@@ -27,6 +29,7 @@ import test_drivers_inapp as inapp  # noqa: E402
 import test_postures  # noqa: E402
 from appstores_lib import jsonio  # noqa: E402
 from drivers import adb as adb_driver  # noqa: E402
+from drivers import appium as appium_driver  # noqa: E402
 from drivers import base  # noqa: E402
 from drivers import chrome as chrome_driver  # noqa: E402
 
@@ -51,8 +54,9 @@ class FakeForm(test_postures.FakeFoldable):
     ``escape_goes_back``, navigates as an unhandled Escape does on older Android); swipes move the pane they start
     in."""
 
-    def __init__(self, off=0, escape_goes_back=False):
+    def __init__(self, off=0, escape_goes_back=False, pane_without_id=False):
         test_postures.FakeFoldable.__init__(self, foldable=False)
+        self.pane_without_id = pane_without_id
         self.off = off
         self.left_off = 0
         self.escape_goes_back = escape_goes_back
@@ -79,7 +83,7 @@ class FakeForm(test_postures.FakeFoldable):
         nodes = []
         if self.page == "form":
             nodes.append('<node index="0" text="" resource-id="%s:id/list" class="android.widget.ScrollView" '
-                         'bounds="[%d,%d][%d,%d]"/>' % ((PACKAGE,) + LEFT))
+                         'scrollable="true" bounds="[%d,%d][%d,%d]"/>' % ((PACKAGE,) + LEFT))
             kids = []
             for field in FIELDS:
                 if not self.visible(field):
@@ -88,16 +92,20 @@ class FakeForm(test_postures.FakeFoldable):
                 cls = "android.widget.TextView" if field == "title" else "android.widget.EditText"
                 text = "Scale recipe" if field == "title" else self.texts[field]
                 kids.append('<node index="1" text="%s" resource-id="%s:id/%s" class="%s" focused="%s" '
-                            'bounds="[620,%d][1060,%d]"/>' % (text, PACKAGE, field, cls,
-                                                              "true" if self.focused == field else "false", y, y + 60))
-            nodes.append('<node index="1" text="" resource-id="%s:id/form" class="android.widget.ScrollView" '
-                         'bounds="[%d,%d][%d,%d]">%s</node>' % ((PACKAGE,) + FORM + ("".join(kids),)))
+                            'scrollable="false" bounds="[620,%d][1060,%d]"/>' % (
+                                text, PACKAGE, field, cls, "true" if self.focused == field else "false", y, y + 60))
+            # The pane: a ScrollView with no id of its own here (the app's id is on its content, inside it).
+            content = '<node index="0" text="" resource-id="%s:id/form-content" class="android.widget.LinearLayout" ' \
+                      'scrollable="false" bounds="[%d,%d][%d,%d]">%s</node>' % ((PACKAGE,) + FORM + ("".join(kids),))
+            nodes.append('<node index="1" text="" resource-id="%s" class="android.widget.ScrollView" '
+                         'scrollable="true" bounds="[%d,%d][%d,%d]">%s</node>'
+                         % (("" if self.pane_without_id else PACKAGE + ":id/form",) + FORM + (content,)))
         else:
             nodes.append('<node index="0" text="Home" resource-id="%s:id/home" class="android.widget.TextView" '
                          'bounds="[40,200][600,260]"/>' % PACKAGE)
         return ('<?xml version="1.0" encoding="UTF-8"?><hierarchy rotation="0"><node index="0" text="" '
-                'resource-id="" class="android.widget.FrameLayout" bounds="[0,0][1080,1920]">%s</node></hierarchy>'
-                % "".join(nodes))
+                'resource-id="" class="android.widget.FrameLayout" scrollable="false" bounds="[0,0][1080,1920]">%s'
+                '</node></hierarchy>' % "".join(nodes))
 
     def shell(self, text):
         m = re.match(r"input swipe (\d+) (\d+) (\d+) (\d+) \d+$", text)
@@ -240,6 +248,103 @@ class ScrollTests(AdbFormCase):
                                                                "times": 3}}]), "en-US")
         self.assertEqual(shot.status, "missed")
         self.assertIn("scrolled down and up within id 'form'", shot.reason)
+
+
+class PaneTests(AdbFormCase):
+    """A scroll's or a fill's ``in`` may name anything inside the pane: what scrolls is its nearest scrolling
+    ancestor, and the shot says so."""
+
+    PANE = "in id %r: scrolled its nearest scrolling ancestor, android.widget.ScrollView [600,200][1080,1920]"
+
+    def test_a_fill_in_one_of_its_own_fields_scrolls_the_pane_around_it(self):
+        form, drv, device = self.prepared(pane_without_id=True)
+        lines = []
+        base.LOG = lines.append
+        steps = [{"fill": {"fields": [{"field": "servings", "text": "12"}, {"field": "minutes", "text": "45"},
+                                      {"field": "notes", "text": "spicy"}],
+                           "in": {"id": "servings"}, "scrollTo": "top"}}]
+        shot = drv.run_screen(device, self.screen(steps, verify=[{"id": "servings", "contains": "12"}]), "en-US")
+        self.assertEqual(shot.status, "taken", shot.reason)
+        self.assertEqual(form.texts, {"servings": "12", "minutes": "45", "notes": "spicy"})
+        self.assertEqual((form.off, form.left_off), (0, 0), "the form wasn't scrolled back, or the list was scrolled")
+        self.assertTrue(form.swipes and all(FORM[0] <= x1 < FORM[2] for x1, _, _, _ in form.swipes), form.swipes)
+        self.assertEqual(shot.panes, [self.PANE % "servings"], "said once, though the field scrolled out of sight")
+        self.assertTrue(any("id 'servings' is out of sight now: scrolling the pane it was in" in l for l in lines),
+                        "the way back up never needed the pane found before")
+
+    def test_the_panes_content_by_its_id_serves_as_well_as_an_xpath_to_the_scroll_view(self):
+        form, drv, device = self.prepared(pane_without_id=True)
+        shot = drv.run_screen(device, self.screen([{"scroll": {"direction": "down", "in": {"id": "form-content"}}}]),
+                              "en-US")
+        self.assertEqual(shot.status, "taken", shot.reason)
+        self.assertEqual((form.off, form.left_off), (STEP, 0))
+        self.assertEqual(shot.panes, [self.PANE % "form-content"])
+        shot = drv.run_screen(device, self.screen([{"scroll": {"direction": "down", "in": {
+            "xpath": "//node[@scrollable='true'][.//node[contains(@resource-id, 'form-content')]]"}}}], sid="b"),
+            "en-US")
+        self.assertEqual((form.off, form.left_off), (2 * STEP, 0))
+        self.assertEqual(shot.panes, [], "the scroll view itself: nothing to say")
+
+    def test_the_scroll_view_itself_is_scrolled_as_before_and_not_reported(self):
+        form, drv, device = self.prepared()
+        shot = drv.run_screen(device, self.screen([{"scroll": {"direction": "down", "in": {"id": "form"}}}]), "en-US")
+        self.assertEqual((form.off, form.left_off), (STEP, 0))
+        self.assertEqual(shot.panes, [])
+
+    def test_with_nothing_around_it_that_scrolls_the_element_itself_is_scrolled_and_said(self):
+        form, drv, device = self.prepared()
+        shot = drv.run_screen(device, self.screen([{"scroll": {"direction": "down", "in": {
+            "xpath": "/hierarchy/node"}}}]), "en-US")
+        self.assertEqual(shot.status, "taken", shot.reason)
+        self.assertEqual((form.off, form.left_off), (0, STEP), "the whole screen's middle is the list pane")
+        self.assertEqual(len(shot.panes), 1)
+        self.assertIn("nothing that scrolls is it or holds it (it's android.widget.FrameLayout [0,0][1080,1920]), "
+                      "so it was scrolled itself", shot.panes[0])
+
+    def test_scrolling_types_where_a_tree_has_no_flag(self):
+        import xml.etree.ElementTree as ET
+        for kind, scrolls in (("XCUIElementTypeScrollView", True), ("XCUIElementTypeTable", True),
+                              ("XCUIElementTypeCollectionView", True), ("XCUIElementTypeTextField", False),
+                              ("XCUIElementTypeTableRow", False), ("RecyclerView", True), ("ScrollViewer", True),
+                              ("VerticalStackLayout", False)):
+            self.assertEqual(base.scrolls(ET.Element(kind, {"type": kind})), scrolls, kind)
+        self.assertFalse(base.scrolls(ET.Element("node", {"class": "android.widget.ScrollView",
+                                                          "scrollable": "false"})), "the flag wins")
+
+
+class OutOfSightTests(AdbFormCase):
+    """A verify sees only what's on screen: a field fill typed that's out of sight once the form is scrolled back
+    can't be checked, and fill says so."""
+
+    STEPS = [{"fill": {"fields": [{"field": "servings", "text": "12"}, {"field": "notes", "text": "spicy"}],
+                       "in": {"id": "form"}, "scrollTo": "top"}}]
+
+    def test_a_verify_naming_a_field_left_out_of_sight_is_warned_about(self):
+        form, drv, device = self.prepared()
+        shot = drv.run_screen(device, self.screen(self.STEPS, verify=[{"id": "notes", "contains": "spicy"}]),
+                              "en-US")
+        self.assertEqual(form.texts["notes"], "spicy")
+        self.assertEqual(shot.status, "missed", "the verify can't see it")
+        warned = [w for w in shot.warnings if "out of sight" in w]
+        self.assertEqual(len(warned), 1, shot.warnings)
+        for words in ("fill typed into id 'notes'", "scrolled back to the top (scrollTo)", "verify names it",
+                      "sees only what's on screen", "check only the fields the shot shows", "leave scrollTo out"):
+            self.assertIn(words, warned[0])
+
+    def test_checking_only_the_fields_in_sight_warns_nothing(self):
+        form, drv, device = self.prepared()
+        shot = drv.run_screen(device, self.screen(self.STEPS, verify=[{"id": "servings", "contains": "12"}]),
+                              "en-US")
+        self.assertEqual(shot.status, "taken", shot.reason)
+        self.assertFalse(any("out of sight" in w for w in shot.warnings), shot.warnings)
+
+    def test_without_scroll_to_nothing_is_checked(self):
+        form, drv, device = self.prepared()
+        steps = [{"fill": {"fields": [{"field": "servings", "text": "12"}, {"field": "notes", "text": "spicy"}],
+                           "in": {"id": "form"}}}]
+        shot = drv.run_screen(device, self.screen(steps, verify=[{"id": "notes", "contains": "spicy"}]), "en-US")
+        self.assertEqual(shot.status, "taken", shot.reason)
+        self.assertFalse(any("out of sight" in w for w in shot.warnings), shot.warnings)
 
 
 class UnfocusTests(AdbFormCase):
@@ -476,6 +581,146 @@ class AppiumKeyboardTests(inapp.Case):
                          "a swipe is the finger's way: content up is the finger down")
         self.assertIn("elementId", swipes[2], "a pane scrolled by swiping inside it")
         self.assertGreaterEqual(len(swipes), 4, "scrollTo top swiped too")
+
+
+IOS_SOURCE = (
+    '<?xml version="1.0" encoding="UTF-8"?><AppiumAUT><XCUIElementTypeApplication type="XCUIElementTypeApplication" '
+    'name="Sample Recipes"><XCUIElementTypeWindow type="XCUIElementTypeWindow">'
+    '<XCUIElementTypeScrollView type="XCUIElementTypeScrollView" x="0" y="0" width="400" height="1000">'
+    '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="list-title"/></XCUIElementTypeScrollView>'
+    '<XCUIElementTypeScrollView type="XCUIElementTypeScrollView" x="400" y="0" width="600" height="1000">'
+    '<XCUIElementTypeOther type="XCUIElementTypeOther" name="form-content">'
+    '<XCUIElementTypeTextField type="XCUIElementTypeTextField" name="servings" value="12"/>'
+    '</XCUIElementTypeOther></XCUIElementTypeScrollView></XCUIElementTypeWindow></XCUIElementTypeApplication>'
+    '</AppiumAUT>')
+ANDROID_SOURCE = (
+    '<?xml version="1.0" encoding="UTF-8"?><hierarchy rotation="0"><android.widget.FrameLayout scrollable="false" '
+    'resource-id="" bounds="[0,0][1080,1920]"><androidx.recyclerview.widget.RecyclerView scrollable="true" '
+    'resource-id="com.example.samplerecipes:id/list" bounds="[0,200][600,1920]"/>'
+    '<android.widget.ScrollView scrollable="true" resource-id="" bounds="[600,200][1080,1920]">'
+    '<android.widget.LinearLayout scrollable="false" resource-id="com.example.samplerecipes:id/form-content" '
+    'bounds="[600,200][1080,1920]"><android.widget.EditText scrollable="false" '
+    'resource-id="com.example.samplerecipes:id/servings" bounds="[620,220][1060,280]"/></android.widget.LinearLayout>'
+    '</android.widget.ScrollView></android.widget.FrameLayout></hierarchy>')
+
+
+class AppiumPaneTests(inapp.Case):
+    """Appium: the page source shows what holds the element named; the pane is found again by its path."""
+
+    def prepared(self, platform, source):
+        t = self.transport
+        t.on("GET", r"^/status$", body=inapp.answer("appium-status.json"))
+        t.on("POST", r"^/session$", body=inapp.answer("appium-session.json"))
+        t.on("GET", r"/source$", body=json.dumps({"value": source}))
+        t.on("POST", r"/element$", body=[(200, json.dumps({"value": {appium_driver.W3C_ELEMENT: "el-servings"}})),
+                                         (200, json.dumps({"value": {appium_driver.W3C_ELEMENT: "pane-form"}}))])
+        t.on("POST", r"/execute/sync$", body='{"value": null}')
+        d = inapp.drivers.get("appium")(self.options())
+        dev = self.device("appium", platform=platform, target={"host": "fakehost"})
+        d.prepare(dev, {})
+        d.apply_locale(dev, "en-US", base.Shot())
+        self.transport.calls[:] = []
+        return d, dev
+
+    def gestures(self):
+        return [c[2]["args"][0] for c in self.transport.find("POST", r"/execute/sync$")
+                if c[2]["script"] in ("mobile: swipe", "mobile: scrollGesture")]
+
+    def test_ios_scrolls_the_scroll_view_around_a_field(self):
+        d, dev = self.prepared("ios", IOS_SOURCE)
+        ctx = self.ctx(dev)
+        d.step_scroll(ctx, {"direction": "down", "in": {"id": "servings"}})
+        finds = [c[2] for c in self.transport.find("POST", r"/element$")]
+        self.assertEqual(finds[-1], {"using": "xpath", "value": "/AppiumAUT/XCUIElementTypeApplication[1]/"
+                                     "XCUIElementTypeWindow[1]/XCUIElementTypeScrollView[2]"})
+        self.assertEqual([g.get("elementId") for g in self.gestures()], ["pane-form"])
+        self.assertEqual(ctx.shot.panes, ["in id 'servings': scrolled its nearest scrolling ancestor, "
+                                          "XCUIElementTypeScrollView at (400, 0), 600 x 1000"])
+
+    def test_android_reads_the_scrollable_flag(self):
+        d, dev = self.prepared("android", ANDROID_SOURCE)
+        ctx = self.ctx(dev)
+        d.step_scroll(ctx, {"direction": "down", "in": {"id": "form-content"}})
+        finds = [c[2] for c in self.transport.find("POST", r"/element$")]
+        self.assertEqual(finds[-1]["value"], "/hierarchy/android.widget.FrameLayout[1]/android.widget.ScrollView[1]")
+        self.assertEqual([g.get("elementId") for g in self.gestures()], ["pane-form"])
+        self.assertIn("android.widget.ScrollView [600,200][1080,1920]", ctx.shot.panes[0])
+
+    def test_a_pane_not_found_again_leaves_the_element_itself(self):
+        d, dev = self.prepared("ios", IOS_SOURCE)
+        self.transport.on("POST", r"/element$", body=[
+            (200, json.dumps({"value": {appium_driver.W3C_ELEMENT: "el-servings"}})),
+            (404, json.dumps({"value": {"error": "no such element", "message": "gone"}}))])
+        ctx = self.ctx(dev)
+        d.step_scroll(ctx, {"direction": "down", "in": {"id": "servings"}})
+        self.assertEqual([g.get("elementId") for g in self.gestures()], ["el-servings"])
+        self.assertEqual(ctx.shot.panes, [])
+
+
+class AgentPaneTests(inapp.Case):
+    """The in-app agents: the agent's tree shows what holds the element named, by type."""
+
+    TREE = [{"id": "page", "type": "ContentPage", "children": [
+        {"id": "el-2", "type": "CollectionView", "automationId": "list"},
+        {"id": "el-3", "type": "ScrollView", "fullType": "Microsoft.Maui.Controls.ScrollView", "children": [
+            {"id": "el-4", "type": "VerticalStackLayout", "automationId": "form-content", "children": [
+                {"id": "el-9", "type": "Entry", "automationId": "servings", "text": "12"}]}]}]}]
+
+    def setUp(self):
+        inapp.Case.setUp(self)
+        self.agents((10224, "com.example.samplerecipes", None, 41017, "MacCatalyst"))
+        self.runner.on(r"ui tree", out=json.dumps(self.TREE))
+
+    def test_devflow_scrolls_the_scroll_view_around_the_panes_content(self):
+        self.runner.on(r"ui query --automationId form-content",
+                       out=json.dumps([{"id": "el-4", "type": "VerticalStackLayout", "automationId": "form-content"}]))
+        d = inapp.drivers.get("devflow")(self.options())
+        ctx = self.ctx(self.device("devflow"))
+        d.step_scroll(ctx, {"direction": "down", "in": {"id": "form-content"}})
+        self.assertEqual(self.runner.matching(r"ui scroll"), [
+            "maui devflow ui scroll --element el-3 --dy -400 --agent-port 10224 --platform maccatalyst"])
+        self.assertEqual(ctx.shot.panes, ["in id 'form-content': scrolled its nearest scrolling ancestor, ScrollView"])
+
+    def test_a_scroll_view_named_itself_says_nothing(self):
+        self.runner.on(r"ui query --automationId list",
+                       out=json.dumps([{"id": "el-2", "type": "CollectionView", "automationId": "list"}]))
+        d = inapp.drivers.get("devflow")(self.options())
+        ctx = self.ctx(self.device("devflow"))
+        d.step_scroll(ctx, {"direction": "down", "in": {"id": "list"}})
+        self.assertEqual(self.runner.matching(r"ui scroll"), [
+            "maui devflow ui scroll --element el-2 --dy -400 --agent-port 10224 --platform maccatalyst"])
+        self.assertEqual(ctx.shot.panes, [])
+
+
+class PaneChrome(cli_tests.FakeChrome):
+    """A page whose ``pane`` lookups answer as FIND_JS would for a field inside a scrolling ``div.pane``."""
+
+    def call(self, method, params=None, session_id=None, timeout=30):
+        if method == "Runtime.evaluate" and '"pane": true' in params["expression"]:
+            self.calls.append((method, params))
+            return {"result": {"value": {"x": 1, "y": 1, "width": 2, "height": 2, "pane": "ancestor",
+                                         "what": "div#form.pane"}}}
+        return cli_tests.FakeChrome.call(self, method, params, session_id, timeout)
+
+
+class ChromePaneTests(cli_tests.DriverCase):
+    def test_a_scroll_in_a_field_scrolls_its_scrolling_ancestor_and_says_which(self):
+        fake = PaneChrome(elements={("id", "servings"): {"x": 100, "y": 300, "width": 200, "height": 40}})
+        saved = chrome_driver.CHROME_FACTORY
+        chrome_driver.CHROME_FACTORY = lambda: fake
+        self.addCleanup(setattr, chrome_driver, "CHROME_FACTORY", saved)
+        drv = chrome_driver.ChromeDriver(self.options)
+        device = self.device(id="web-phone", driver="chrome", width=1290, height=2796, app={}, target={"scale": 3})
+        drv.prepare(device, {"app": {"web": {"url": "http://localhost:8080/"}}})
+        shot = drv.run_screen(device, self.screen([{"scroll": {"direction": "down", "in": {"id": "servings"}}},
+                                                   {"scroll": {"to": "top", "in": {"id": "servings"}}}]), "en-US")
+        self.assertEqual(shot.status, "taken", shot.reason)
+        exprs = [p["expression"] for m, p in fake.calls
+                 if m == "Runtime.evaluate" and '"pane": true' in p["expression"]]
+        self.assertTrue(any('"scrollBy": [0.0, 0.8]' in e for e in exprs), exprs)
+        self.assertTrue(any('"edge": "top"' in e for e in exprs), exprs)
+        self.assertIn("scrolling(p)", chrome_driver.FIND_JS)
+        self.assertEqual(shot.panes, ["in id 'servings': scrolled its nearest scrolling ancestor, div#form.pane"])
 
 
 class DevFlowScrollTests(inapp.Case):

@@ -303,7 +303,7 @@
           "scroll": { "type": "object", "additionalProperties": false, "properties": {
             "$comment": { "type": "string" },
             "to": { "$comment": "An element (looked for in direction, default down, until it's in view or the content stops moving, then the other way), or top or bottom (until the content stops moving).", "$ref": "#/$defs/scrollTo" },
-            "in": { "$comment": "The element to scroll within (a pane of a two-pane layout, a list), else the screen's middle.", "$ref": "#/$defs/element" },
+            "in": { "$comment": "The element to scroll within (a pane of a two-pane layout, a list), else the screen's middle: the scroll view or anything inside it (its nearest scrolling ancestor is scrolled).", "$ref": "#/$defs/element" },
             "direction": { "enum": ["up", "down", "left", "right"] },
             "times": { "type": "integer", "minimum": 1, "maximum": 50 },
             "distance": { "$comment": "In-app agents: each scroll's distance (default 400).", "type": "number", "minimum": 1 }
@@ -351,7 +351,7 @@
             { "type": "object", "required": ["fields"], "additionalProperties": false, "properties": {
               "$comment": { "type": "string" },
               "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/fillField" } },
-              "in": { "$comment": "The pane the fields are in (scrolled within).", "$ref": "#/$defs/element" },
+              "in": { "$comment": "The pane the fields are in (scrolled within): the scroll view or anything inside it.", "$ref": "#/$defs/element" },
               "keyboard": { "$comment": "true (default): closed after, as hideKeyboard; keep: left up (and the focus kept); or hideKeyboard's tries.", "anyOf": [ { "type": "boolean" }, { "const": "keep" }, { "$ref": "#/$defs/keyboardTries" } ] },
               "unfocus": { "$comment": "Clear the focus after (default true, unless the keyboard's kept).", "type": "boolean" },
               "scrollTo": { "$comment": "Then scroll back: top, bottom or an element (typing scrolls a long form).", "$ref": "#/$defs/scrollTo" } } }
