@@ -39,6 +39,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -56,7 +57,13 @@ from appstores_lib import web  # noqa: E402
 
 # Every step kind the plan may use (CONTRACT.md 10.2), and every element finder.
 STEP_KINDS = ("launch", "deepLink", "url", "tap", "type", "wait", "scroll", "back", "swipe", "flow", "script",
-              "settle", "appFile")
+              "settle", "appFile", "posture", "hideKeyboard")
+# Keys a step may carry besides its kind: a comment, and a name other layers patch it by (stepsPatch).
+STEP_META = ("$comment", "name")
+# A foldable's postures (the plan's word, and the words other tools use for the same).
+POSTURES = ("folded", "open", "half-open")
+POSTURE_ALIASES = {"unfolded": "open", "opened": "open", "closed": "folded", "half-opened": "half-open",
+                   "partially-folded": "half-open", "tabletop": "half-open", "book": "half-open"}
 FINDER_KEYS = ("id", "text", "label", "xpath", "css")
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 
@@ -448,8 +455,9 @@ def http_json(method, url, body=None, headers=None, timeout=30, dry_body=b"{}"):
 # -- steps and elements ---------------------------------------------------------------------------------------
 
 def step_of(step):
-    """Split a plan step (``{"tap": {"id": "search"}}``) into ``(kind, value)``; ``$comment`` is ignored."""
-    keys = [k for k in step if k != "$comment"]
+    """Split a plan step (``{"tap": {"id": "search"}}``) into ``(kind, value)``; ``$comment`` and ``name`` (the step's
+    handle for ``stepsPatch``) are ignored."""
+    keys = [k for k in step if k not in STEP_META]
     if len(keys) != 1:
         raise ValueError("a step has exactly one kind, not %s" % (", ".join(keys) or "none"))
     return keys[0], step[keys[0]]
@@ -585,20 +593,392 @@ def find_element(elements, finder, wanted):
     return None
 
 
+def posture_of(value):
+    """A posture as the plan's word (``folded``, ``open``, ``half-open``), taking the other tools' words for the same
+    (``unfolded``, ``closed``, ``partially-folded``, ``tabletop``, ``book``); ``ValueError`` for anything else."""
+    if isinstance(value, dict):
+        value = value.get("posture") or value.get("mode")
+    word = str(value or "").strip().lower()
+    word = POSTURE_ALIASES.get(word, word)
+    if word not in POSTURES:
+        raise ValueError("a posture is %s, not %r" % (", ".join(POSTURES), value))
+    return word
+
+
+# -- XPath over a UI tree ----------------------------------------------------------------------------------------
+#
+# ElementTree's own XPath has no functions (no contains(), not(), and/or), so a plan's cross-platform xpath
+# (``//*[contains(@text,'Raise') or contains(@label,'Raise')]``) failed on the drivers that read a tree themselves
+# (adb, uiautomator, the in-app agents). This is XPath 1.0's everyday part: absolute and relative location paths
+# with ``/`` and ``//``, ``*``, ``.``, ``..``, names, ``@attr``, predicates (positions, ``=``, ``!=``, ``<``, ``>``,
+# ``and``, ``or``, parentheses) and the functions ``contains``, ``starts-with``, ``ends-with``, ``not``,
+# ``normalize-space``, ``translate``, ``lower-case``, ``upper-case``, ``string``, ``concat``, ``string-length``,
+# ``text``, ``name``, ``position``, ``last``, ``true``, ``false``, ``boolean``, ``number``. No other axes, no unions.
+
+class XPathError(ValueError):
+    """An xpath this evaluator doesn't understand."""
+
+
+_XTOKEN = re.compile(r"\s*(?:(//|/|\[|\]|\(|\)|,|@|!=|<=|>=|=|<|>|\.\.|\.|\*|\|)|(\"[^\"]*\"|'[^']*')|"
+                     r"(\d+(?:\.\d+)?)|([A-Za-z_][\w.\-]*))")
+_XFUNCS = ("contains", "starts-with", "ends-with", "not", "normalize-space", "translate", "lower-case", "upper-case",
+           "string", "concat", "string-length", "text", "name", "local-name", "position", "last", "true", "false",
+           "boolean", "number")
+
+
+def _xtokens(expr):
+    out, pos = [], 0
+    expr = expr.strip()
+    while pos < len(expr):
+        m = _XTOKEN.match(expr, pos)
+        if not m or m.end() == pos:
+            raise XPathError("can't read %r at %r" % (expr, expr[pos:pos + 12]))
+        op, lit, num, name = m.groups()
+        if op is not None:
+            out.append(("op", op))
+        elif lit is not None:
+            out.append(("str", lit[1:-1]))
+        elif num is not None:
+            out.append(("num", float(num)))
+        else:
+            out.append(("name", name))
+        pos = m.end()
+    return out
+
+
+class _XParser(object):
+    """A recursive-descent parser for the XPath subset; ``parse()`` returns a tuple tree."""
+
+    def __init__(self, expr):
+        self.toks = _xtokens(expr)
+        self.i = 0
+
+    def peek(self, k=0):
+        return self.toks[self.i + k] if self.i + k < len(self.toks) else (None, None)
+
+    def take(self, kind=None, value=None):
+        tok = self.peek()
+        if tok[0] is None or (kind and tok[0] != kind) or (value is not None and tok[1] != value):
+            raise XPathError("expected %s, found %r" % (value or kind, tok[1]))
+        self.i += 1
+        return tok
+
+    def at(self, kind, value=None):
+        tok = self.peek()
+        return tok[0] == kind and (value is None or tok[1] == value)
+
+    def parse(self):
+        node = self.expr()
+        if self.i != len(self.toks):
+            raise XPathError("unexpected %r" % (self.peek()[1],))
+        return node
+
+    def expr(self):
+        left = self.and_expr()
+        while self.at("name", "or"):
+            self.take()
+            left = ("or", left, self.and_expr())
+        return left
+
+    def and_expr(self):
+        left = self.cmp_expr()
+        while self.at("name", "and"):
+            self.take()
+            left = ("and", left, self.cmp_expr())
+        return left
+
+    def cmp_expr(self):
+        left = self.primary()
+        while self.peek()[0] == "op" and self.peek()[1] in ("=", "!=", "<", ">", "<=", ">="):
+            op = self.take()[1]
+            left = ("cmp", op, left, self.primary())
+        return left
+
+    def primary(self):
+        kind, value = self.peek()
+        if kind == "op" and value == "(":
+            self.take()
+            inner = self.expr()
+            self.take("op", ")")
+            preds = []
+            while self.at("op", "["):
+                self.take()
+                preds.append(self.expr())
+                self.take("op", "]")
+            return ("filter", inner, preds) if preds else inner
+        if kind in ("str", "num"):
+            self.take()
+            return ("lit", value)
+        if kind == "name" and self.peek(1) == ("op", "("):
+            if value not in _XFUNCS:
+                raise XPathError("the function %s() isn't supported" % value)
+            self.take()
+            self.take("op", "(")
+            args = []
+            while not self.at("op", ")"):
+                args.append(self.expr())
+                if self.at("op", ","):
+                    self.take()
+                elif not self.at("op", ")"):
+                    raise XPathError("expected , or ) in %s()" % value)
+            self.take("op", ")")
+            return ("call", value, args)
+        if kind == "op" and value == "@":
+            self.take()
+            return ("attr", self.take()[1] if self.at("op", "*") else self.take("name")[1])
+        return self.path()
+
+    def path(self):
+        absolute = None
+        if self.at("op", "//") or self.at("op", "/"):
+            absolute = self.take()[1]
+        steps = []
+        sep = absolute or "/"
+        while True:
+            kind, value = self.peek()
+            if kind == "op" and value in ("*", ".", ".."):
+                self.take()
+                test = value
+            elif kind == "name":
+                self.take()
+                test = value
+            elif kind == "op" and value == "@":
+                self.take()
+                test = "@" + self.take("name")[1]
+            elif absolute == "/" and not steps:
+                return ("path", True, [])
+            else:
+                raise XPathError("expected a step, found %r" % (value,))
+            preds = []
+            while self.at("op", "["):
+                self.take()
+                preds.append(self.expr())
+                self.take("op", "]")
+            steps.append((sep, test, preds))
+            if self.at("op", "//") or self.at("op", "/"):
+                sep = self.take()[1]
+                continue
+            break
+        return ("path", absolute is not None, steps)
+
+
+class _XDoc(object):
+    """The document node above a tree's root (so ``/hierarchy`` and ``//node`` mean what XPath says)."""
+
+    def __init__(self, root):
+        self.root = root
+        self.tag = "#document"
+        self.attrib = {}
+        self.text = None
+
+    def __iter__(self):
+        return iter([self.root])
+
+
+def _xstr(v):
+    if isinstance(v, list):
+        if not v:
+            return ""
+        first = v[0]
+        return first if isinstance(first, str) else (first.text or "")
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, float):
+        return str(int(v)) if v == v and v == int(v) else repr(v)
+    return str(v)
+
+
+def _xnum(v):
+    try:
+        return float(_xstr(v).strip())
+    except ValueError:
+        return float("nan")
+
+
+def _xbool(v):
+    if isinstance(v, list):
+        return bool(v)
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, float):
+        return v == v and v != 0
+    return bool(v)
+
+
+def _is_number(v):
+    return isinstance(v, float) and not isinstance(v, bool)
+
+
+def _xcompare(op, a, b):
+    if isinstance(a, list) or isinstance(b, list):
+        left = [_xstr([x]) for x in a] if isinstance(a, list) else [a]
+        right = [_xstr([y]) for y in b] if isinstance(b, list) else [b]
+        return any(_xcompare(op, x, y) for x in left for y in right)
+    if op in ("=", "!="):
+        if isinstance(a, bool) or isinstance(b, bool):
+            same = _xbool(a) == _xbool(b)
+        elif _is_number(a) or _is_number(b):
+            same = _xnum(a) == _xnum(b)
+        else:
+            same = _xstr(a) == _xstr(b)
+        return same if op == "=" else not same
+    x, y = _xnum(a), _xnum(b)
+    return {"<": x < y, ">": x > y, "<=": x <= y, ">=": x >= y}[op]
+
+
+class _XEval(object):
+    """Evaluates a parsed xpath over an ElementTree root."""
+
+    def __init__(self, root):
+        self.doc = _XDoc(root)
+        self.parents = {root: self.doc}
+        for parent in root.iter():
+            for child in parent:
+                self.parents[child] = parent
+
+    def descendants_or_self(self, node):
+        out = [node]
+        for child in list(node):
+            out.extend(self.descendants_or_self(child))
+        return out
+
+    def step(self, contexts, sep, test, preds):
+        out, seen = [], set()
+        for ctx in contexts:
+            if isinstance(ctx, str):
+                continue
+            for b in (self.descendants_or_self(ctx) if sep == "//" else [ctx]):
+                if test == ".":
+                    cands = [b]
+                elif test == "..":
+                    cands = [self.parents[b]] if b in self.parents else []
+                elif test.startswith("@"):
+                    cands = [b.attrib[test[1:]]] if test[1:] in b.attrib else []
+                else:
+                    cands = [c for c in list(b) if test == "*" or c.tag == test]
+                for c in self.filter(cands, preds):
+                    key = (id(b), c) if isinstance(c, str) else id(c)
+                    if key not in seen:
+                        seen.add(key)
+                        out.append(c)
+        return out
+
+    def filter(self, nodes, preds):
+        for pred in preds:
+            size = len(nodes)
+            nodes = [c for pos, c in enumerate(nodes, 1)
+                     for v in [self.eval(pred, c, pos, size)] if ((v == pos) if _is_number(v) else _xbool(v))]
+        return nodes
+
+    def eval(self, node, ctx, pos=1, size=1):
+        kind = node[0]
+        if kind == "lit":
+            return node[1]
+        if kind == "filter":
+            found = self.eval(node[1], ctx, pos, size)
+            if not isinstance(found, list):
+                raise XPathError("only a path can be filtered with [...]")
+            return self.filter(found, node[2])
+        if kind == "or":
+            return _xbool(self.eval(node[1], ctx, pos, size)) or _xbool(self.eval(node[2], ctx, pos, size))
+        if kind == "and":
+            return _xbool(self.eval(node[1], ctx, pos, size)) and _xbool(self.eval(node[2], ctx, pos, size))
+        if kind == "cmp":
+            return _xcompare(node[1], self.eval(node[2], ctx, pos, size), self.eval(node[3], ctx, pos, size))
+        if kind == "attr":
+            if ctx is None or isinstance(ctx, str):
+                return []
+            if node[1] == "*":
+                return list(ctx.attrib.values())
+            return [ctx.attrib[node[1]]] if node[1] in ctx.attrib else []
+        if kind == "path":
+            _, absolute, steps = node
+            contexts = [self.doc] if absolute or ctx is None else [ctx]
+            for sep, test, preds in steps:
+                contexts = self.step(contexts, sep, test, preds)
+            return contexts
+        return self.call(node[1], node[2], ctx, pos, size)
+
+    def call(self, name, args, ctx, pos, size):
+        a = [self.eval(x, ctx, pos, size) for x in args]
+        here = [ctx] if ctx is not None else []
+        if name == "position":
+            return float(pos)
+        if name == "last":
+            return float(size)
+        if name in ("true", "false"):
+            return name == "true"
+        if name in ("not", "boolean"):
+            if not a:
+                raise XPathError("%s() needs an argument" % name)
+            return (not _xbool(a[0])) if name == "not" else _xbool(a[0])
+        if name == "number":
+            return _xnum(a[0] if a else here)
+        if name == "text":
+            text = None if ctx is None or isinstance(ctx, str) else ctx.text
+            return [text] if text else []
+        if name in ("name", "local-name"):
+            return "" if ctx is None or isinstance(ctx, str) else str(ctx.tag)
+        if name == "string":
+            return _xstr(a[0] if a else here)
+        if name == "string-length":
+            return float(len(_xstr(a[0] if a else here)))
+        if name == "normalize-space":
+            return " ".join(_xstr(a[0] if a else here).split())
+        if name == "concat":
+            return "".join(_xstr(v) for v in a)
+        if name in ("lower-case", "upper-case"):
+            s = _xstr(a[0] if a else here)
+            return s.lower() if name == "lower-case" else s.upper()
+        if len(a) < 2:
+            raise XPathError("%s() needs two arguments" % name)
+        s, t = _xstr(a[0]), _xstr(a[1])
+        if name == "contains":
+            return t in s
+        if name == "starts-with":
+            return s.startswith(t)
+        if name == "ends-with":
+            return s.endswith(t)
+        to = _xstr(a[2]) if len(a) > 2 else ""
+        table = {}
+        for i, ch in enumerate(t):
+            table.setdefault(ord(ch), to[i] if i < len(to) else None)
+        return s.translate(table)
+
+
+def xpath_all(root, expr):
+    """Every element ``expr`` selects in an ElementTree ``root`` (XPath 1.0's everyday part, above). Raises
+    ``XPathError`` for an xpath it can't read, or one that isn't a path to elements."""
+    tree = _XParser(expr).parse()
+    if tree[0] not in ("path", "filter"):
+        raise XPathError("an xpath that finds elements is a path (//node[...]), not %r" % expr)
+    found = _XEval(root).eval(tree, None)
+    return [n for n in found if not isinstance(n, (str, _XDoc))]
+
+
+def xpath_first(root, expr):
+    """The first element ``expr`` selects in ``root`` (``xpath_all``), or ``None``. An xpath this evaluator can't
+    read is tried with ElementTree's own subset before giving up with ``StepFailed``."""
+    try:
+        found = xpath_all(root, expr)
+        return found[0] if found else None
+    except XPathError as e:
+        problem = e
+    rel = "." + expr if expr.startswith("/") else expr
+    try:
+        return root.find(rel)
+    except (SyntaxError, KeyError):
+        raise StepFailed("the xpath %r isn't one this driver understands: %s" % (expr, problem)) from None
+
+
 def find_xpath(root, expr, elements=None):
     """The first node an XPath finds in a UI tree, as an ``Element``, or ``None``.
 
-    ElementTree's XPath subset: ``//node[@resource-id='…']``, ``//node[@text='…']``, ``//*[@content-desc='…']``,
-    child steps and positions. A leading ``//`` searches the whole tree.
+    XPath 1.0's everyday part (``xpath_all``): ``//node[@resource-id='…']``, ``//*[contains(@text,'Raise') or
+    contains(@content-desc,'Raise')]``, ``//node[not(@text='')][2]``, ``..``, positions. A leading ``//`` searches
+    the whole tree.
     """
-    if expr.startswith("//"):
-        expr = "." + expr
-    elif expr.startswith("/"):
-        expr = "." + expr
-    try:
-        node = root.find(expr)
-    except (SyntaxError, KeyError) as e:
-        raise StepFailed("the xpath %r isn't one this driver understands: %s" % (expr, e)) from None
+    node = xpath_first(root, expr)
     if node is None:
         return None
     a = node.attrib
@@ -645,6 +1025,7 @@ class Driver(object):
     PLATFORMS = ()          # the plan platforms it can capture: "ios", "android", "web", "macos", ...
     STEPS = ("wait", "settle", "script")   # step kinds it handles
     FINDERS = ()            # element finders it understands ("id", "text", "label", "xpath", "css")
+    POSTURE_SETTING = False  # a device's or screen's posture is applied before the steps (a flow driver's, say)
     SETTLE_TIMEOUT = 5.0    # seconds settle waits for two identical frames
     WAIT_TIMEOUT = 10.0     # seconds a wait for an element waits by default
 
@@ -688,6 +1069,7 @@ class Driver(object):
         ctx = StepContext(device, screen, locale, shot, 0, None)
         try:
             self.enter_screen(device, screen, locale, shot)
+            shot.source = self.source(device)   # what entering changed (a posture) is in the report too
             for i, step in enumerate(screen.get("steps") or [], 1):
                 ctx = StepContext(device, screen, locale, shot, i, step)
                 self.do_step(ctx)
@@ -714,15 +1096,18 @@ class Driver(object):
         """The screen's ``verify``: each element (``id``, ``text``, ``label``, ``xpath``, ``css``; ``timeout``
         seconds, default 5) must be on screen before the shot, else ``WrongState`` (the shot is ``missed``, "wrong
         state", and says what the screen should show: its ``state``). A driver that can't see elements can't
-        check: ``unchecked``, with a warning to look at the picture."""
+        check: ``unchecked``, with a warning to look at the picture.
+
+        The keyboard too (``check_keyboard``): ``{"keyboard": "hidden"}`` (or ``"shown"``) in ``verify`` asks for it;
+        a screen that types nothing is checked for ``hidden`` without asking, where the driver can tell."""
         checks = screen.get("verify")
-        if not checks:
+        checks = [checks] if isinstance(checks, dict) else list(checks or [])
+        keyboard = [c for c in checks if isinstance(c, dict) and "keyboard" in c]
+        elements = [c for c in checks if isinstance(c, dict) and "keyboard" not in c]
+        if not elements and not keyboard:
             shot.state_check = "none"
-            return
-        if isinstance(checks, dict):
-            checks = [checks]
         unchecked = []
-        for check in checks:
+        for check in elements:
             query = element_query(check)
             if query is None:
                 continue
@@ -738,12 +1123,56 @@ class Driver(object):
                 state = screen.get("state")
                 raise WrongState("wrong state: %s %r wasn't on screen within %g s%s" % (
                     query[0], query[1], timeout, (" (the screen should show: %s)" % state) if state else ""))
+        if not self.check_keyboard(ctx, screen, shot, keyboard[-1] if keyboard else None):
+            unchecked.append("the keyboard")
         if unchecked:
             shot.state_check = "unchecked"
             ctx.warn("verify not checked: the %s driver can't find %s; look at the picture for it"
                      % (self.NAME, ", ".join(unchecked)))
             return
-        shot.state_check = "passed"
+        if elements or keyboard:
+            shot.state_check = "passed"
+
+    def check_keyboard(self, ctx, screen, shot, rule):
+        """The keyboard part of ``verify``: ``rule`` is ``{"keyboard": "hidden"|"shown"|"any", "timeout": s}``, or
+        ``None`` for the default (``hidden`` when the screen's steps type nothing; with typing, nothing is asked,
+        but a keyboard left up is a warning). ``WrongState`` when it isn't so; returns False when an asked-for
+        check couldn't be made (the driver can't see the keyboard: ``keyboard_shown`` is ``None``)."""
+        typed = any(step_of(st)[0] == "type" for st in screen.get("steps") or [] if isinstance(st, dict))
+        wanted = (rule or {}).get("keyboard")
+        if wanted == "any":
+            return True
+        implicit = wanted is None
+        if implicit:
+            wanted = None if typed else "hidden"
+        shown = self.keyboard_shown(ctx)
+        if shown is None:
+            return implicit
+        if wanted is None:
+            if shown:
+                ctx.warn("the keyboard is up in this shot: if it shouldn't be, end the steps with hideKeyboard and "
+                         "add {\"keyboard\": \"hidden\"} to verify")
+            return True
+        want_shown = wanted == "shown"
+        if shown != want_shown:
+            timeout = float((rule or {}).get("timeout") or 2)
+            try:
+                poll(lambda: self.keyboard_shown(ctx) == want_shown, timeout, interval=0.5,
+                     what="the keyboard to be %s" % wanted)
+            except StepFailed:
+                shot.state_check = "failed"
+                state = screen.get("state")
+                raise WrongState("wrong state: the keyboard is %s%s (end the steps with hideKeyboard; %s)%s" % (
+                    "up" if shown else "down", "" if not implicit else ", and the screen types nothing",
+                    "verify {\"keyboard\": \"any\"} allows it" if implicit else "or change verify's keyboard",
+                    (" (the screen should show: %s)" % state) if state else ""))
+        note("  verify keyboard %s" % wanted)
+        return True
+
+    def keyboard_shown(self, ctx):
+        """True when the on-screen keyboard is up, False when it isn't, ``None`` when this driver can't tell (the
+        base can't)."""
+        return None
 
     def save_tree(self, ctx, shot):
         """With ``capture.py --inspect``: write the screen's UI tree (``inspect_tree``) beside its picture in the
@@ -798,6 +1227,12 @@ class Driver(object):
         leave it ``as-is``; return ``verified``, ``overridden``, ``unverified`` or ``none``."""
         return "none"
 
+    def apply_posture(self, device, posture, shot):
+        """Put a foldable in ``posture`` (``folded``, ``open``, ``half-open``), remember what to put back, and make
+        what a posture change undoes right again (the display size, the status bar, the display captured).
+        Drivers that can fold list ``posture`` in ``STEPS``; the base can't."""
+        raise StepSkipped("the %s driver can't put a device in a posture" % self.NAME)
+
     # Shared machinery.
 
     def enter_screen(self, device, screen, locale, shot):
@@ -807,6 +1242,12 @@ class Driver(object):
         if self.state.get("locale") != locale:
             self.apply_locale(device, locale, shot)
             self.state["locale"] = locale
+        posture = screen.get("posture") or device.get("posture")
+        if posture:
+            posture = posture_of(posture)
+            if self.state.get("posture") != posture:
+                self.apply_posture(device, posture, shot)
+                self.state["posture"] = posture
         appearance = screen.get("appearance") or device.get("appearance")
         if appearance and self.state.get("appearance") != appearance:
             self.apply_appearance(device, appearance, shot)
@@ -823,6 +1264,9 @@ class Driver(object):
         reason: it waits its ``timeout`` (``step_wait``) with a warning. Also checks the device's platform."""
         if device is not None and self.PLATFORMS and device.get("platform") not in self.PLATFORMS:
             return "the %s driver doesn't capture %s devices" % (self.NAME, device.get("platform"))
+        posture = screen.get("posture") or (device or {}).get("posture")
+        if posture and not self.folds(device or {}):
+            return "the %s driver can't put a device in a posture (%s)" % (self.NAME, posture)
         for i, step in enumerate(screen.get("steps") or [], 1):
             kind, value = step_of(step)
             if kind not in self.STEPS:
@@ -835,6 +1279,10 @@ class Driver(object):
                 return "step %d (%s): the %s driver can't find elements by %s (it finds by %s)" % (
                     i, describe_step(step), self.NAME, query[0], ", ".join(self.FINDERS) or "nothing")
         return None
+
+    def folds(self, device):
+        """True when this driver can put ``device`` in a posture (``posture`` in ``STEPS``, or ``POSTURE_SETTING``)."""
+        return "posture" in self.STEPS or self.POSTURE_SETTING
 
     def do_step(self, ctx):
         """Run one step by calling ``step_<kind>(ctx, value)``; log it first."""
@@ -890,6 +1338,32 @@ class Driver(object):
             sleep(seconds)
             return
         self.wait_for(ctx, query, value.get("timeout"))
+
+    def step_posture(self, ctx, value):
+        """``posture``: ``"folded"``, ``"open"`` or ``"half-open"`` (or ``{"posture": …}``) in the middle of a screen's
+        steps; the device's or screen's ``posture`` setting does the same before the steps."""
+        try:
+            posture = posture_of(value)
+        except ValueError as e:
+            raise StepFailed("step %d: %s" % (ctx.index, e)) from None
+        if self.state.get("posture") != posture:
+            self.apply_posture(ctx.device, posture, ctx.shot)
+            self.state["posture"] = posture
+
+    def step_hideKeyboard(self, ctx, value):
+        """``hideKeyboard``: close the on-screen keyboard if it's up (``hide_keyboard``); ``{"tap": <element>}`` taps
+        that element instead (a label or title outside the field: the field loses focus), on any driver that taps."""
+        if isinstance(value, dict) and value.get("tap"):
+            if "tap" not in self.STEPS:
+                raise StepSkipped("step %d: the %s driver can't tap" % (ctx.index, self.NAME))
+            self.step_tap(ctx, value["tap"])
+            return
+        self.hide_keyboard(ctx, value)
+
+    def hide_keyboard(self, ctx, value):
+        """Close the keyboard if it's up, without doing anything else (never a navigation back). The base can't."""
+        raise StepSkipped("step %d: the %s driver can't see the keyboard: give hideKeyboard a tap (an element "
+                          "outside the field)" % (ctx.index, self.NAME))
 
     def step_settle(self, ctx, value):
         """``settle``: wait until two screenshots in a row are identical (no animation), at most ``timeout``
@@ -948,7 +1422,7 @@ __all__ = [
     "Driver", "Shot", "Options", "StepContext", "Result", "Element",
     "DriverError", "ToolMissing", "CommandError", "CommandTimeout", "StepFailed", "WrongState", "StepSkipped",
     "NotLocal", "run", "spawn", "stop", "which", "sleep", "poll", "http", "http_json", "check_local", "quote",
-    "mask", "note", "SECRETS",
+    "mask", "note", "SECRETS", "XPathError", "xpath_all", "xpath_first", "posture_of", "POSTURES",
     "step_of", "describe_step", "element_query", "step_element", "find_element", "find_xpath", "parse_uiautomator",
     "parse_bounds", "file_sha256", "STEP_KINDS", "FINDER_KEYS", "RUNNER", "SPAWNER", "SLEEP", "CLOCK", "LOG",
     "DRY_RUN",

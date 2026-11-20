@@ -141,7 +141,7 @@ class AgentCliDriver(HostedDriver):
     PLATFORM_ARGS = {"ios": "ios", "ipados": "ios", "android": "android", "macos": "maccatalyst",
                      "windows": "windows"}
     STEPS = ("launch", "deepLink", "url", "appFile", "tap", "type", "wait", "scroll", "back", "swipe", "settle",
-             "script")
+             "script", "posture", "hideKeyboard")
     FINDERS = ("id", "text", "css", "xpath")
     LOCATORS = {"id": "accessibility-id", "text": "text", "css": "css-selector", "xpath": "xpath"}
     INSTALL = ""
@@ -502,18 +502,18 @@ class AgentCliDriver(HostedDriver):
 
     def find_in_tree(self, device, query):
         """``query`` looked up in the whole tree: an ``id`` the agent's query missed (a native view registered
-        with the agent shows its automationId in the tree only) or an ``xpath`` (ElementTree's subset, over
-        elements named by their type with their fields as attributes)."""
+        with the agent shows its automationId in the tree only), ``text`` as every driver matches it (exactly, then
+        ignoring case and surrounding space, then contained: the agent's own query is exact), or an ``xpath``
+        (XPath 1.0's everyday part, ``base.xpath_all``, over elements named by their type with their fields as
+        attributes)."""
         items = self.tree(device)
         finder, wanted = query
         if finder == "xpath":
             root, nodes = tree_to_xml(items)
-            expr = "." + wanted if wanted.startswith("/") else wanted
-            try:
-                node = root.find(expr)
-            except (SyntaxError, KeyError) as e:
-                raise base.StepFailed("the xpath %r isn't one this driver understands: %s" % (wanted, e)) from None
-            return element_from(nodes[node]) if node is not None else None
+            node = base.xpath_first(root, wanted)
+            return element_from(nodes[node]) if node is not None and node in nodes else None
+        if finder == "text":
+            return base.find_element([element_from(item) for item in walk(items)], "text", wanted)
         for item in walk(items):
             aid = item.get("automationId")
             if finder == "id" and aid and (aid == wanted or str(aid).endswith("/" + str(wanted))):
@@ -532,7 +532,7 @@ class AgentCliDriver(HostedDriver):
                 items = [items]
             if items:
                 return element_from(items[0])
-            if query[0] == "id" and not base.DRY_RUN:
+            if query[0] in ("id", "text") and not base.DRY_RUN:
                 return self.find_in_tree(ctx.device, query)
             return None
         path = "/api/v1/ui/elements?strategy=%s&value=%s&limit=1" % (self.LOCATORS[query[0]], _quote(query[1]))
@@ -629,7 +629,7 @@ class AgentCliDriver(HostedDriver):
                        timeout=timeout + 30, check=False)
         if res.ok:
             return
-        if query[0] == "id" and self.find_in_tree(ctx.device, query) is not None:
+        if query[0] in ("id", "text") and self.find_in_tree(ctx.device, query) is not None:
             return
         raise base.StepFailed("%s %r didn't appear within %g s" % (query[0], query[1], timeout))
 

@@ -205,7 +205,7 @@ class DevFlowTests(Case):
         self.assertEqual(caps["name"], "devflow")
         self.assertEqual(caps["finders"], ["id", "text", "css", "xpath"])
         self.assertIn("tap", caps["steps"])
-        self.assertEqual(caps["throughHost"], ["launch", "deepLink", "url", "appFile"])
+        self.assertEqual(caps["throughHost"], ["launch", "deepLink", "url", "appFile", "posture"])
         self.assertEqual(caps["hosts"]["ios"], "simctl")
         self.assertEqual(caps["hosts"]["android"], "adb")
 
@@ -391,6 +391,34 @@ class DevFlowTests(Case):
             {"id": "el-4", "type": "Button", "text": "Summary"}]}]))
         d = self.driver()
         d.step_tap(self.ctx(self.device("devflow")), {"xpath": "//Button[@text='Summary']"})
+        self.assertEqual(self.runner.lines[-1], "maui devflow ui tap el-4 --agent-port 10224 --platform maccatalyst")
+
+    def test_text_falls_back_as_every_driver_does_ignoring_case_then_contained(self):
+        # The agent's own text query is exact: "Cooking time" drawn COOKING TIME, and "Lemon" inside a
+        # longer label, are found in the tree as config.md promises.
+        self.runner.on(r"ui tap --text", code=1, err="No elements found")
+        self.runner.on(r"ui query --text", out="[]")
+        self.runner.on(r"ui tree", out=json.dumps([{"id": "page", "type": "ContentPage", "children": [
+            {"id": "el-1", "type": "Label", "text": "COOKING TIME", "bounds": {"x": 0, "y": 0, "width": 9, "height": 9}},
+            {"id": "el-2", "type": "Label", "text": "  Lemon Pasta for 4 people",
+             "bounds": {"x": 0, "y": 20, "width": 9, "height": 9}}]}]))
+        d = self.driver()
+        dev = self.device("devflow")
+        d.step_tap(self.ctx(dev), {"text": "Cooking time"})
+        self.assertEqual(self.runner.lines[-1], "maui devflow ui tap el-1 --agent-port 10224 --platform maccatalyst")
+        d.step_tap(self.ctx(dev), {"text": "Lemon"})
+        self.assertEqual(self.runner.lines[-1], "maui devflow ui tap el-2 --agent-port 10224 --platform maccatalyst")
+        shot = d.run_screen(dev, self.screen([], verify={"text": "lemon pasta for"}), "en-US")
+        self.assertEqual(shot.state_check, "passed")
+
+    def test_an_xpath_with_functions_is_found_in_the_tree(self):
+        self.transport.on("GET", r"^/api/v1/ui/elements", status=400, body='{"title": "nope"}')
+        self.runner.on(r"ui tree", out=json.dumps([{"id": "page", "type": "ContentPage", "children": [
+            {"id": "el-3", "type": "Button", "automationId": "menu", "text": ""},
+            {"id": "el-4", "type": "Label", "text": "Estimated effects"}]}]))
+        d = self.driver()
+        d.step_tap(self.ctx(self.device("devflow")),
+                   {"xpath": "//*[contains(@text,'effects') or contains(@label,'effects')][not(@automationId)]"})
         self.assertEqual(self.runner.lines[-1], "maui devflow ui tap el-4 --agent-port 10224 --platform maccatalyst")
 
     def test_a_command_turned_away_by_the_lease_is_tried_again(self):
@@ -679,7 +707,7 @@ class AppiumTests(Case):
         caps = self.driver().capabilities()
         self.assertEqual(caps["finders"], ["id", "text", "label", "xpath"])
         self.assertNotIn("url", caps["steps"])
-        self.assertEqual(caps["throughHost"], ["appFile"])
+        self.assertEqual(caps["throughHost"], ["appFile", "posture"])
 
     def sim_host(self):
         """The fake host registered as simctl (with ensure_booted), as a real simulator's would be."""
@@ -826,12 +854,82 @@ class AppiumTests(Case):
 
     def test_text_finders_per_platform(self):
         d, dev = self.start("ios")
-        self.assertEqual(d.strategies(dev, ("text", 'Say "hi"')),
-                         [("-ios predicate string", 'label == "Say \\"hi\\"" OR value == "Say \\"hi\\"" OR '
-                                                    'name == "Say \\"hi\\""')])
+        # Exact first, then ignoring case (trimmed), then contained: what config.md promises on every driver.
+        self.assertEqual(d.strategies(dev, ("text", 'Say "hi"')), [
+            ("-ios predicate string", 'label == "Say \\"hi\\"" OR value == "Say \\"hi\\"" OR name == "Say \\"hi\\""'),
+            ("-ios predicate string", 'label ==[c] "Say \\"hi\\"" OR value ==[c] "Say \\"hi\\"" OR '
+                                      'name ==[c] "Say \\"hi\\""'),
+            ("-ios predicate string", 'label CONTAINS[c] "Say \\"hi\\"" OR value CONTAINS[c] "Say \\"hi\\"" OR '
+                                      'name CONTAINS[c] "Say \\"hi\\""')])
+        self.assertEqual([v for _, v in d.strategies(dev, ("label", " Menu "))],
+                         ['label == " Menu "', 'label ==[c] "Menu"', 'label CONTAINS[c] "Menu"'])
         android = self.device("appium", platform="android")
-        self.assertEqual(d.strategies(android, ("text", "Plan")), [("xpath", "//*[@text='Plan']")])
-        self.assertEqual(d.strategies(android, ("label", "Plan")), [("accessibility id", "Plan")])
+        texts = d.strategies(android, ("text", "Plan"))
+        self.assertEqual(texts[0], ("xpath", "//*[@text='Plan']"))
+        self.assertEqual(texts[1], ("xpath", "//*[translate(normalize-space(@text), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+                                             "'abcdefghijklmnopqrstuvwxyz')='plan']"))
+        self.assertEqual(texts[2], ("xpath", "//*[contains(translate(@text, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+                                             "'abcdefghijklmnopqrstuvwxyz'), 'plan')]"))
+        labels = d.strategies(android, ("label", "Plan"))
+        self.assertEqual(labels[0], ("accessibility id", "Plan"))
+        self.assertIn("@content-desc", labels[2][1])
+
+    def test_ios_text_found_by_its_upper_case_label_and_by_part_of_it(self):
+        # The trial: "Cooking time" drawn COOKING TIME, and "Lemon" inside "  Lemon Pasta for 4 people".
+        exact_miss = '{"value": {"error": "no such element", "message": "none"}}'
+        found = '{"value": {"element-6066-11e4-a52e-4f735466cecf": "%s"}}' % EL
+        d, dev = self.start("ios")
+
+        def route(hit_on):
+            """The n-th strategy (1: exact, 2: ignoring case, 3: contained) is the first to find it."""
+            self.transport.on("POST", r"/element$", body=[(200, found) if n == hit_on else (404, exact_miss)
+                                                          for n in range(1, 4)] + [(200, found)])
+        route(2)
+        el = d.find(self.ctx(dev), ("text", "Cooking time"))
+        self.assertIsNotNone(el)
+        usings = [c[2]["value"] for c in self.transport.find("POST", r"/element$")]
+        self.assertEqual(len(usings), 2)
+        self.assertIn("==[c]", usings[1])
+        self.transport.calls[:] = []
+        route(3)
+        self.assertIsNotNone(d.find(self.ctx(dev), ("text", "Lemon")))
+        self.assertIn("CONTAINS[c]", self.transport.find("POST", r"/element$")[-1][2]["value"])
+
+    def test_the_keyboard_is_read_and_hidden_with_its_own_keys_on_ios(self):
+        d, dev = self.start("ios")
+        self.transport.on("POST", r"/execute/sync$", body='{"value": true}')
+        self.assertTrue(d.keyboard_shown(self.ctx(dev)))
+        self.transport.calls[:] = []
+        self.transport.on("POST", r"/execute/sync$", body=[(200, '{"value": true}'), (200, '{"value": null}'),
+                                                           (200, '{"value": false}')])
+        d.step_hideKeyboard(self.ctx(dev), True)
+        scripts = [c[2]["script"] for c in self.transport.find("POST", r"/execute/sync$")]
+        self.assertEqual(scripts, ["mobile: isKeyboardShown", "mobile: hideKeyboard", "mobile: isKeyboardShown"])
+        hide = self.transport.find("POST", r"/execute/sync$")[1][2]["args"][0]
+        self.assertIn("Done", hide["keys"])
+        self.assertEqual(self.transport.find("POST", r"/back$"), [], "never Appium's back: that's navigation on iOS")
+
+    def test_a_keyboard_left_up_on_a_screen_that_types_nothing_is_a_wrong_state(self):
+        d, dev = self.start("ios")
+        self.transport.on("POST", r"/execute/sync$", body='{"value": true}')
+        shot = d.run_screen(dev, self.screen([{"wait": {"ms": 10}}], state="the plan, nothing being typed"), "de-DE")
+        self.assertEqual(shot.status, "missed")
+        self.assertEqual(shot.state_check, "failed")
+        self.assertIn("keyboard is up", shot.reason)
+        self.assertIn("hideKeyboard", shot.reason)
+
+    def test_a_screen_that_types_may_keep_the_keyboard_but_is_warned(self):
+        d, dev = self.start("ios")
+        self.transport.on("POST", r"/execute/sync$", body='{"value": true}')
+        self.transport.on("POST", r"/element$", body='{"value": {"element-6066-11e4-a52e-4f735466cecf": "%s"}}' % EL)
+        shot = d.run_screen(dev, self.screen([{"type": {"id": "amount", "text": "12"}}]), "de-DE")
+        self.assertEqual(shot.status, "taken", shot.reason)
+        self.assertTrue(any("keyboard is up" in w for w in shot.warnings))
+        # Asked for explicitly, the same keyboard fails the shot.
+        shot = d.run_screen(dev, self.screen([{"type": {"id": "amount", "text": "12"}}],
+                                             verify=[{"id": "amount"}, {"keyboard": "hidden"}]), "de-DE")
+        self.assertEqual(shot.status, "missed")
+        self.assertIn("keyboard is up", shot.reason)
 
     def test_waiting_for_an_element_that_never_comes_misses_the_shot(self):
         self.transport.on("POST", r"/element$", status=404, body=answer("appium-no-such-element.json"))

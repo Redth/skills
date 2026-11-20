@@ -31,7 +31,7 @@ apple` notes a required display type no device fills.
 | iPhone 16 Plus, 15 Pro Max, 15 Plus, 14 Pro Max | 1290×2796 | `APP_IPHONE_67` | yes |
 | iPhone 17 Pro, 17, 16 Pro | 1206×2622 | `APP_IPHONE_61` (6.3", **required**) | yes |
 | iPhone 16, 15, 15 Pro, 14 Pro | 1179×2556 | `APP_IPHONE_61` (**required**) | yes |
-| iPhone Duo | inner 2007×2853, outer 1398×2034 | `IPHONE_DUO_INNER`, `IPHONE_DUO_OUTER` | yes: two devices in the plan, each with `target.display` |
+| iPhone Duo | outer 1398×2034 (folded); inner captured **2853×2007, landscape** (open; the rules list it 2007×2853, the same size turned) | `IPHONE_DUO_OUTER`, `IPHONE_DUO_INNER` | yes: two devices in the plan, `"posture": "folded"` and `"open"` ([simctl.md](simctl.md#the-iphone-duo)) |
 | iPhone 14 Plus, 13 Pro Max, 12 Pro Max | 1284×2778 | `APP_IPHONE_65` (6.5") | yes |
 | iPhone 11 Pro Max, Xs Max | 1242×2688 | `APP_IPHONE_65` | yes |
 | **iPhone 11, iPhone Xʀ** | **828×1792** | listed in 6.5" | **no**: not an accepted size |
@@ -70,7 +70,8 @@ recommendation formats; games, three 16:9 at 1920×1080 or more.
 | `small_phone` | 720×1280 | 9:16 | passes, but under 1080 | prefer a phone at `wmSize 1080x1920` |
 | `small_tablet` (7") | 1920×1200 | 16:10 | not 16:9 | `wmSize: "1920x1080"` |
 | `medium_tablet`, `pixel_tablet` (10") | 2560×1600 | 16:10 | not 16:9 | `wmSize: "2560x1440"` |
-| `pixel_10_pro_fold` (inner) | 2076×2152 | about 1:1 | not 16:9 | `wmSize`, and `screencap -d` for the display |
+| `pixel_9_pro_fold`, `pixel_10_pro_fold` (cover, folded) | 1080×2424 | 2.24 | **no** | `"posture": "folded"`, `wmSize: "1080x1920"` |
+| `pixel_9_pro_fold` (inner, open) | 2076×2152 | about 1:1 | phone slot as it is; not 16:9 | `"posture": "open"`; for a tablet slot `wmSize: "1920x1080"` |
 | `desktop_large` | 1920×1080 | 16:9 | yes (Chromebook) | |
 | `desktop_medium` | 3840×2160 | 16:9 | yes | |
 | `desktop_small` | 1366×768 | about 16:9 | **no** (under 1080) | |
@@ -82,6 +83,24 @@ recommendation formats; games, three 16:9 at 1920×1080 or more.
 
 The simplest consistent Play set: every phone at `wmSize 1080x1920`, every tablet at a 16:9 `wmSize`. Apple TV's
 3840×2160 captures can double as Android TV ones when the UI is the same.
+
+## Foldables
+
+Each posture is its own device in the plan, with its own id and size ([config.md](config.md#foldables)).
+
+- **App Store:** the iPhone Duo has its own two slots, `IPHONE_DUO_OUTER` (1398×2034, folded) and
+  `IPHONE_DUO_INNER` (open). The inner display captures landscape, **2853×2007**: write `width: 2853, height: 2007`
+  and don't rotate anything; `check_captures.py` and `listing.py check` accept the turned size. Both are
+  `unverified` in the rules (no API display type yet: App Store Connect's web app takes them).
+- **Google Play has no foldable slot.** Its slots are the phone (at most 2:1, at most 8 pictures), the 7" and 10"
+  tablets (16:9 or 9:16, 1080–7680 px) and the rest. So:
+  - the cover display (folded) is a phone: lay it out at `wmSize "1080x1920"` like any phone. It competes with the
+    phone set for the phone slot's 8 places, so send it only instead of phone shots, or not at all;
+  - the inner display (open, about 1:1) fits the phone slot as it is, or a tablet slot laid out at 16:9:
+    `wmSize "1920x1080"` (landscape) or `"1080x1920"`, with a density that keeps the tablet layout (320 at
+    1920×1080 on the Pixel 9 Pro Fold image, seen 2026-11-19);
+  - say which device's pictures go to which slot in `store-listing.json` (`stores.google.slots`), so nothing has to
+    guess.
 
 ## Web viewports → any store size
 

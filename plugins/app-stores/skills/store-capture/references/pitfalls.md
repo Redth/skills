@@ -17,7 +17,25 @@ happen to any app.
 - **Landscape assumed.** Whether a capture comes out landscape depends on the app's scene, not the device: check
   the size.
 - **Two screens.** Foldables and the iPhone Duo have more than one display; without choosing one (`--display`,
-  `screencap -d`) a capture fails or takes the wrong screen.
+  `screencap -d`) a capture fails ("Invalid argument" on the Duo; on Android a warning printed before the PNG) or
+  takes the screen that's off. The drivers pick the one in use; `target.display` names one.
+- **The iPhone Duo's inner display is landscape**: it captures 2853×2007, though it's listed 2007×2853. Write the
+  device that way round; don't rotate.
+
+## Foldables
+
+- **Folding locks the screen** (an Android emulator), and the next launch lands behind the keyguard. The `adb`
+  driver wakes and unlocks it after every posture change; a script that folds by itself has to as well (`input
+  keyevent KEYCODE_WAKEUP`, `wm dismiss-keyguard`).
+- **`wm size` is per physical display.** Set while open, it never reaches the cover display; the fold then
+  captures the cover display at its own 1080×2424 and the shot fails. The driver sets it again after each posture
+  change and puts each display's back.
+- **Demo mode after a fold** showed a stray icon beside 9:41 until applied again; the driver re-applies it.
+- **No way to fold from a script** was the trial's first blocker. Use the plan's `posture` (the emulator's
+  console; DevFlow's fold control for the iPhone Duo) rather than a `script` step per device.
+- **A layout that changes with the posture**: an open foldable may show two screens side by side and drop the tab
+  bar, so a tap meant for a tab lands on something else (`verify` catches it). Patch the steps for that layout
+  (`stepsPatch`, a device `layout`), or `omit` the screen there.
 
 ## Pixels
 
@@ -65,8 +83,18 @@ happen to any app.
   A screenshot mode by name breaks less often than taps.
 - **Coordinates.** Taps at `x`,`y` land elsewhere on another size or locale. Use elements.
 - **Scroll bars.** They appear after a scroll and fade a moment later; `settle` after scrolling.
-- **The keyboard.** Typing into a field leaves the keyboard up and a caret blinking: `back` or tap away unless the
-  shot is about typing.
+- **The keyboard.** Typing into a field leaves the keyboard up and a caret blinking. Tapping a label near the end
+  of the steps didn't close it on iOS; the keyboard's own Done key did. End the steps with `hideKeyboard` and add
+  `{ "keyboard": "hidden" }` to `verify` (a screen that types nothing is checked without asking): a `verify`
+  element the keyboard doesn't cover passed with the keyboard up. On iOS, `back` is navigation, never a way to
+  close the keyboard.
+- **Per-device copies of the steps go stale.** A device override that copies the whole step list doesn't get a
+  later fix to the base steps (the keyboard's Done reached the phone but not the open Duo's copy, whose shot came
+  out with the keyboard up). Name the steps and patch only what differs (`stepsPatch`).
+- **Text that matches on one platform and not another.** `verify {text: "Cooking time"}` must find a label drawn
+  "COOKING TIME", and "Lemon" one that reads "  Lemon Pasta for 4 people": every driver matches exactly,
+  then ignoring case and surrounding space, then contained. Cross-platform xpaths name both platforms' attributes
+  (`@text` and `@label`).
 - **Waits too short on a cold start.** The first launch after install is slow (and slower on CI); wait for an
   element, not a fixed time.
 - **The right screen in the wrong state.** Reached by its taps, but signed out, empty, or under a what's-new sheet:
@@ -97,6 +125,9 @@ happen to any app.
 - **Real accounts in an existing pipeline.** A screenshot suite that signs in to a real test account and resets
   it on the production server isn't safe for an agent to run: reuse its data and ids under a demo account or a
   bypass ([staging.md](staging.md)).
+- **CoreSimulator hiccups.** "Mach error -308 - (ipc/mig) server died" failed an install once and every screen
+  of that device was reported missed; a retry a few seconds later worked. The `simctl` driver tries such a command
+  once more by itself.
 - **SDK tools in versioned folders.** An SDK Manager install may have `cmdline-tools/19.0/`, `23.0/` and no
   `latest/`: the driver takes the newest; `target.avdmanager` names one.
 - **Permissions for the tools.** macOS needs Screen Recording for `screencapture` (without it, only the wallpaper is

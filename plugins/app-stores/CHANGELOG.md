@@ -7,6 +7,7 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 ## [Unreleased]
 
 ### Added
+
 - `store-capture` 0.1.0 (#13): an app's real screens captured at exactly each store's sizes, on any stack.
   `capture-plan.json` (schema `schema/capture-plan.schema.json`: devices each promising a width and height, screens
   reached by steps, locales, appearance, clock, status bar, seed, per-device and per-screen overrides);
@@ -38,6 +39,21 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - `store-capture`: decision-table row for an existing pipeline that needs a real account or secrets (reuse its data
   and ids, not its run); DevFlow's limits on iOS documented, with when to switch a device to Appium; a .NET MAUI
   section on seeding local data without a screenshot mode and `-p:EmbedAssembliesIntoApk=true` for Debug APKs.
+- `store-capture`: foldables. A device's (or screen's) `posture` (`folded`, `open`, `half-open`) and a `posture`
+  step: `adb` folds an emulator through its console and a real foldable through `cmd device_state`, then wakes and
+  unlocks it, finds the display in use, sets `wm size`/`wm density` again on it (each display's put back in its
+  posture) and re-applies demo mode; `screencap -d` takes the display in use by itself. `simctl` opens the iPhone
+  Duo simulator through DevFlow's fold control (experimental, no agent needed; `target.foldCli`, `hingeAngle`) and
+  captures the screen it made active, or the one of the device's size. Each posture is its own device; two can share
+  an AVD. sizes.md: the Duo's inner display captures landscape (2853x2007), and where foldable pictures go on Play.
+- `store-capture`: per-layout steps that follow the base steps. A device's `layout`; screens' `overrides` keyed by
+  platform, layout or device id; `stepsPatch` (prepend, append, remove, replace, insert before or after a step by its
+  `name` or position; a ref that's gone is a plan error) instead of whole copies that go stale; `omit` a screen on a
+  device that shows it inside another.
+- `store-capture`: the keyboard. A `hideKeyboard` step (Android: back only while the keyboard is up; Appium:
+  `mobile: hideKeyboard` with the iOS keyboard's Done or Return, then a Done button; `{"tap": …}` anywhere) and
+  `verify`'s `{"keyboard": "hidden"|"shown"|"any"}`, checked for `hidden` by default on a screen that types nothing,
+  so a shot with the keyboard up is a wrong state, not a pass.
 
 - `store-screenshots` 0.1.0 (#12): designed store screenshots from an app's real captures, one design for every
   store, size and locale. A brief and a storyboard agreed with the user before rendering; `store-screenshots.json`
@@ -124,9 +140,18 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - The live import round-trips: pull → import → build → plan against the same store plans nothing. The copyright is
   kept as live (its © too), each platform's languages and the kept slots are set, and the pull records each
   platform's App Review notes.
+- `store-listings`: per-platform Apple words: `locales.<loc>.apple.platforms.<IOS|MAC_OS|TV_OS|VISION_OS>`
+  overrides a version's `description`, `keywords`, `promotionalText`, `whatsNew`, `marketingUrl` and `supportUrl`
+  for one platform (App Store Connect keeps them per platform); the check runs each platform's words where they
+  differ, and the build writes each platform's own into `listing.json` and fastlane's folders.
+- `store-listings`: locales per store: `stores.<store>.locales` (default: every locale) and
+  `stores.apple.primaryLocale`; a store's words fall back to its own primary (Play's `defaultLanguage`) before the
+  config's. `check`, `build` and `push.py` see only each store's locales; a store's primary must be one of them.
+- `listing.py import --platform` for a fastlane folder; a later Apple platform's differing words become its
+  overrides; each store's `locales` and primary come from what its source had.
+- `appstores_lib.chrome.Chrome.render(..., full_page=N)`: capture the whole page, up to N CSS px tall.
 
 ### Fixed
-- `pattern` rules skip `""` (a field cleared on purpose): Play's `video: ""` no longer fails the YouTube rule.
 - `store-screenshots`: an iOS simulator capture's black corner tip (its framebuffer's own few pure-black pixels) no
   longer squares every iPhone frame's screen corners: the corner check ignores the corner's tip, pure black near it
   and a few stray pixels; a radius the frame sets is always kept (what it cuts is reported, and `check.py` warns); a
@@ -142,6 +167,33 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - `store-screenshots`: `check.py` no longer guesses a Play slot for a target `store-listing.json`'s
   `stores.google.slots` leaves out (it isn't sent, so it's counted in no slot); a render report outside the config's
   `out` resolves its files beside itself.
+
+- `store-capture`: `text` and `label` match the same way on every driver, as config.md promised: exactly, then
+  ignoring case and surrounding space, then contained (Appium's iOS and Mac predicates `==[c]` and `CONTAINS[c]`,
+  its Android and Windows XPaths `translate()` and `contains()`, the in-app agents' trees, the Mac's AppleScript);
+  the drivers that read a tree themselves evaluate XPath 1.0's everyday part (`contains()`, `not()`, `and`/`or`,
+  `translate()`, positions), where ElementTree's subset failed a cross-platform xpath; a CoreSimulator hiccup
+  ("server died") booting, installing, launching or capturing is tried once more; `capture.py --current` lists
+  `design/current.json` by group and order with what each shot shows, its capture and caption (it printed "?");
+  staging.md and SKILL.md: `staging.confirmed` only on the user's own answer, never a relayed one: stop and ask with
+  the first picture attached. The report drops entries for screens, devices or locales the plan no longer has
+  (removed or omitted), named in its `notes`; entries a filtered run didn't reach are still kept.
+- `store-listings`: `push.py pull apple --public` downloads the screenshots at the uploads' own size (the lookup's
+  mzstatic address with a box bigger than any upload, which Apple serves at the upload's size, never enlarged)
+  instead of the web page's 320x480 to 392x696 copies, checks each against the rules' App Store sizes
+  (`storeSize`), falls back to the page's copy (noted) when the full size can't be had, and keeps the old behaviour
+  with `--thumbnails`. The pictures are marked `reencoded` and the README says they're the App Store's re-encoded
+  copies; `import --from live` copies those at a store size into the config and lists their slots in
+  `stores.apple.keep`.
+- `store-listings`: `listing.py check` no longer warns that a `rules.relax` id "isn't one of <store>'s rules" when
+  it's a screenshot design rule (a rules file's `design` entry, e.g. `google.design.frames`, which
+  `store-screenshots`' check honours): it lists it as relaxed for `store-screenshots` and warns only for ids the
+  rules data has nowhere. `appstores_lib.rules`: `RuleSet.design_ids`, `.known()`, `relaxed_design`,
+  `design_rule_id()` (which `store-screenshots`' check now uses for its design findings' ids).
+- `store-listings`: `listing.py import --from live` with one store pulled names the other, how to read it, and what
+  a listing there still needs before the check passes (from its rules: required fields and graphics, the least
+  screenshots, screens for its slots), instead of leaving the check to report them all at once.
+- `pattern` rules skip `""` (a field cleared on purpose): Play's `video: ""` no longer fails the YouTube rule.
 - `store-listings` 0.1.0 (#11): one `store-listing.json` for the App Store and Google Play; the stores' rules as
   dated, sourced data (`rules/apple.json`, `rules/google.json`), checked offline; `listing.py` import (fastlane
   deliver and supply, Gradle Play Publisher, Expo), check, build (fastlane-compatible output) and preview;
@@ -149,29 +201,6 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - The shared `appstores_lib` package (PNG/JPEG reading, Chrome over the DevTools pipe, a JSON Schema subset,
   text counting, locale tables, the rules engine, requests with retries, JWT signing through openssl) and the
   sync tool that copies it into each skill.
-
-### Added
-- `store-listings`: per-platform Apple words: `locales.<loc>.apple.platforms.<IOS|MAC_OS|TV_OS|VISION_OS>`
-  overrides a version's `description`, `keywords`, `promotionalText`, `whatsNew`, `marketingUrl` and `supportUrl`
-  for one platform (App Store Connect keeps them per platform); the check runs each platform's words where they
-  differ, and the build writes each platform's own into `listing.json` and fastlane's folders.
-- `store-listings`: locales per store: `stores.<store>.locales` (default: every locale) and
-  `stores.apple.primaryLocale`; a store's words fall back to its own primary (Play's `defaultLanguage`) before the
-  config's. `check`, `build` and `push.py` see only each store's locales; a store's primary must be one of them.
-- `listing.py import --platform` for a fastlane folder; a later Apple platform's differing words become its
-  overrides; each store's `locales` and primary come from what its source had.
-- `appstores_lib.chrome.Chrome.render(..., full_page=N)`: capture the whole page, up to N CSS px tall.
-
-### Changed
-- `listing.py import`: shot ids come from the file names (`01-plan-iphone.jpg` -> `plan`), `shot-NN` only for a
-  folder whose names don't each name a moment; a shot only some screens have lists them; Apple screens are named
-  by device class (`iphone`, `ipad`, `mac`, `apple-tv`) unless a class has two display types; Play slots with
-  byte-identical pictures share one screen (`android-tablet` for both tablet slots).
-- `listing.py preview --png` renders each page whole (Mac, Apple TV and Vision pages were cut off above the
-  description), shows descriptions in whole lines instead of a clamp that could cut a word, and gives Play's
-  developer line as the copyright's holder, not the package name.
-
-### Fixed
 - `store-capture`: the `devflow` and `ailoha` drivers could drive another app's agent (the developer's own
   simulators): they now pin the agent of the plan's app on the dedicated device (status device id, the process's
   simulator folder, Android's `pidof`), pass `--agent-port` everywhere, find it again after each launch, and refuse
@@ -201,3 +230,13 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - Play's icon check (`google.icon.transparency`) warns only on see-through pixels, not on the opaque alpha channel
   of the 32-bit PNG Play asks for. The rules gain a `format` key, `transparency`, and `appstores_lib.png` a
   `has_transparency(path)`.
+
+### Changed
+
+- `listing.py import`: shot ids come from the file names (`01-plan-iphone.jpg` -> `plan`), `shot-NN` only for a
+  folder whose names don't each name a moment; a shot only some screens have lists them; Apple screens are named
+  by device class (`iphone`, `ipad`, `mac`, `apple-tv`) unless a class has two display types; Play slots with
+  byte-identical pictures share one screen (`android-tablet` for both tablet slots).
+- `listing.py preview --png` renders each page whole (Mac, Apple TV and Vision pages were cut off above the
+  description), shows descriptions in whole lines instead of a clamp that could cut a word, and gives Play's
+  developer line as the copyright's holder, not the package name.

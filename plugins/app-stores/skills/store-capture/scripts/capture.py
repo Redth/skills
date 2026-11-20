@@ -17,7 +17,8 @@ colour and the change listed in its ``fixes``.
 Pictures are written into a temporary folder inside ``<out>`` and moved into place at the end:
 ``<out>/<locale>/<device id>/<screen id>.png``, with ``<out>/capture-report.json`` saying what was taken, missed
 (``kept: previous`` when an older picture stays), failed or skipped, and why. A partial run (``--devices``, …)
-keeps the report's entries for what it didn't run.
+keeps the report's entries for what it didn't run; entries for what the plan no longer has (a screen, device or
+locale removed, or omitted) are dropped and named in the report's ``notes``.
 
 **Staging** (the plan's ``staging``, agreed with the user first: ``references/staging.md``): its ``launch`` args and
 env go into every ``launch`` step (the step's own win; ``${NAME}`` takes a variable ``staging.account.env``
@@ -74,9 +75,9 @@ EXIT_REFUSED = 2
 EXIT_USAGE = 3
 
 # Settings a device and a screen may override (CONTRACT.md 10.2), and their defaults.
-SETTINGS = ("appearance", "clock", "statusBar", "seed", "flatten")
+SETTINGS = ("appearance", "clock", "statusBar", "seed", "flatten", "posture")
 DEFAULTS = {"locales": ["en-US"], "appearance": "light", "clock": "09:41", "statusBar": "clean", "seed": None,
-            "flatten": "#000000", "out": "captures"}
+            "flatten": "#000000", "out": "captures", "posture": None}
 # A platform with no app entry of its own uses its family's.
 FAMILY = {"ipados": "ios", "tvos": "ios", "watchos": "ios", "visionos": "ios"}
 
@@ -142,18 +143,96 @@ def check_plan(plan):
         seen.add(d["id"])
     screens = set()
     platforms = set(d["platform"] for d in plan["devices"])
+    layouts = set(d["layout"] for d in plan["devices"] if d.get("layout"))
     for i, s in enumerate(plan["screens"]):
         if s["id"] in screens:
-            problems.append("/screens: the id %s is used twice" % s["id"])
+            problems.append("/screens/%d: the id %s is used twice" % (i, s["id"]))
         screens.add(s["id"])
         for name in s.get("devices") or []:
             if name not in seen:
                 problems.append("/screens/%d/devices: no device %s" % (i, name))
         for name in s.get("overrides") or {}:
-            if name not in seen and name not in platforms:
-                problems.append("/screens/%d/overrides: %s is neither a device id nor a device's platform" % (i, name))
+            if name not in seen and name not in platforms and name not in layouts:
+                problems.append("/screens/%d/overrides: %s is neither a device id, a device's platform nor a "
+                                "device's layout" % (i, name))
+        problems.extend(step_name_problems(s.get("steps") or [], "/screens/%d/steps" % i))
+    for d in plan["devices"]:
+        try:
+            screens_for(plan, resolve_device(plan, d))
+        except PatchError as e:
+            if str(e) not in problems:
+                problems.append(str(e))
     problems.extend(check_staging(plan))
     return problems
+
+
+class PatchError(ValueError):
+    """An override's ``stepsPatch`` names a step that isn't there (renamed or removed in the base steps)."""
+
+
+PATCH_OPS = ("prepend", "append", "remove", "replace", "before", "after")
+
+
+def step_name_problems(steps, where):
+    """Step names used twice in one list (a patch couldn't tell them apart)."""
+    seen, out = set(), []
+    for j, step in enumerate(steps):
+        name = step.get("name") if isinstance(step, dict) else None
+        if name in seen:
+            out.append("%s/%d: the step name %s is used twice" % (where, j, name))
+        if name:
+            seen.add(name)
+    return out
+
+
+def _locate(steps, ref, where):
+    if isinstance(ref, int) and not isinstance(ref, bool):
+        if 1 <= ref <= len(steps):
+            return ref - 1
+        raise PatchError("%s: there's no step %d (the steps are %d long here)" % (where, ref, len(steps)))
+    for i, step in enumerate(steps):
+        if isinstance(step, dict) and step.get("name") == ref:
+            return i
+    names = [st.get("name") for st in steps if isinstance(st, dict) and st.get("name")]
+    raise PatchError("%s: no step named %s (named here: %s)" % (where, ref, ", ".join(names) or "none"))
+
+
+def patch_steps(steps, patch, where="stepsPatch"):
+    """``steps`` with an override's ``stepsPatch`` applied, in order: ``{"prepend": [...]}``, ``{"append": [...]}``,
+    ``{"remove": ref}``, ``{"replace": ref, "with": [...]}``, ``{"before": ref, "insert": [...]}``, ``{"after": ref,
+    "insert": [...]}``. A ref is a step's ``name`` (or a 1-based position in the steps as they are when that entry
+    runs). Raises ``PatchError`` for a ref that isn't there, so a renamed base step is caught when the plan loads."""
+    out = copy.deepcopy(list(steps))
+    for k, op in enumerate(patch or []):
+        here = "%s/%d" % (where, k)
+        if "prepend" in op:
+            out = copy.deepcopy(op["prepend"]) + out
+        elif "append" in op:
+            out = out + copy.deepcopy(op["append"])
+        elif "remove" in op:
+            del out[_locate(out, op["remove"], here)]
+        elif "replace" in op:
+            i = _locate(out, op["replace"], here)
+            out[i:i + 1] = copy.deepcopy(op.get("with") or [])
+        elif "before" in op:
+            i = _locate(out, op["before"], here)
+            out[i:i] = copy.deepcopy(op.get("insert") or [])
+        elif "after" in op:
+            i = _locate(out, op["after"], here) + 1
+            out[i:i] = copy.deepcopy(op.get("insert") or [])
+        else:
+            raise PatchError("%s: a patch entry is one of %s" % (here, ", ".join(PATCH_OPS)))
+    return out
+
+
+def override_keys(device):
+    """The ``overrides`` keys that apply to a resolved device, least specific first: its platform, its layout,
+    its id."""
+    keys = [device["platform"]]
+    if device.get("layout"):
+        keys.append(device["layout"])
+    keys.append(device["id"])
+    return keys
 
 
 def staging_vars(plan):
@@ -245,27 +324,30 @@ def resolve_device(plan, device):
     return out
 
 
-def screens_for(plan, device):
+def screens_for(plan, device, omitted=None):
     """The screens a resolved device captures, each resolved for it: its settings (the device's, then the
-    screen's, then its overrides' for the device's platform, then for its id), its ``steps`` (an override's
-    replace the screen's) and its ``locales`` (those of the device's it's limited to)."""
+    screen's, then its overrides' for the device's platform, then its layout, then its id), its ``steps`` (an
+    override's ``steps`` replace the ones before; its ``stepsPatch`` changes them, so a fix to the base steps still
+    reaches the device) and its ``locales`` (those of the device's it's limited to). An override's ``omit`` leaves
+    the screen out on that device (``omitted``, a list, gets ``(screen id, reason)``). Raises ``PatchError``."""
     out = []
-    for screen in plan["screens"]:
+    for i, screen in enumerate(plan["screens"]):
         if screen.get("devices") and device["id"] not in screen["devices"]:
             continue
         if screen.get("platforms") and device["platform"] not in screen["platforms"]:
             continue
-        layers = [screen]
+        layers = [("", screen)]
         overrides = screen.get("overrides") or {}
-        for key in (device["platform"], device["id"]):
+        for key in override_keys(device):
             if key in overrides:
-                layers.append(overrides[key])
+                layers.append((key, overrides[key]))
         resolved = {"id": screen["id"], "steps": copy.deepcopy(screen.get("steps") or []),
                     "staging": screen.get("staging", True)}
         for key in SETTINGS:
             resolved[key] = device.get(key)
         wanted = None
-        for layer in layers:
+        omit = None
+        for name, layer in layers:
             for key in SETTINGS:
                 if layer.get(key) is not None:
                     resolved[key] = layer[key]
@@ -274,8 +356,17 @@ def screens_for(plan, device):
                     resolved[key] = copy.deepcopy(layer[key])
             if layer is not screen and "steps" in layer:
                 resolved["steps"] = copy.deepcopy(layer["steps"])
+            if layer is not screen and layer.get("stepsPatch"):
+                resolved["steps"] = patch_steps(resolved["steps"], layer["stepsPatch"],
+                                                "/screens/%d/overrides/%s/stepsPatch" % (i, name))
+            if layer is not screen and layer.get("omit") not in (None, False):
+                omit = layer["omit"]
             if layer.get("locales"):
                 wanted = layer["locales"]
+        if omit not in (None, False):
+            if omitted is not None:
+                omitted.append((screen["id"], omit if isinstance(omit, str) else "omitted"))
+            continue
         resolved["locales"] = [l for l in device["locales"] if wanted is None or l in wanted]
         out.append(resolved)
     return out
@@ -299,10 +390,29 @@ def _describe_steps(steps):
     return " → ".join(base.describe_step(st) for st in steps or []) or "(no steps)"
 
 
+def _describe_patch(op):
+    if "prepend" in op:
+        return "first %s" % _describe_steps(op["prepend"])
+    if "append" in op:
+        return "then %s" % _describe_steps(op["append"])
+    if "remove" in op:
+        return "without step %s" % op["remove"]
+    if "replace" in op:
+        return "step %s as %s" % (op["replace"], _describe_steps(op.get("with")))
+    if "before" in op:
+        return "%s before step %s" % (_describe_steps(op.get("insert")), op["before"])
+    if "after" in op:
+        return "%s after step %s" % (_describe_steps(op.get("insert")), op["after"])
+    return "?"
+
+
 def _verify_words(verify):
     checks = verify if isinstance(verify, list) else [verify] if verify else []
     out = []
     for c in checks:
+        if isinstance(c, dict) and c.get("keyboard"):
+            out.append("the keyboard %s" % c["keyboard"])
+            continue
         q = base.element_query(c) if isinstance(c, dict) else None
         if q:
             out.append("%s `%s`" % q)
@@ -380,12 +490,22 @@ def staging_markdown(plan, plan_name="capture-plan.json"):
     network = st.get("network") or {}
     section("Network", ["- %s" % network["kind"] if network.get("kind") else "",
                         "- How: %s" % network["how"] if network.get("how") else ""])
+    folded = ["- `%s`: %s%s" % (d["id"], d.get("posture") or "as it is",
+                                (", the %s layout" % d["layout"]) if d.get("layout") else "")
+              for d in plan["devices"] if d.get("posture") or d.get("layout")]
+    section("Postures and layouts", folded)
     lines += ["## Screens", "", "| Screen | Shows | Reached by | Checked |", "|---|---|---|---|"]
     for screen in plan["screens"]:
         reached = _describe_steps(screen.get("steps"))
         for name, o in sorted((screen.get("overrides") or {}).items()):
             if o.get("steps") is not None:
                 reached += "; on %s: %s" % (name, _describe_steps(o["steps"]))
+            if o.get("stepsPatch"):
+                reached += "; on %s: %s" % (name, ", ".join(_describe_patch(op) for op in o["stepsPatch"]))
+            if o.get("posture"):
+                reached += "; on %s: %s" % (name, o["posture"])
+            if o.get("omit") not in (None, False):
+                reached += "; not on %s%s" % (name, (" (%s)" % o["omit"]) if isinstance(o["omit"], str) else "")
         lines.append("| `%s` | %s | %s | %s |" % (
             screen["id"], (screen.get("state") or "").replace("|", "\\|"), reached.replace("|", "\\|"),
             _verify_words(screen.get("verify")) or "(nothing: look at it)"))
@@ -404,10 +524,21 @@ def write_staging(plan_path):
 PICTURES = (".png", ".jpg", ".jpeg", ".webp")
 
 
+def _group_key(name):
+    """Order groups as a person reads a set: App Store before Play, phones before tablets, then by name."""
+    low = name.lower()
+    store = 0 if "apple" in low else 1 if "google" in low else 2
+    kind = 1 if any(k in low for k in ("ipad", "tablet", "seven", "ten")) else 2 if any(
+        k in low for k in ("tv", "watch", "desktop", "mac", "vision")) else 0
+    return store, kind, low
+
+
 def current_screenshots(plan_dir, folder=None):
     """What the current store set already shows, to start the screen list from: ``[(group, rel, note)]`` for
     every picture under ``folder`` (or ``existing/<store>/screenshots/`` from ``store-listings``' pull) and every
-    shot ``store-screenshots.json`` or ``design/current.json`` lists, in order."""
+    shot ``store-screenshots.json`` or ``design/current.json`` lists, grouped (``design/current.json``'s ``group``:
+    a store, locale and slot, App Store and phones first) and in order, each shot with what it shows, the capture
+    screen it maps to and its caption, where those are written down."""
     out = []
     roots = []
     if folder:
@@ -415,13 +546,13 @@ def current_screenshots(plan_dir, folder=None):
     else:
         existing = os.path.join(plan_dir, "existing")
         if os.path.isdir(existing):
-            for store in sorted(os.listdir(existing)):
+            for store in sorted(os.listdir(existing), key=_group_key):
                 shots = os.path.join(existing, store, "screenshots")
                 if os.path.isdir(shots):
                     roots.append(("existing/%s/screenshots" % store, shots))
     for group, root in roots:
         for dirpath, dirs, files in os.walk(root):
-            dirs.sort()
+            dirs.sort(key=_group_key)
             for name in sorted(files):
                 if not name.lower().endswith(PICTURES):
                     continue
@@ -430,7 +561,7 @@ def current_screenshots(plan_dir, folder=None):
                     meta = png.info(full)
                     size = "%dx%d" % (meta.width, meta.height)
                 except (png.ImageError, OSError):
-                    size = "?"
+                    size = "(not a picture this can read)"
                 out.append((group, os.path.relpath(full, root), size))
     for name in ("store-screenshots.json", os.path.join("design", "current.json")):
         path = os.path.join(plan_dir, name)
@@ -442,10 +573,31 @@ def current_screenshots(plan_dir, folder=None):
             out.append((name, "(unreadable)", ""))
             continue
         shots = data.get("shots") if isinstance(data, dict) else data if isinstance(data, list) else None
-        for i, shot in enumerate(shots or [], 1):
-            if isinstance(shot, dict):
-                out.append((name, "%d. %s" % (i, shot.get("id") or "?"), "capture: %s" % (
-                    shot.get("capture") or shot.get("screen") or "?")))
+        shots = [s for s in shots or [] if isinstance(s, dict)]
+        groups = []
+        for shot in shots:
+            g = shot.get("group")
+            if g not in groups:
+                groups.append(g)
+        if any(groups):
+            groups.sort(key=lambda g: _group_key(g or ""))
+        for g in groups:
+            members = [s for s in shots if s.get("group") == g]
+            if any(isinstance(s.get("order"), int) for s in members):
+                members.sort(key=lambda s: s.get("order") if isinstance(s.get("order"), int) else 10 ** 6)
+            label = "%s: %s" % (name, g) if g else name
+            for n, shot in enumerate(members, 1):
+                order = shot.get("order") if isinstance(shot.get("order"), int) else n
+                what = shot.get("id") or shot.get("file") or "shot %d" % order
+                bits = []
+                if shot.get("screen"):
+                    bits.append("shows: %s" % shot["screen"])
+                bits.append("capture: %s" % (shot.get("capture") or "(not mapped yet)"))
+                if shot.get("caption"):
+                    bits.append("caption: %s" % shot["caption"])
+                if shot.get("verdict"):
+                    bits.append("verdict: %s" % shot["verdict"])
+                out.append((label, "%d. %s" % (order, what), "; ".join(bits)))
     return out
 
 
@@ -633,8 +785,12 @@ class Run(object):
 
     def jobs(self, device):
         """``(locale, screen)`` pairs for a resolved device, locale by locale (so a device switches locale least)."""
-        screens = [s for s in screens_for(self.plan, device)
+        omitted = []
+        screens = [s for s in screens_for(self.plan, device, omitted)
                    if not self.only_screens or s["id"] in self.only_screens]
+        for sid, why in omitted:
+            if not self.only_screens or sid in self.only_screens:
+                (print if self.dry_run else log)("  %s isn't captured on %s: %s" % (sid, device["id"], why))
         pairs = []
         for locale in device["locales"]:
             if self.only_locales and locale not in self.only_locales:
@@ -794,11 +950,12 @@ class Run(object):
 
     def capture_device(self, device, tmp):
         """Prepare one device, take its shots, and always reset it."""
-        jobs = self.jobs(device)
         name = device["driver"]
-        header = "device %s (%s, %s, %dx%d)" % (device["id"], name, device["platform"], device["width"],
-                                                 device["height"])
+        header = "device %s (%s, %s, %dx%d%s)" % (device["id"], name, device["platform"], device["width"],
+                                                   device["height"],
+                                                   (", %s" % device["posture"]) if device.get("posture") else "")
         (print if self.dry_run else log)(header)
+        jobs = self.jobs(device)
         if not jobs:
             log("  nothing to capture on %s" % device["id"])
             return
@@ -861,6 +1018,11 @@ class Run(object):
                 log("  warning: %s" % w)
             note["warnings"].extend(warnings)
             note["warnings"].extend(getattr(driver, "warnings", []) or [])
+            if prepared:
+                try:
+                    note["source"] = driver.source(device) or note["source"]
+                except Exception:  # noqa: BLE001 - the report keeps what prepare said
+                    pass
 
     def shoot(self, driver, device, screen, locale, tmp):
         """Take one shot and record it."""
@@ -937,11 +1099,29 @@ class Run(object):
                             if isinstance(e, dict) and (e.get("locale"), e.get("device"), e.get("screen")) not in keys]
             except (jsonio.JsonError, OSError, AttributeError):
                 previous = []
+        planned = self.planned()
+        gone = [e for e in previous if (e.get("locale"), e.get("device"), e.get("screen")) not in planned]
+        if gone:
+            previous = [e for e in previous if e not in gone]
+            self.notes.append("dropped %d entr%s the plan no longer has (a screen, device or locale removed or "
+                              "omitted): %s" % (len(gone), "y" if len(gone) == 1 else "ies", ", ".join(
+                                  "%s/%s/%s" % (e.get("locale"), e.get("device"), e.get("screen")) for e in gone)))
         out = {"version": 1, "startedAt": _stamp(started), "finishedAt": _stamp(now()),
                "plan": os.path.basename(self.plan_path), "devices": self.device_notes,
                "shots": previous + self.entries}
         if self.notes:
             out["notes"] = list(self.notes)
+        return out
+
+    def planned(self):
+        """Every ``(locale, device, screen)`` the plan captures, whatever this run's filters: what the report may
+        keep from earlier runs."""
+        out = set()
+        for d in self.plan["devices"]:
+            device = resolve_device(self.plan, d)
+            for screen in screens_for(self.plan, device):
+                for locale in screen["locales"]:
+                    out.add((locale, device["id"], screen["id"]))
         return out
 
     def exit_code(self):

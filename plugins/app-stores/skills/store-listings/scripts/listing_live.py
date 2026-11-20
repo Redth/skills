@@ -133,6 +133,63 @@ def picture_counts(doc):
     return out
 
 
+def not_pulled(store, config_path, data):
+    """Lines for the import's summary when ``store`` wasn't pulled: how to read it, and what a listing there still
+    needs before ``listing.py check`` passes (the store's required fields and graphics that always apply, its
+    least screenshots and the screens that fill its slots), from its rules data. ``[]`` when the config turns the
+    store off."""
+    import listing
+    from appstores_lib import rules
+    if ((data.get("stores") or {}).get(store) or {}).get("enabled") is False:
+        return []
+    lst = listing.Listing(config_path, data)
+    loc = lst.store_primary(store) if (data.get("stores") or {}).get(store) else data.get("primaryLocale")
+    loc = loc or "en-US"
+    ruleset = rules.load(store, listing.RULES_DIR)
+    needs = []
+    if not isinstance((data.get("stores") or {}).get(store), dict):
+        needs.append("stores.%s (enabled: true; config.md has its fields) and %s" % (
+            store, "app.ids.google.package" if store == "google" else "app.ids.apple.bundleId"))
+    for rule in ruleset.by_kind("required"):
+        if rule.data.get("when") or rule.severity != "error":
+            continue
+        for field in rule.fields:
+            if field.startswith(("app.", "stores.")):
+                value = lst.root_value(field)
+                where = field
+            else:
+                value = lst.resolve(loc, field)[0]
+                where = "locales.%s.%s" % (loc, field)
+            if value in (None, "", []):
+                needs.append(where)
+        for slot in rule.slots:
+            if not ((data.get("stores") or {}).get(store) or {}).get("graphics", {}).get(slot):
+                sizes = (ruleset.slots.get(slot) or {}).get("sizes") or []
+                needs.append("stores.%s.graphics.%s (%s)" % (store, slot, " or ".join("%dx%d" % tuple(s) for s in sizes)
+                                                            or "the picture"))
+    least = [r for r in ruleset.by_kind("count") if not r.data.get("when") and (r.data.get("min") or 0) > 0
+             and r.severity == "error"]
+    if store == "google":
+        slots = ((data.get("stores") or {}).get("google") or {}).get("slots") or {}
+        if not any(slots.values()):
+            needs.append("screens for the new set and stores.google.slots (which screen fills phone, tablet7, "
+                         "tablet10, tv, wear)%s" % ("; at least %d screenshots across them" % least[0].data["min"]
+                                                     if least else ""))
+    elif not ((data.get("stores") or {}).get("apple") or {}).get("platforms"):
+        needs.append("screens for the new set and stores.apple.platforms (each platform's screens; the check names "
+                     "the display types each needs)")
+    name = STORE_NAMES[store]
+    how = ("push.py pull google with the service account's key (Play has no public API), or paste the words from "
+           "Play Console" if store == "google" else "push.py pull apple (with the key, or --public)")
+    lines = ["%s wasn't pulled. If the app is on %s, read it first: %s." % (
+        name, "the App Store" if store == "apple" else name, how)]
+    if needs:
+        lines.append("For %s %s listing the config still needs (listing.py check --stores %s names each):" % (
+            "an" if store == "apple" else "a", name, store))
+        lines += ["  " + n for n in needs]
+    return lines
+
+
 def describe(doc):
     """Lines describing a pulled listing: where it came from, each locale's words (lengths), the pictures per
     slot, and what it lacks."""

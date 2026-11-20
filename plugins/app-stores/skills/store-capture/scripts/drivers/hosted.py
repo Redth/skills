@@ -19,8 +19,9 @@ from . import base
 # The host a plan platform gets when its device's target doesn't say.
 DEFAULT_HOSTS = {"ios": "simctl", "ipados": "simctl", "tvos": "simctl", "watchos": "simctl", "visionos": "simctl",
                  "android": "adb"}
-# Steps the host does for a hosted driver (when the host has them).
-HOST_STEPS = ("launch", "deepLink", "url", "appFile")
+# Steps the host does for a hosted driver (when the host has them): a foldable's posture is the device's, so the
+# host's too (simctl through DevFlow's fold control, adb through the emulator's console or device_state).
+HOST_STEPS = ("launch", "deepLink", "url", "appFile", "posture")
 
 
 def type_target(value):
@@ -152,6 +153,42 @@ class HostedDriver(base.Driver):
             h.apply_appearance(device, appearance, shot)
             h.state["appearance"] = appearance
 
+    def apply_posture(self, device, posture, shot):
+        """The host folds the device (and lays it out again, finds the display in use, cleans the status bar
+        again); a driver without a host that folds can't."""
+        if not self.host_has(device, "posture"):
+            raise base.StepSkipped("%s can't put %s in a posture: %s" % (
+                self.NAME, device["id"], "it has no host" if self.host(device) is None else
+                "its host (%s) can't" % self._host_name))
+        h = self.host(device)
+        if h.state.get("posture") == posture:
+            return   # the host put the device in it already (adb does, preparing a device with a posture)
+        h.apply_posture(device, posture, shot)
+        h.state["posture"] = posture
+        if "statusBar" not in h.state:
+            self.state.pop("statusBar", None)
+
+    def folds(self, device):
+        """A hosted driver folds through its host."""
+        return self.host_has(device, "posture")
+
+    def step_posture(self, ctx, value):
+        """``posture`` by the host."""
+        base.Driver.step_posture(self, ctx, value)
+
+    def keyboard_shown(self, ctx):
+        """The host's view of the keyboard (adb can tell; a simulator can't), unless the driver sees it itself."""
+        h = self.host(ctx.device)
+        return h.keyboard_shown(ctx) if h is not None else None
+
+    def hide_keyboard(self, ctx, value):
+        """The host closes the keyboard when it can (adb: the back key, only while the keyboard is up)."""
+        h = self.host(ctx.device)
+        if h is not None and "hideKeyboard" in h.STEPS:
+            h.hide_keyboard(ctx, value)
+            return
+        base.Driver.hide_keyboard(self, ctx, value)
+
     def apply_status_bar(self, device, mode, clock, shot):
         """The host cleans the status bar; ``none`` without a host."""
         h = self.host(device)
@@ -169,6 +206,10 @@ class HostedDriver(base.Driver):
     def unsupported(self, screen, device=None):
         """The base checks, with the host's steps counted only when the host has them."""
         if device is not None:
+            posture = screen.get("posture") or device.get("posture")
+            if posture and not self.host_has(device, "posture"):
+                return "%s puts a device in a posture through its host, and %s has %s" % (
+                    self.NAME, device["id"], "no host" if self.host(device) is None else "a host that can't")
             for i, step in enumerate(screen.get("steps") or [], 1):
                 kind, _ = base.step_of(step)
                 if kind in self.HOST_STEPS and not self.has_own_step(kind) and not self.host_has(device, kind):

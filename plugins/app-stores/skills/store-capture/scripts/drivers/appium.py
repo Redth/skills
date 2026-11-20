@@ -19,9 +19,13 @@ Steps: ``launch`` (iOS/Mac ``mobile: launchApp`` with ``arguments``/``environmen
 startActivity`` with ``extras``), ``deepLink`` (``mobile: deepLink``), ``tap`` (find, then
 ``/element/<id>/click``), ``type`` (``/element/<id>/value``, or the focused element), ``wait`` (find until it
 appears), ``scroll`` (iOS ``mobile: scroll``; Android ``mobile: scrollGesture``; ``to`` an element: scroll until
-it's found), ``swipe`` (``mobile: swipe`` / ``mobile: swipeGesture``), ``back`` (``/back``). Finders: ``id``
-(``accessibility id``; on Android ``id``, the resource id, then ``accessibility id``), ``text`` and ``label``
-(an iOS predicate, an Android or Windows XPath), ``xpath``.
+it's found), ``swipe`` (``mobile: swipe`` / ``mobile: swipeGesture``), ``back`` (``/back``), ``hideKeyboard``
+(``mobile: isKeyboardShown``, then ``mobile: hideKeyboard``: on iOS with the keyboard's Done/Return keys, then a
+Done button above it), ``posture`` (the host's). Finders: ``id`` (``accessibility id``; on Android ``id``, the
+resource id, then ``accessibility id``), ``text`` and ``label`` (an iOS predicate, an Android or Windows XPath),
+``xpath``. ``text`` and ``label`` match as every driver does: exactly, then ignoring case and surrounding space,
+then contained (``==``, ``==[c]``, ``CONTAINS[c]`` on iOS and Mac; ``@text=``, ``translate()``, ``contains()`` on
+Android and Windows). The keyboard is read with ``mobile: isKeyboardShown`` for ``verify``.
 
 The device (boot, locale on the device, appearance, the clean status bar) is the host's (``hosted.py``); the
 screenshot is the host's when there is one, else ``GET /session/<id>/screenshot`` (base64 PNG).
@@ -59,6 +63,35 @@ def _pred(text):
     return '"%s"' % str(text).replace("\\", "\\\\").replace('"', '\\"')
 
 
+UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+LOWER = "abcdefghijklmnopqrstuvwxyz"
+# iOS keyboard keys that close it, tried in order (XCUITest's mobile: hideKeyboard adds "done").
+IOS_KEYBOARD_KEYS = ["Done", "done", "Return", "return", "Go", "Search", "Next"]
+
+
+def ascii_lower(text):
+    """``text`` with only A-Z lowered, as XPath 1.0's ``translate(…, UPPER, LOWER)`` lowers the other side."""
+    return "".join(LOWER[UPPER.index(c)] if c in UPPER else c for c in str(text))
+
+
+def predicates(fields, wanted):
+    """iOS/Mac predicates for ``wanted`` on ``fields``: exact, then ignoring case (trimmed), then contained."""
+    exact = " OR ".join("%s == %s" % (f, _pred(wanted)) for f in fields)
+    trimmed = str(wanted).strip()
+    nocase = " OR ".join("%s ==[c] %s" % (f, _pred(trimmed)) for f in fields)
+    within = " OR ".join("%s CONTAINS[c] %s" % (f, _pred(trimmed)) for f in fields)
+    return [("-ios predicate string", exact), ("-ios predicate string", nocase), ("-ios predicate string", within)]
+
+
+def xpaths(attr, wanted):
+    """XPaths for ``wanted`` in ``@attr``: exact, then ignoring (ASCII) case and surrounding space, then contained."""
+    trimmed = ascii_lower(str(wanted).strip())
+    folded = "translate(%s, '%s', '%s')" % ("normalize-space(@%s)" % attr, UPPER, LOWER)
+    return [("xpath", "//*[@%s=%s]" % (attr, _lit(wanted))),
+            ("xpath", "//*[%s=%s]" % (folded, _lit(trimmed))),
+            ("xpath", "//*[contains(translate(@%s, '%s', '%s'), %s)]" % (attr, UPPER, LOWER, _lit(trimmed)))]
+
+
 def language_of(locale):
     """``de-DE`` → ``de``; ``zh-Hans`` → ``zh-Hans``."""
     parts = locale.split("-")
@@ -91,7 +124,8 @@ class AppiumDriver(HostedDriver):
 
     NAME = "appium"
     PLATFORMS = ("ios", "ipados", "tvos", "android", "macos", "windows")
-    STEPS = ("launch", "deepLink", "appFile", "tap", "type", "wait", "scroll", "back", "swipe", "settle", "script")
+    STEPS = ("launch", "deepLink", "appFile", "tap", "type", "wait", "scroll", "back", "swipe", "settle", "script",
+             "posture", "hideKeyboard")
     FINDERS = ("id", "text", "label", "xpath")
     SESSION_TIMEOUT = 600   # the first XCUITest session builds WebDriverAgent
     SCROLLS = 8             # scroll to an element: at most this many swipes
@@ -104,7 +138,7 @@ class AppiumDriver(HostedDriver):
         self.session_error = None
 
     def has_own_step(self, kind):
-        return kind in ("launch", "deepLink")
+        return kind in ("launch", "deepLink", "hideKeyboard")
 
     # -- the server ---------------------------------------------------------------------------------------
 
@@ -308,7 +342,8 @@ class AppiumDriver(HostedDriver):
     # -- finding --------------------------------------------------------------------------------------------
 
     def strategies(self, device, query):
-        """``[(using, value), …]`` to try, in order, for a finder."""
+        """``[(using, value), …]`` to try, in order, for a finder. ``text`` and ``label`` go from exact to ignoring
+        case and surrounding space to contained, as the other drivers' finders do."""
         finder, wanted = query
         fam = self.family(device)
         if finder == "xpath":
@@ -318,20 +353,14 @@ class AppiumDriver(HostedDriver):
                 return [("id", wanted), ("accessibility id", wanted)]
             return [("accessibility id", wanted)]
         if fam == "ios":
-            if finder == "label":
-                return [("-ios predicate string", "label == %s" % _pred(wanted))]
-            return [("-ios predicate string", "label == %s OR value == %s OR name == %s" % (
-                _pred(wanted), _pred(wanted), _pred(wanted)))]
+            return predicates(["label"] if finder == "label" else ["label", "value", "name"], wanted)
         if fam == "mac":
-            if finder == "label":
-                return [("-ios predicate string", "label == %s" % _pred(wanted))]
-            return [("-ios predicate string", "title == %s OR value == %s OR label == %s" % (
-                _pred(wanted), _pred(wanted), _pred(wanted)))]
+            return predicates(["label"] if finder == "label" else ["title", "value", "label"], wanted)
         if fam == "android":
             if finder == "label":
-                return [("accessibility id", wanted)]
-            return [("xpath", "//*[@text=%s]" % _lit(wanted))]
-        return [("xpath", "//*[@Name=%s]" % _lit(wanted))]
+                return [("accessibility id", wanted)] + xpaths("content-desc", wanted)[1:]
+            return xpaths("text", wanted)
+        return xpaths("Name", wanted)
 
     def find(self, ctx, query):
         """The element ``query`` finds now (``POST /element``), as a ``base.Element`` whose ``attrs["ref"]`` is
@@ -509,6 +538,48 @@ class AppiumDriver(HostedDriver):
     def step_back(self, ctx, value):
         """``POST /back``."""
         self.wd(ctx.device, "POST", self.sid() + "/back")
+
+    def keyboard_shown(self, ctx):
+        """``mobile: isKeyboardShown`` (XCUITest, UiAutomator2); ``None`` on a Mac or Windows, or when it can't say."""
+        if self.family(ctx.device) not in ("ios", "android") or base.DRY_RUN or not self.session:
+            return None
+        try:
+            value = self.mobile(ctx.device, "isKeyboardShown", timeout=60)
+        except base.DriverError:
+            return None
+        return value if isinstance(value, bool) else None
+
+    def hide_keyboard(self, ctx, value):
+        """Close the keyboard if it's up: ``mobile: hideKeyboard`` (on iOS tapping its Done or Return key); on iOS,
+        still up, a Done or Return button (an input accessory's) is tapped. Never Appium's back: on iOS that's
+        navigation."""
+        fam = self.family(ctx.device)
+        if fam not in ("ios", "android"):
+            raise base.StepSkipped("step %d: %s apps have no on-screen keyboard to hide" % (ctx.index, fam))
+        if base.DRY_RUN:
+            self.mobile(ctx.device, "hideKeyboard", {"keys": list(IOS_KEYBOARD_KEYS)} if fam == "ios" else {})
+            return
+        if self.keyboard_shown(ctx) is False:
+            return
+        try:
+            self.mobile(ctx.device, "hideKeyboard", {"keys": list(IOS_KEYBOARD_KEYS)} if fam == "ios" else {})
+        except base.DriverError as e:
+            base.note("  mobile: hideKeyboard didn't: %s" % str(e)[:160])
+        if self.keyboard_shown(ctx) is False:
+            return
+        if fam == "ios":
+            names = " OR ".join("name ==[c] %s" % _pred(k) for k in ("Done", "Return", "Go", "Search"))
+            found = self.wd(ctx.device, "POST", self.sid() + "/element", {
+                "using": "-ios predicate string", "value": "type == 'XCUIElementTypeButton' AND (%s)" % names},
+                ok_missing=True)
+            ref = (found or {}).get(W3C_ELEMENT) if isinstance(found, dict) else None
+            if ref:
+                self.wd(ctx.device, "POST", self.sid() + "/element/%s/click" % ref)
+        try:
+            base.poll(lambda: self.keyboard_shown(ctx) is not True, 3, interval=0.5, what="the keyboard to close")
+        except base.StepFailed:
+            raise base.StepFailed("step %d: the keyboard is still up: give hideKeyboard a tap (a label or title "
+                                  "outside the field)" % ctx.index) from None
 
     def inspect_tree(self, ctx):
         """The page source (``GET /session/<id>/source``: XCUITest's or UiAutomator2's XML), for writing steps."""

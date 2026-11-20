@@ -102,6 +102,11 @@ id, resource id, test id or key the agent reports), `text`, `css` or `xpath`; no
 agent's own and go stale when the screen changes; the driver finds each element again for every step. `settle` first asks
 the agent to wait for idle (pending frames and animations), then waits for two identical frames.
 
+Foldables: Ailoha has no fold control of its own. A device's `posture` is its host's: `adb` folds an Android
+emulator through its console; `simctl` opens the iPhone Duo with DevFlow's fold control (the `maui` CLI, no agent
+needed: [simctl.md](simctl.md#the-iphone-duo)). The keyboard: on Android the host sees and closes it
+(`hideKeyboard`); on iOS give `hideKeyboard` a `tap` outside the field ([config.md](config.md#steps)).
+
 ## The picture
 
 With a host, the picture is the host's: the device's whole framebuffer, status bar included, at its native size.
