@@ -121,7 +121,8 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   ("server died") booting, installing, launching or capturing is tried once more; `capture.py --current` lists
   `design/current.json` by group and order with what each shot shows, its capture and caption (it printed "?");
   staging.md and SKILL.md: `staging.confirmed` only on the user's own answer, never a relayed one: stop and ask with
-  the first picture attached.
+  the first picture attached. The report drops entries for screens, devices or locales the plan no longer has
+  (removed or omitted), named in its `notes`; entries a filtered run didn't reach are still kept.
 - `pattern` rules skip `""` (a field cleared on purpose): Play's `video: ""` no longer fails the YouTube rule.
 - `store-listings` 0.1.0 (#11): one `store-listing.json` for the App Store and Google Play; the stores' rules as
   dated, sourced data (`rules/apple.json`, `rules/google.json`), checked offline; `listing.py` import (fastlane

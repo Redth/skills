@@ -303,7 +303,9 @@ Each PNG is exactly its device's `width`×`height`, 8-bit RGB (no alpha, no `tRN
 written to a temporary folder and moved into place at the end, so a failed run never leaves a mix.
 
 The report also has `devices` (each device's source and warnings) and `notes` (said once a run, like the count of
-quietly flattened pictures).
+quietly flattened pictures). A run keeps earlier entries for what it didn't run this time (`--screens`,
+`--devices`, `--locales`), and drops those the plan no longer has (a screen, device or locale removed, or omitted
+on a device), naming them in `notes`.
 
 ## Options outside the plan
 

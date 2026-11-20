@@ -967,7 +967,9 @@ device's size — and `<out>/capture-report.json`:
              { "…": "status missed: not reached (kept: previous|none, reason); failed: wrong size etc.; skipped: a step or device the driver can't do" } ] }
 ```
 
-Adapters write into a temp folder and move files into place at the end. `fixes` lists what was changed
+Adapters write into a temp folder and move files into place at the end. A run keeps the report's earlier entries
+for plan items it didn't run (filters) and drops those the plan no longer has (removed or omitted), naming them in
+`notes`. `fixes` lists what was changed
 (`alpha-flattened`, `converted-to-srgb`, `16-bit-to-8-bit`), never a resize; an alpha channel that's all opaque is
 flattened without a per-shot mention and counted once in the report's `notes`. `check_captures.py` reads PNG headers
 against the plan (and, with `--rules`, the stores' accepted sizes; a required App Store display type no device fills

@@ -380,6 +380,29 @@ class RunTests(CaptureCase):
         self.assertEqual(sorted((e["device"], e["screen"]) for e in shots),
                          [("phone", "plan"), ("phone", "recipe"), ("tablet", "plan"), ("tablet", "recipe")])
 
+    def test_entries_the_plan_no_longer_has_are_dropped_but_filtered_ones_kept(self):
+        # Friction #70: a screen removed from the plan (or omitted on a device) kept its old entry for good.
+        path = self.plan(devices=[{"id": "phone", "platform": "ios", "driver": "fake", "width": 120, "height": 260},
+                                  {"id": "tablet", "platform": "ipados", "driver": "fake", "width": 200, "height": 260}])
+        self.assertEqual(self.main("--plan", path), 0)
+        self.assertEqual(len(self.report()["shots"]), 4)
+        with open(path, encoding="utf-8") as f:
+            plan = json.load(f)
+        plan["screens"][1]["overrides"] = {"tablet": {"omit": "the tablet shows it beside the plan"}}
+        plan["screens"].append({"id": "shop", "steps": [{"launch": {}}]})
+        kit.write_plan(self.tmp, plan)
+        self.assertEqual(self.main("--plan", path, "--devices", "phone", "--screens", "shop"), 0)
+        shots = set((e["device"], e["screen"]) for e in self.report()["shots"])
+        # Not run this time but still planned: kept. Omitted on the tablet now: dropped, and said so.
+        self.assertEqual(shots, {("phone", "plan"), ("phone", "recipe"), ("tablet", "plan"), ("phone", "shop")})
+        notes = self.report().get("notes") or []
+        self.assertTrue(any("dropped 1 entry the plan no longer has" in n and "en-US/tablet/recipe" in n
+                            for n in notes), notes)
+        del plan["screens"][1]
+        kit.write_plan(self.tmp, plan)
+        self.assertEqual(self.main("--plan", path, "--screens", "plan"), 0)
+        self.assertNotIn("recipe", set(e["screen"] for e in self.report()["shots"]))
+
     def test_another_capture_holding_the_folder_is_refused(self):
         path = self.plan()
         os.makedirs(self.capture_path())

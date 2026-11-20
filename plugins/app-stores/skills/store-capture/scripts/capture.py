@@ -17,7 +17,8 @@ colour and the change listed in its ``fixes``.
 Pictures are written into a temporary folder inside ``<out>`` and moved into place at the end:
 ``<out>/<locale>/<device id>/<screen id>.png``, with ``<out>/capture-report.json`` saying what was taken, missed
 (``kept: previous`` when an older picture stays), failed or skipped, and why. A partial run (``--devices``, …)
-keeps the report's entries for what it didn't run.
+keeps the report's entries for what it didn't run; entries for what the plan no longer has (a screen, device or
+locale removed, or omitted) are dropped and named in the report's ``notes``.
 
 **Staging** (the plan's ``staging``, agreed with the user first: ``references/staging.md``): its ``launch`` args and
 env go into every ``launch`` step (the step's own win; ``${NAME}`` takes a variable ``staging.account.env``
@@ -1098,11 +1099,29 @@ class Run(object):
                             if isinstance(e, dict) and (e.get("locale"), e.get("device"), e.get("screen")) not in keys]
             except (jsonio.JsonError, OSError, AttributeError):
                 previous = []
+        planned = self.planned()
+        gone = [e for e in previous if (e.get("locale"), e.get("device"), e.get("screen")) not in planned]
+        if gone:
+            previous = [e for e in previous if e not in gone]
+            self.notes.append("dropped %d entr%s the plan no longer has (a screen, device or locale removed or "
+                              "omitted): %s" % (len(gone), "y" if len(gone) == 1 else "ies", ", ".join(
+                                  "%s/%s/%s" % (e.get("locale"), e.get("device"), e.get("screen")) for e in gone)))
         out = {"version": 1, "startedAt": _stamp(started), "finishedAt": _stamp(now()),
                "plan": os.path.basename(self.plan_path), "devices": self.device_notes,
                "shots": previous + self.entries}
         if self.notes:
             out["notes"] = list(self.notes)
+        return out
+
+    def planned(self):
+        """Every ``(locale, device, screen)`` the plan captures, whatever this run's filters: what the report may
+        keep from earlier runs."""
+        out = set()
+        for d in self.plan["devices"]:
+            device = resolve_device(self.plan, d)
+            for screen in screens_for(self.plan, device):
+                for locale in screen["locales"]:
+                    out.add((locale, device["id"], screen["id"]))
         return out
 
     def exit_code(self):
