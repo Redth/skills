@@ -1,0 +1,6 @@
+{
+  "name": "sample-recipes-e2e",
+  "private": true,
+  "scripts": { "test:e2e": "mocha tests/*.spec.js" },
+  "devDependencies": { "webdriverio": "^9.0.0", "mocha": "^10.0.0" }
+}

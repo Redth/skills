@@ -1,0 +1,85 @@
+{
+  "$schema": "../../../schema/store-screenshots.schema.json",
+  "$comment": "Eval fixture for the invented app Sample Recipes, with an approved baseline (design/baseline: its reports only; the PNGs aren't kept here, so render.py makes the current ones). Captures are the recipes fixture's: synthetic, text-free wireframes.",
+  "version": 1,
+  "captures": "../recipes/captures",
+  "out": "screenshots",
+  "primaryLocale": "en-US",
+  "locales": [
+    "en-US"
+  ],
+  "style": "screenshot-style.json",
+  "theme": {
+    "fonts": []
+  },
+  "targets": {
+    "iphone": {
+      "store": "apple",
+      "width": 1320,
+      "height": 2868,
+      "capture": "iphone-6.9"
+    },
+    "iphone-medium": {
+      "store": "apple",
+      "width": 1206,
+      "height": 2622,
+      "capture": "iphone-6.9"
+    },
+    "android-phone": {
+      "store": "google",
+      "width": 1080,
+      "height": 1920,
+      "capture": "android-phone"
+    }
+  },
+  "shots": [
+    {
+      "id": "plan",
+      "capture": "plan",
+      "role": "feature",
+      "caption": "cap.plan"
+    },
+    {
+      "id": "recipe",
+      "capture": "recipe",
+      "role": "feature",
+      "caption": "cap.recipe"
+    },
+    {
+      "id": "shopping",
+      "capture": "shopping",
+      "role": "detail",
+      "caption": "cap.shop",
+      "callout": {
+        "rect": [
+          0.05,
+          0.17,
+          0.9,
+          0.06
+        ],
+        "scale": 1.35
+      }
+    },
+    {
+      "id": "profile",
+      "capture": "profile",
+      "role": "feature",
+      "caption": "cap.profile"
+    }
+  ],
+  "panorama": null,
+  "stores": {
+    "apple": {},
+    "google": {
+      "frame": "none"
+    }
+  },
+  "strings": {
+    "en-US": {
+      "cap.plan": "Plan a week in *minutes*",
+      "cap.recipe": "Every recipe, step by step",
+      "cap.shop": "Your list, sorted by aisle",
+      "cap.profile": "Your tastes, remembered"
+    }
+  }
+}

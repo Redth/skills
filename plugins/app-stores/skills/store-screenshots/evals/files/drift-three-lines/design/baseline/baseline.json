@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "approvedAt": "2026-11-10T15:00:00Z",
+  "note": "The bold green one: big words, the phone cut off at the bottom, the yellow word for the one thing that matters.",
+  "style": "screenshot-style.json",
+  "styleName": "Sample Recipes bold green",
+  "styleSha256": "a4b9bcf66c84c25a5bec7973a2d4d8d8429a3fea5c87f170dba9a21844586b03",
+  "configSha256": "6352ea5e7bff210debcec4826bbe5b0dce56d5e2b7c9ea28d705c04794c4e6c5",
+  "inputsSha256": "b0114e05d46cbe59d73c4e73893e0b5e37987d7d53058efa7ba6dd0829a6b54d",
+  "report": "render-report.json",
+  "files": [
+    "en-US/iphone/plan.png",
+    "en-US/iphone/recipe.png",
+    "en-US/iphone/shopping.png",
+    "en-US/iphone/profile.png",
+    "en-US/iphone-medium/plan.png",
+    "en-US/iphone-medium/recipe.png",
+    "en-US/iphone-medium/shopping.png",
+    "en-US/iphone-medium/profile.png",
+    "en-US/android-phone/plan.png",
+    "en-US/android-phone/recipe.png",
+    "en-US/android-phone/shopping.png",
+    "en-US/android-phone/profile.png"
+  ]
+}

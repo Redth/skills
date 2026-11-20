@@ -1,0 +1,23 @@
+{
+  "$comment": "A generic smartwatch: a rounded case and strap, no crown or buttons. Drawn for this skill: generic, no maker's details. Units are the SVG's.",
+  "name": "watch",
+  "kind": "watch",
+  "orientation": "portrait",
+  "drawn": true,
+  "maker": null,
+  "viewBox": [
+    0,
+    0,
+    520,
+    920
+  ],
+  "screen": {
+    "x": 40,
+    "y": 190,
+    "width": 440,
+    "height": 540
+  },
+  "screenRadius": 110,
+  "stretch": "y",
+  "realWidthMm": 44
+}

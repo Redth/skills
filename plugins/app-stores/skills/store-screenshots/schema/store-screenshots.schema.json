@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "store-screenshots.json: one design for an app's store screenshots, rendered for every target (output size), locale and shot. Paths inside are relative to the config's own folder. Settings resolve theme, then the shot, then stores.<store>, then the target (each later one wins). Uses only the subset appstores_lib/schema.py validates.",
+  "type": "object",
+  "required": ["version", "primaryLocale", "locales", "targets", "shots"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "$comment": { "type": "string" },
+    "version": { "const": 1 },
+    "captures": { "$comment": "The captures' folder: <captures>/<locale>/<capture device>/<screen>.png (store-capture's layout). Default 'captures'.", "$ref": "#/$defs/path" },
+    "out": { "$comment": "Where the screenshots go: <out>/<locale>/<target>/<shot>.png, the layout store-listings reads. Default 'screenshots'.", "$ref": "#/$defs/path" },
+    "primaryLocale": { "$comment": "What every other locale's strings and captures fall back to. Must be in locales.", "$ref": "#/$defs/locale" },
+    "locales": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/locale" } },
+    "theme": { "$ref": "#/$defs/theme" },
+    "style": { "$comment": "A screenshot-style.json (relative to this file): its theme and stores merge over these (the style wins) and its roles give shots with a role their layout. Locked once a baseline is approved (baseline.py).", "$ref": "#/$defs/path" },
+    "design": { "$comment": "The design folder: inspiration, directions, explorations, decisions.md and the approved baseline. Default 'design'.", "$ref": "#/$defs/path" },
+    "targets": {
+      "$comment": "The output screens, by the screen names store-listing.json uses.",
+      "type": "object",
+      "properties": { "$comment": { "type": "string" } },
+      "patternProperties": { "^[a-z0-9][a-z0-9_.-]*$": { "$ref": "#/$defs/target" } },
+      "additionalProperties": false
+    },
+    "shots": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/shot" } },
+    "panorama": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["shots"],
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "shots": { "$comment": "The shots that share one canvas, in order (consecutive in 'shots').", "type": "array", "minItems": 2, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+            "background": { "$comment": "An image across the whole canvas, or null for the theme's background.", "$ref": "#/$defs/pathOrNull" },
+            "seam": { "$comment": "The keep-out margin either side of a seam, in --u (1% of a slot's width). Default 6.", "type": ["number", "null"], "minimum": 0, "maximum": 30 }
+          }
+        }
+      ]
+    },
+    "stores": {
+      "$comment": "Overrides for every target of a store (apple, google).",
+      "type": "object",
+      "properties": { "$comment": { "type": "string" } },
+      "patternProperties": { "^[a-z]+$": { "anyOf": [ { "type": "null" }, { "$ref": "#/$defs/overrides" } ] } },
+      "additionalProperties": false
+    },
+    "strings": {
+      "$comment": "Words by locale and key; a locale missing a key falls back to primaryLocale's. *word* stresses a word in the accent colour; \\n breaks a line.",
+      "type": "object",
+      "properties": { "$comment": { "type": "string" } },
+      "patternProperties": {
+        "^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "null"] }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "locale": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$" },
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$" },
+    "path": { "type": "string", "minLength": 1 },
+    "pathOrNull": { "anyOf": [ { "type": "null" }, { "type": "string", "minLength": 1 } ] },
+    "colour": { "type": "string", "minLength": 3, "maxLength": 64 },
+    "layout": { "enum": ["fullbleed", "band", "framed", "framed-bleed", "tilt", "pair", "callout", "hero", "gameplay"] },
+    "frame": {
+      "$comment": "A drawn frame (phone, phone-landscape, tablet, tablet-landscape, laptop, desktop, tv, watch: its portrait or landscape variant is picked by the capture's shape), 'none', or a path to a user's own device art (SVG or PNG) with a JSON beside it giving its screen, used as it is.",
+      "type": "string",
+      "minLength": 1
+    },
+    "captionStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "placement": { "$comment": "Where the words go: top or bottom.", "enum": ["top", "bottom", null] },
+        "align": { "enum": ["center", "start", "end", null] },
+        "maxLines": { "type": ["integer", "null"], "minimum": 1, "maximum": 6 },
+        "weight": { "type": ["integer", "null"], "minimum": 100, "maximum": 1000 },
+        "sizePct": { "$comment": "The caption's size as a % of the slot's width on a tall (portrait phone) slot; other aspect classes scale it (mid 0.66, square 0.78, wide 0.42).", "type": ["number", "null"], "minimum": 1, "maximum": 30 },
+        "floorPct": { "$comment": "The smallest it may shrink to fit, on the same scale. A caption that won't fit at the floor fails the render.", "type": ["number", "null"], "minimum": 1, "maximum": 30 },
+        "font": { "$comment": "A family from theme.fonts, or null for the system's.", "type": ["string", "null"] },
+        "plate": { "$comment": "fullbleed only: solid (a rounded plate), scrim (a fade from the edge) or none.", "enum": ["solid", "scrim", "none", null] },
+        "case": { "$comment": "Drawn as written (none, the default), in capitals (upper) or lower case (lower). The strings stay as written.", "enum": ["none", "upper", "lower", null] }
+      }
+    },
+    "background": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "kind": { "$comment": "color (flat), gradient (palette.background2 to background), glow (soft light and the accent; the default) or image (src, cover).", "enum": ["color", "gradient", "glow", "image"] },
+        "src": { "$ref": "#/$defs/pathOrNull" },
+        "angle": { "type": ["number", "null"] },
+        "dim": { "$comment": "image only: a veil of palette.background over it, 0-1.", "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "fonts": {
+          "$comment": "Fonts the project bundles (never fetched). Empty: the system's.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["family", "src"],
+            "additionalProperties": false,
+            "properties": {
+              "$comment": { "type": "string" },
+              "family": { "type": "string", "minLength": 1 },
+              "src": { "$ref": "#/$defs/path" },
+              "weight": { "type": ["string", "integer", "null"] },
+              "style": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "palette": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "background": { "$ref": "#/$defs/colour" },
+            "background2": { "$ref": "#/$defs/colour" },
+            "ink": { "$ref": "#/$defs/colour" },
+            "accent": { "$ref": "#/$defs/colour" },
+            "plate": { "$ref": "#/$defs/colour" },
+            "plateInk": { "$ref": "#/$defs/colour" },
+            "band": { "$ref": "#/$defs/colour" },
+            "bandInk": { "$ref": "#/$defs/colour" }
+          }
+        },
+        "background": { "$ref": "#/$defs/background" },
+        "caption": { "$ref": "#/$defs/captionStyle" },
+        "frame": { "$ref": "#/$defs/frame" },
+        "icon": { "$comment": "The app's icon, shown on the hero.", "$ref": "#/$defs/pathOrNull" }
+      }
+    },
+    "overrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "layout": { "$ref": "#/$defs/layout" },
+        "frame": { "$ref": "#/$defs/frame" },
+        "caption": { "$comment": "false: no words; an object: caption style overrides.", "anyOf": [ { "const": false }, { "$ref": "#/$defs/captionStyle" } ] }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": ["store", "width", "height", "capture"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "store": { "enum": ["apple", "google"] },
+        "width": { "type": "integer", "minimum": 64, "maximum": 8000 },
+        "height": { "type": "integer", "minimum": 64, "maximum": 8000 },
+        "capture": { "$comment": "The capture device whose captures feed this target.", "$ref": "#/$defs/id" },
+        "layout": { "$ref": "#/$defs/layout" },
+        "frame": { "$ref": "#/$defs/frame" },
+        "caption": { "anyOf": [ { "const": false }, { "$ref": "#/$defs/captionStyle" } ] }
+      }
+    },
+    "shot": {
+      "type": "object",
+      "required": ["id", "capture"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "id": { "$ref": "#/$defs/id" },
+        "capture": { "$comment": "The capture's screen id.", "$ref": "#/$defs/id" },
+        "role": { "$comment": "With a style: the style's role (hero, feature, detail, accent, gameplay...) whose layout this shot takes when it gives none.", "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "layout": { "$ref": "#/$defs/layout" },
+        "frame": { "$ref": "#/$defs/frame" },
+        "caption": { "$comment": "A string key.", "type": ["string", "null"] },
+        "kicker": { "type": ["string", "null"] },
+        "proof": { "type": ["string", "null"] },
+        "captionStyle": { "$ref": "#/$defs/captionStyle" },
+        "targets": { "anyOf": [ { "type": "null" }, { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true } ] },
+        "tilt": { "enum": ["left", "right", null] },
+        "at": { "enum": ["top", "bottom", null] },
+        "callout": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["rect"],
+              "additionalProperties": false,
+              "properties": {
+                "$comment": { "type": "string" },
+                "rect": { "$comment": "[x, y, w, h] as fractions of the capture, from its top left.", "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number", "minimum": 0, "maximum": 1 } },
+                "scale": { "type": ["number", "null"], "minimum": 1, "maximum": 3 }
+              }
+            }
+          ]
+        },
+        "pair": {
+          "$comment": "The second capture for 'pair': a screen id on the same capture device, or {capture, device, frame}.",
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/id" },
+            {
+              "type": "object",
+              "required": ["capture"],
+              "additionalProperties": false,
+              "properties": {
+                "$comment": { "type": "string" },
+                "capture": { "$ref": "#/$defs/id" },
+                "device": { "$ref": "#/$defs/id" },
+                "frame": { "$ref": "#/$defs/frame" }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "$comment": "A generic phone, landscape: a rounded slab, thin even bezels. Drawn for this skill: generic, no maker's details. Units are the SVG's.",
+  "name": "phone-landscape",
+  "kind": "phone",
+  "orientation": "landscape",
+  "drawn": true,
+  "maker": null,
+  "viewBox": [
+    0,
+    0,
+    1899,
+    900
+  ],
+  "screen": {
+    "x": 24,
+    "y": 24,
+    "width": 1851,
+    "height": 852
+  },
+  "screenRadius": 104,
+  "stretch": "x",
+  "realWidthMm": 160
+}

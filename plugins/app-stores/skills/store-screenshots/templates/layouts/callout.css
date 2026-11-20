@@ -1,0 +1,19 @@
+/*
+  callout: framed-bleed, plus a clipped, enlarged copy of part of the capture (the shot's callout.rect, fractions of
+  the capture from its top left, at callout.scale) lifted out over the device with a deep shadow, centred where
+  that part sits on the screen. It's the app's own pixels, enlarged: never redrawn.
+*/
+.slot[data-layout="callout"] {
+  --device-w: 86;
+  --bleed: 0.12;
+}
+body[data-aspect="mid"] .slot[data-layout="callout"] { --device-w: 86; --bleed: 0.16; }
+body[data-aspect="square"] .slot[data-layout="callout"] { --device-w: 66; --bleed: 0.2; }
+body[data-aspect="wide"] .slot[data-layout="callout"] { --device-w: 78; --bleed: 0.12; --caption-bias: 0.5; }
+
+.slot[data-layout="callout"] .device-wrap .screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.1);
+}

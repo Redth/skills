@@ -1,0 +1,77 @@
+{
+  "$schema": "../schema/screenshot-style.schema.json",
+  "$comment": "Suits mobile games where one line of action sells each shot; Play-safe (no frame). Full-bleed gameplay with a band of the brand's colour at the foot, heavy capitals, imperative two-to-four-word verbs. The pattern of Royal Match's band and Monopoly GO's ribbon, and Duolingo's pill in an app (described, never copied). Keep one shot unaltered (the gameplay role) where a store wants one.",
+  "version": 1,
+  "name": "Game banner caption",
+  "locked": false,
+  "traits": {
+    "captionPosition": "bottom-band",
+    "captionAlign": "center",
+    "captionSize": "loud",
+    "captionWeight": "heavy",
+    "captionCase": "upper",
+    "emphasis": "none",
+    "lines": "two",
+    "support": "none",
+    "device": "none",
+    "devicePlacement": "whole",
+    "deviceSize": "big",
+    "background": "brand-colour",
+    "colour": "monochrome-brand",
+    "density": "standard",
+    "decoration": "none",
+    "mood": "bold",
+    "story": "parallel"
+  },
+  "theme": {
+    "palette": {
+      "background": "#1748C9",
+      "ink": "#FFFFFF",
+      "accent": "#FFD23F",
+      "band": "#1748C9",
+      "bandInk": "#FFFFFF"
+    },
+    "background": {
+      "kind": "color"
+    },
+    "caption": {
+      "placement": "bottom",
+      "align": "center",
+      "maxLines": 2,
+      "weight": 900,
+      "sizePct": 11.0,
+      "floorPct": 8.0,
+      "case": "upper"
+    },
+    "frame": "none"
+  },
+  "roles": {
+    "banner": {
+      "layout": "band"
+    },
+    "gameplay": {
+      "layout": "gameplay"
+    }
+  },
+  "stores": {
+    "google": {
+      "frame": "none"
+    },
+    "apple": {
+      "frame": "none"
+    }
+  },
+  "copy": {
+    "maxWords": 4,
+    "maxLines": 2,
+    "case": "upper",
+    "emphasis": "an imperative verb first"
+  },
+  "drift": {
+    "captionSize": 0.05,
+    "captionPosition": 0.005,
+    "deviceBox": 0.01,
+    "textShare": 0.03,
+    "colour": 2
+  }
+}

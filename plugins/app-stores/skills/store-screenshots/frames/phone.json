@@ -1,0 +1,23 @@
+{
+  "$comment": "A generic phone, portrait: a rounded slab, thin even bezels. Drawn for this skill: generic, no maker's details. Units are the SVG's.",
+  "name": "phone",
+  "kind": "phone",
+  "orientation": "portrait",
+  "drawn": true,
+  "maker": null,
+  "viewBox": [
+    0,
+    0,
+    900,
+    1899
+  ],
+  "screen": {
+    "x": 24,
+    "y": 24,
+    "width": 852,
+    "height": 1851
+  },
+  "screenRadius": 104,
+  "stretch": "y",
+  "realWidthMm": 73
+}

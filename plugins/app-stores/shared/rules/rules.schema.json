@@ -12,7 +12,8 @@
     "rules": { "type": "array", "items": { "$ref": "#/$defs/rule" } },
     "slots": { "type": "object" },
     "categories": { "$ref": "#/$defs/categories" },
-    "ageRating": { "$ref": "#/$defs/ageRating" }
+    "ageRating": { "$ref": "#/$defs/ageRating" },
+    "design": { "$ref": "#/$defs/design" }
   },
   "anyOf": [
     { "properties": { "store": { "const": "apple" }, "slots": { "$ref": "#/$defs/appleSlots" } } },
@@ -293,6 +294,102 @@
         "maxTags": { "type": "integer", "minimum": 0 }
       }
     },
+    "design": {
+      "$comment": "What the store allows in a screenshot's design (store-screenshots' check.py and sheet.py read it). Each entry says its value, source, checked date and status like a rule; severity is how a picture that breaks it is reported (an entry that isn't verified is reported as a warning). bySlot overrides an entry for slots of this file's 'slots' table.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "frames": { "allOf": [ { "$ref": "#/$defs/designEntry" }, { "$ref": "#/$defs/designPermissionValues" } ] },
+        "backgrounds": { "allOf": [ { "$ref": "#/$defs/designEntry" }, { "$ref": "#/$defs/designPermissionValues" } ] },
+        "captions": {
+          "allOf": [
+            { "$ref": "#/$defs/designEntry" },
+            {
+              "properties": {
+                "value": { "$ref": "#/$defs/designCaptionValue" },
+                "bySlot": { "additionalProperties": { "properties": { "value": { "$ref": "#/$defs/designCaptionValue" } } } }
+              }
+            }
+          ]
+        },
+        "awards": {
+          "allOf": [
+            { "$ref": "#/$defs/designEntry" },
+            { "properties": { "value": { "enum": ["allowed", "verifiableOnly", "forbidden"] } } }
+          ]
+        },
+        "deviceArt": {
+          "$comment": "ownAsIs: a maker's device art only as the user supplies it, unmodified (no tilt, crop or overlap). none: no maker's device art. allowed: no limit known.",
+          "allOf": [
+            { "$ref": "#/$defs/designEntry" },
+            { "properties": { "value": { "enum": ["ownAsIs", "none", "allowed"] } } }
+          ]
+        },
+        "maxTextShare": {
+          "$comment": "The most of a picture's area its text boxes may cover (0-1).",
+          "allOf": [
+            { "$ref": "#/$defs/designEntry" },
+            { "properties": { "value": { "type": "number", "minimum": 0, "maximum": 1 } } }
+          ]
+        },
+        "inUseMajority": {
+          "$comment": "More than this share of each set (per device and locale) shows the app in use (0-1).",
+          "allOf": [
+            { "$ref": "#/$defs/designEntry" },
+            { "properties": { "value": { "type": "number", "minimum": 0, "maximum": 1 } } }
+          ]
+        },
+        "uiFirst": {
+          "$comment": "The first this many shots of a set show the app's UI.",
+          "allOf": [
+            { "$ref": "#/$defs/designEntry" },
+            { "properties": { "value": { "type": "integer", "minimum": 0 } } }
+          ]
+        }
+      }
+    },
+    "designEntry": {
+      "type": "object",
+      "required": ["value", "source", "checked", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "value": { "$comment": "Typed by each entry." },
+        "severity": { "$ref": "#/$defs/severity" },
+        "source": { "$ref": "#/$defs/url" },
+        "checked": { "$ref": "#/$defs/date" },
+        "status": { "$ref": "#/$defs/status" },
+        "note": { "type": "string" },
+        "bySlot": {
+          "$comment": "Keyed by a slot id of this file's 'slots' table.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/designSlotEntry" }
+        }
+      }
+    },
+    "designSlotEntry": {
+      "type": "object",
+      "required": ["value", "source", "checked", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "value": { "$comment": "Typed as the entry's value." },
+        "severity": { "$ref": "#/$defs/severity" },
+        "source": { "$ref": "#/$defs/url" },
+        "checked": { "$ref": "#/$defs/date" },
+        "status": { "$ref": "#/$defs/status" },
+        "note": { "type": "string" }
+      }
+    },
+    "designPermission": { "enum": ["allowed", "discouraged", "required", "forbidden"] },
+    "designPermissionValues": {
+      "properties": {
+        "value": { "$ref": "#/$defs/designPermission" },
+        "bySlot": { "additionalProperties": { "properties": { "value": { "$ref": "#/$defs/designPermission" } } } }
+      }
+    },
+    "designCaptionValue": { "enum": ["allowed", "discouraged", "required", "forbidden", "oneUnaltered"] },
     "idList": {
       "type": "array", "minItems": 1, "uniqueItems": true,
       "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }

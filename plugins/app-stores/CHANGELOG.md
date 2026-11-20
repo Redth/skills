@@ -7,6 +7,75 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 ## [Unreleased]
 
 ### Added
+- `store-capture` 0.1.0 (#13): an app's real screens captured at exactly each store's sizes, on any stack.
+  `capture-plan.json` (schema `schema/capture-plan.schema.json`: devices each promising a width and height, screens
+  reached by steps, locales, appearance, clock, status bar, seed, per-device and per-screen overrides);
+  `capture.py` (a driver per device, `--dry-run`, a dedicated `appstores-<device id>` simulator or emulator by
+  default, everything changed put back, every picture checked: the wrong size `failed` and never resized, alpha
+  flattened and reported; `capture-report.json` marking each shot taken, missed with the previous picture kept,
+  failed or skipped); drivers for `simctl`, `adb`, `uiautomator`, `chrome`, `macos`, the DevFlow and Ailoha in-app
+  agents, `appium`, `xcuitest` and `maestro`; `import_captures.py` (fastlane snapshot and screengrab, xcresult,
+  Maestro, Flutter, Detox, Playwright, a folder, with a mapping); `check_captures.py`; `video.py` (record, encode
+  to each store's preview spec with ffmpeg: constant frame rate, H.264 or ProRes, the exact size, a silent stereo
+  track when there's none; check with ffprobe). The references choose a technique per app (a decision table), show
+  how to add a screenshot mode on SwiftUI, UIKit, Compose, .NET MAUI, Flutter, React Native and the web, cover each
+  driver, game engines, desktop, clean state and which simulator or emulator renders which store size natively
+  (read 2026-11-14).
+- `store-capture`: staging with the user before any plan runs (`references/staging.md`): which screens tell the
+  story, starting from the current set (`capture.py --current`: the storyboard, `existing/<store>/screenshots/`, a
+  folder), and how the app is signed in (guest, a debug bypass, or a demo account named only by environment
+  variables, checked before a run and masked in every log and report; never a real person's account), seeded (a
+  command or a file copied into the app's data), skipped, granted, flagged, clocked and networked. The plan's
+  `staging` section (schema), each screen's `state` and `verify` (an element that must be on screen, else the shot
+  is `missed`, "wrong state"; the report's `stateCheck`), `staging.md` written by `capture.py --write-staging`,
+  `staging.confirmed` before a run of more than one screen, reuse on every later capture.
+- `store-capture`: the `appFile` step (a file into the app's own data: the simulator's data container, Android's
+  through `run-as`); `staging.permissions` granted before launch and revoked after (`simctl privacy`, `pm grant`);
+  `capture.py --inspect` (each screen's UI tree in `<out>/.inspect/`); `settle.ignore` rectangles; `target.navigation`
+  (gesture or button navigation), `statusBarMobile` and `statusBarCheck` on Android; `check_captures.py` notes a
+  required App Store display type no device fills; script steps also get `APPSTORES_PLATFORM`, `APPSTORES_APP_ID`
+  and `APPSTORES_SERIAL`.
+- `store-capture`: decision-table row for an existing pipeline that needs a real account or secrets (reuse its data
+  and ids, not its run); DevFlow's limits on iOS documented, with when to switch a device to Appium; a .NET MAUI
+  section on seeding local data without a screenshot mode and `-p:EmbedAssembliesIntoApk=true` for Debug APKs.
+
+- `store-screenshots` 0.1.0 (#12): designed store screenshots from an app's real captures, one design for every
+  store, size and locale. A brief and a storyboard agreed with the user before rendering; `store-screenshots.json`
+  (theme, targets at each store's exact sizes, shots with their layouts and captions, per-store overrides,
+  strings per locale, an optional panorama); `render.py` (HTML/CSS templates through headless Chrome, captions that
+  shrink to a floor and fail there, a render report); `check.py` (sizes, alpha, counts, caption fit and words,
+  Play's text share, frames per store, forbidden words in captions, missing glyphs, seams, contrast, upscaling,
+  fallbacks, and the checklist a person judges); `sheet.py` (Apple's search row, the product page, Play's listing
+  and a contact sheet, at real display size). Generic drawn device frames only; Play frameless by default. The
+  references give each design principle its evidence grade, what each store allows (read 2026-11-14), the makers'
+  device-art licences, localisation and legibility.
+- `store-screenshots`: taste, directions and the baseline (CONTRACT.md 8.7). The user's examples described in a
+  fixed traits vocabulary (`design/inspiration/inspiration.json`, `sheet.py --inspiration`); 2 to 4 directions
+  rendered with `render.py --style ... --out ...` and laid side by side at search-row and product-page size
+  (`sheet.py --directions`); `screenshot-style.json` (schema `schema/screenshot-style.schema.json`: traits, theme,
+  roles, store overrides, copy rules, drift tolerances) merged over the config's theme, shots given a `role`;
+  eight starting styles in `styles/` (brand-colour bold, minimal editorial, dark pro, playful saturated,
+  photo/lifestyle, panoramic strip, game key art, game banner); `baseline.py approve | status | unlock` (a current
+  render report required, history kept, the style locked, decisions logged in `design/decisions.md`);
+  `check.py --baseline` (used by itself when a baseline exists): drift in caption size, position and lines, the
+  device's box, frame and tilt, text share, colours and background, a changed locked style an error, a config theme
+  against it an error, copy rules; `sheet.py --compare` (baseline and now, the drift under each pair). The render
+  report gains `style`, `configSha256` and per file `role`, `tilt` and `background`.
+- `store-screenshots`: template defaults from measured sets and the generators' source: captions start at 9.5u
+  (floor 7u) on a tall slot (mid about 6u, wide about 4.6u), side margin 8u, caption top 12u, gap 9u, the device 86u
+  bleeding 12% (76u whole), leading 1.08, two caption lines reserved so devices line up across a set; `caption.case`.
+  `check.py` warns when shots 1 to 3's captions are under 9.5u (any store) and when a set's device moves more than
+  0.2u or its caption top more than 0.5u.
+- `store-screenshots`: start from the current set (CONTRACT.md 8.7 step 0). `sheet.py --current <folder>` lays out
+  the listing's current screenshots (pulled to `existing/<store>/screenshots/<locale>/<slot>/`, or any folder such as
+  `assets/screenshots/<device>/`) by store and device in order, writes a skeleton `design/current.json` (schema
+  `$defs/current`: each shot's screen, caption, layout, traits and the user's keep/change/drop, and the summary's
+  look: keep, evolve or replace) and shows each shot beside its analysis; the storyboard starts from the shots kept
+  and the inspiration board shows the set as one example. A batched first turn for users who ask for directions up
+  front, its sheet headed as drafts (`sheet.py --directions ... --draft`). `sheet.py --styles` renders every starting
+  style on one made-up app (`samples.py`, nothing committed) to pick by eye. A style role's `stores` gives it another
+  layout or frame on one store; the app starting styles' hero is real UI on Google Play, so shot 1 no longer trips
+  Play's UI-first warning.
 - `store-listings`: start from what's live. `push.py pull apple|google` reads the live listing (read-only, like
   `plan`; on Google an edit opened to read and deleted) into `existing/<store>/`: `listing.json` in the contract's
   vocabulary, every screenshot and preview downloaded per locale and slot, and a `README.md` summary. App Review's
@@ -60,6 +129,29 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   developer line as the copyright's holder, not the package name.
 
 ### Fixed
+- `store-capture`: the `devflow` and `ailoha` drivers could drive another app's agent (the developer's own
+  simulators): they now pin the agent of the plan's app on the dedicated device (status device id, the process's
+  simulator folder, Android's `pidof`), pass `--agent-port` everywhere, find it again after each launch, and refuse
+  when none or several match or a named `agentPort` is another device's. On Android they pass `--device <serial>`
+  and `ANDROID_SERIAL`, never take a forward another device holds, and refuse without a serial when several devices
+  are attached.
+- `store-capture` (DevFlow): changes go only through the CLI, retried when another client's lease turns one away
+  (then a clear error); `success: false` replies fail the step with advice; an xpath the HTTP query refuses (the
+  preview.14 query takes only type, automationId, text, selector) and a native view's automationId the query misses
+  are found in `ui tree`; taps wait for their element; `scroll --element` falls back to scrolling; back is
+  `ui navigate ..`, the host's key, then HTTP.
+- `store-capture` (Android): demo mode sends Wi-Fi `fully` and hides the mobile icon (an API 36 image drew "!" and
+  "3G" while the report said `overridden`), and the first time on a device enters demo mode twice (the first pass
+  after a boot drew two Wi-Fi icons); the status bar is `verified` only when its pixels follow demo mode's clock
+  (each read steady), else `unverified`. A missing log folder is no longer reported as a missing emulator. iOS: a `status_bar list` without the override is `unverified`, not `overridden`.
+- `store-capture` (Appium): `appium:isHeadless` by default on simulators (Xcode 27 moved Simulator.app); a failed
+  session reports its own cause, and the simulator it shut down is booted again (and the session retried) instead
+  of later screens failing with "device is not booted".
+- `store-capture`: `avdmanager` found in a versioned `cmdline-tools/<version>/` when there's no `latest`; a .NET
+  Fast Deployment APK is warned about; the dry run shows the `wm size` a real run sets; no env warning on Android
+  for keys `args` also carries; an opaque alpha channel no longer lists `alpha-flattened` on every shot (counted
+  once in the report's `notes`); tests write only into temp folders, and every test module checks nothing was left
+  beside the scripts.
 - `listing.py import --from supply` (or Triple-T) after an App Store import whose primary language Play has no
   listing in no longer sets `stores.google.defaultLanguage` to that language: it's one of Play's own (the layout's
   default, the primary if Play has it, en-US, or the first).

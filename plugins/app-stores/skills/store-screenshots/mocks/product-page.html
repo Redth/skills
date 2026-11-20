@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="${lang}">
+<head>
+<meta charset="utf-8">
+<title>${title}</title>
+<link rel="stylesheet" href="mocks.css">
+</head>
+<body class="phone-page" style="width:${screen_pt}px">
+<div class="first-screen" style="min-height:${screen_h}px">
+<p class="notice">Approximation, not Apple's rendering: the top of the App Store product page on a ${device}
+${screen_pt}&times;${screen_h} pt (1 CSS px is 1 pt). Screenshots about ${shot_pt} pt wide. ${locale} &middot; ${target}</p>
+<div class="as">
+  <div class="product-head">
+    ${icon}
+    <div class="product-text">
+      <div class="name-2">${name}</div>
+      <div class="subtitle-2">${subtitle}</div>
+      <div class="get blue">Get</div>
+    </div>
+  </div>
+  <div class="facts"><div><b>&mdash;</b><span>ratings</span></div><div><b>4+</b><span>age</span></div>
+    <div><b>&mdash;</b><span>chart</span></div><div><b>&mdash;</b><span>developer</span></div></div>
+  <div class="carousel">${shots}</div>
+</div>
+</div>
+<div class="fold" style="top:${screen_h}px"><span>end of the first screen (${screen_h} pt)</span></div>
+${sizes}
+</body>
+</html>

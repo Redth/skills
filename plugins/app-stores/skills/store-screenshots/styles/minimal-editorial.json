@@ -1,0 +1,91 @@
+{
+  "$schema": "../schema/screenshot-style.schema.json",
+  "$comment": "Suits design-led and premium brands whose UI is clean enough to stand alone; weak when the UI is busy or the brand has no colour. Left-aligned bold words on a warm off-white (plain white reads as unfinished), frameless screens with a hairline and a faint shadow, one accent at most. The pattern of Notion's and Airbnb's sets (described, never copied).",
+  "version": 1,
+  "name": "Minimal editorial",
+  "locked": false,
+  "traits": {
+    "captionPosition": "top",
+    "captionAlign": "start",
+    "captionSize": "standard",
+    "captionWeight": "bold",
+    "captionCase": "sentence",
+    "emphasis": "none",
+    "lines": "two",
+    "support": "none",
+    "device": "frameless",
+    "devicePlacement": "bleed-bottom",
+    "deviceSize": "standard",
+    "background": "light",
+    "colour": "one-accent",
+    "density": "airy",
+    "decoration": "none",
+    "mood": "editorial",
+    "story": "parallel"
+  },
+  "theme": {
+    "palette": {
+      "background": "#F6F2EA",
+      "ink": "#17150F",
+      "accent": "#B4441C"
+    },
+    "background": {
+      "kind": "color"
+    },
+    "caption": {
+      "placement": "top",
+      "align": "start",
+      "maxLines": 2,
+      "weight": 700,
+      "sizePct": 9.5,
+      "floorPct": 7.0
+    },
+    "frame": "none"
+  },
+  "roles": {
+    "hero": {
+      "$comment": "Brand and claim large on Apple; on Google Play the same shot as framed-bleed, the app's own screen, because Play wants UI in the first three shots (its claim must fit two lines there).",
+      "layout": "hero",
+      "stores": {
+        "google": {
+          "layout": "framed-bleed"
+        }
+      }
+    },
+    "feature": {
+      "layout": "framed-bleed"
+    },
+    "whole": {
+      "layout": "framed"
+    },
+    "detail": {
+      "layout": "callout"
+    },
+    "accent": {
+      "layout": "tilt",
+      "maxPerSet": 1
+    },
+    "pair": {
+      "layout": "pair",
+      "maxPerSet": 1
+    }
+  },
+  "stores": {
+    "google": {
+      "frame": "none"
+    }
+  },
+  "copy": {
+    "maxWords": 5,
+    "maxLines": 2,
+    "case": "sentence",
+    "emphasis": "none: the words carry it"
+  },
+  "drift": {
+    "captionSize": 0.05,
+    "captionPosition": 0.005,
+    "deviceBox": 0.01,
+    "textShare": 0.03,
+    "colour": 2
+  }
+}

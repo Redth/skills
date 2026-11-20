@@ -1,0 +1,23 @@
+{
+  "$comment": "A generic desktop monitor on a simple stand. Drawn for this skill: generic, no maker's details. Units are the SVG's.",
+  "name": "desktop",
+  "kind": "desktop",
+  "orientation": "landscape",
+  "drawn": true,
+  "maker": null,
+  "viewBox": [
+    0,
+    0,
+    1700,
+    1193
+  ],
+  "screen": {
+    "x": 24,
+    "y": 24,
+    "width": 1652,
+    "height": 929
+  },
+  "screenRadius": 6,
+  "stretch": "y",
+  "realWidthMm": 610
+}

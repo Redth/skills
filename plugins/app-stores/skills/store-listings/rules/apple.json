@@ -692,6 +692,34 @@
       "note": "Guideline 2.2: no betas, demos or test versions. fastlane precheck's test_words."
     },
     {
+      "id": "apple.captions.urls",
+      "kind": "pattern",
+      "applies": {
+        "field": "captions"
+      },
+      "regex": "(?i)(https?://|\\bwww\\.|\\b[a-z0-9-]+\\.(com|net|org|io|app|co|dev)\\b)",
+      "forbid": true,
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/asset-best-practices/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Asset best practices: no website URLs in screenshots and other assets."
+    },
+    {
+      "id": "apple.captions.copyright",
+      "kind": "pattern",
+      "applies": {
+        "field": "captions"
+      },
+      "regex": "©|\\([cC]\\)",
+      "forbid": true,
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/asset-best-practices/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Asset best practices: no copyright symbols in screenshots and other assets."
+    },
+    {
       "id": "apple.screenshots.count",
       "kind": "count",
       "applies": {
@@ -1171,7 +1199,7 @@
           "APP_APPLE_VISION_PRO"
         ]
       },
-      "item": "Device frames are Apple's product bezels, unmodified: no tilting, cropping, reflections, shadows, 3D renders or drawn devices; latest-generation devices.",
+      "item": "Apple's product bezels, if used, are the user's own download, used as they are: no tilting, cropping, reflections, shadows or 3D renders, nothing over the device, latest-generation devices. A drawn device simulates no Apple product: none of the details unique to Apple's (Home button, sensor housing, Ring/Silent switch, volume controls).",
       "severity": "warning",
       "source": "https://developer.apple.com/app-store/marketing/guidelines/",
       "checked": "2026-11-14",
@@ -2072,6 +2100,57 @@
         "orientation": "landscape"
       },
       "status": "verified"
+    }
+  },
+  "design": {
+    "$comment": "What the store allows in a screenshot's design, read by store-screenshots (check.py, sheet.py). Each entry: 'value', where it's written ('source'), when it was read ('checked'), how sure we are ('status'), and 'severity': how check.py reports a picture that breaks it (an entry that isn't verified is reported as a warning whatever its severity). 'bySlot' overrides an entry for some of this file's slots. Values: frames, backgrounds and captions are allowed | discouraged | required | forbidden (captions also oneUnaltered: at least one shot with no words or art over the app); awards are allowed | verifiableOnly | forbidden; deviceArt is ownAsIs (a maker's device art only as the user supplies it, unmodified) | none | allowed; maxTextShare and inUseMajority are shares of the picture or set (0-1); uiFirst is a number of leading shots. Change an entry's value, source, checked and status together.",
+    "frames": {
+      "value": "allowed",
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-review/guideline-reference/2-3-3-screenshots",
+      "checked": "2026-11-14",
+      "status": "observed",
+      "note": "App Review's screenshot guidance (2.3.3) allows text and image overlays and says nothing about device frames; framed screenshots, drawn and tilted ones included, are common in live listings. A drawn frame mustn't simulate an Apple device: see deviceArt."
+    },
+    "backgrounds": {
+      "value": "allowed",
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-review/guideline-reference/2-3-3-screenshots",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "2.3.3: more than half of a set shows the app in use; the rest may be marketing art, splash screens or marketing text, so a designed background around the app is fine."
+    },
+    "captions": {
+      "value": "allowed",
+      "severity": "warning",
+      "source": "https://developer.apple.com/help/app-review/guideline-reference/2-3-3-screenshots",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "2.3.3: screenshots may include text and image overlays as long as the app's primary functionality isn't obscured. Asset best practices: a short phrase that enhances the visual rather than describes it, localised; no prices, discounts, website URLs or copyright symbols (the captions' word and pattern rules)."
+    },
+    "awards": {
+      "value": "verifiableOnly",
+      "severity": "warning",
+      "source": "https://developer.apple.com/app-store/asset-best-practices/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Asset best practices: no unverifiable awards and no Apple-designated recognitions (Editors' Choice, App of the Day, Apple Design Award), and don't spend a whole screenshot on accolades or calls to action. A real third-party award you can show is tolerated (common in live listings). Laurels drawn in the art are for a person to judge."
+    },
+    "deviceArt": {
+      "value": "ownAsIs",
+      "severity": "error",
+      "source": "https://developer.apple.com/app-store/marketing/guidelines/",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Apple's product bezels only as the user downloads them (the Apple Design Resources licence lets no one redistribute them, and limits them to software that runs only on Apple's platforms), used as is: no tilting, 3D, cropping by the edge (framed-bleed), callouts over the device, shadows or reflections; the latest devices. check.py refuses tilt, 3D, crop and callout overlap on a frame whose JSON says \"maker\": \"apple\". A drawn device mustn't copy details unique to Apple products (Home button, sensor housing, Ring/Silent switch, volume controls). Whether App Review enforces the marketing guidelines on screenshots is unverified; the licence applies regardless."
+    },
+    "inUseMajority": {
+      "value": 0.5,
+      "severity": "error",
+      "source": "https://developer.apple.com/help/app-review/guideline-reference/2-3-3-screenshots",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "App Review approves only submissions where more than half of the screenshots show the app in use, judged per device set and locale. Never only a sign-in or splash screen. check.py counts the layouts that show a capture (every layout but hero); a person confirms the captures really are the app in use."
     }
   },
   "categories": {

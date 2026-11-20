@@ -1,0 +1,4 @@
+{ "days": [ { "day": "monday", "recipe": "Tomato Soup" }, { "day": "tuesday", "recipe": "Lemon Pasta" },
+            { "day": "wednesday", "recipe": "Bean Chili" }, { "day": "thursday", "recipe": "Leek Risotto" },
+            { "day": "friday", "recipe": "Fish Tacos" } ],
+  "shopping": ["Lemons", "Parmesan", "Spaghetti", "Kidney beans", "Leeks", "Arborio rice", "Corn tortillas"] }

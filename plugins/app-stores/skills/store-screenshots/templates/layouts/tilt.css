@@ -1,0 +1,29 @@
+/*
+  tilt: framed-bleed with the device turned in 3D (perspective, then rotateY / rotateX / rotateZ presets), its
+  shadow cast from the turned shape. The shot's `tilt` (left | right) picks the way; right-to-left languages turn it
+  the other way. An accent for one shot of a set, never with a maker's own device art.
+*/
+.slot[data-layout="tilt"] {
+  --device-w: 74;
+  --bleed: 0.12;
+  --gap: 9;
+  --tilt-y: 20;
+  --tilt-x: 6;
+  --tilt-z: 6;
+  --perspective: 260;
+}
+body[data-aspect="tall"] .slot[data-layout="tilt"] { --anchor-gap: 25; }
+body[data-aspect="mid"] .slot[data-layout="tilt"] { --device-w: 76; --gap: 7; --tilt-y: 16; --tilt-z: 4; --anchor-gap: 19; }
+body[data-aspect="square"] .slot[data-layout="tilt"] { --device-w: 58; }
+body[data-aspect="wide"] .slot[data-layout="tilt"] { --device-w: 66; --gap: 4.5; --tilt-y: 18; --tilt-x: 8; --tilt-z: 3; --perspective: 180; }
+
+.slot[data-layout="tilt"] .device {
+  /* Transparent room around the turned layer keeps its edges anti-aliased in software rendering. */
+  outline: 2px solid transparent;
+  transform-origin: 50% 40%;
+  transform: perspective(calc(var(--u) * var(--perspective)))
+             rotateY(calc(var(--tilt-sign, 1) * var(--tilt-y) * 1deg))
+             rotateX(calc(var(--tilt-x) * 1deg))
+             rotateZ(calc(var(--tilt-sign, 1) * var(--tilt-z) * -1deg));
+  backface-visibility: hidden;
+}

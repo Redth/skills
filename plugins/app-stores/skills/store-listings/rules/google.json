@@ -1169,6 +1169,119 @@
       "note": "Required when the app is opted in to Android TV; shown only on TVs."
     }
   },
+  "design": {
+    "$comment": "What the store allows in a screenshot's design, read by store-screenshots (check.py, sheet.py). Each entry: 'value', where it's written ('source'), when it was read ('checked'), how sure we are ('status'), and 'severity': how check.py reports a picture that breaks it (an entry that isn't verified is reported as a warning whatever its severity). 'bySlot' overrides an entry for some of this file's slots. Values: frames, backgrounds and captions are allowed | discouraged | required | forbidden (captions also oneUnaltered: at least one shot with no words or art over the app); awards are allowed | verifiableOnly | forbidden; deviceArt is ownAsIs (a maker's device art only as the user supplies it, unmodified) | none | allowed; maxTextShare and inUseMajority are shares of the picture or set (0-1); uiFirst is a number of leading shots. Change an entry's value, source, checked and status together.",
+    "frames": {
+      "value": "discouraged",
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Highly recommended (it affects promotion, not publishing): no device imagery in screenshots. On Wear OS it's a requirement: no device frames.",
+      "bySlot": {
+        "wear": {
+          "value": "forbidden",
+          "severity": "error",
+          "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+          "checked": "2026-11-14",
+          "status": "verified",
+          "note": "Wear OS screenshots show only the app's interface: no device frames (a requirement)."
+        }
+      }
+    },
+    "backgrounds": {
+      "value": "allowed",
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "unverified",
+      "note": "The page's recommended list names device imagery, not added backgrounds, for phones and tablets; earlier readings treated added backgrounds as discouraged too. On Wear OS no backgrounds or extra graphics (a requirement).",
+      "bySlot": {
+        "wear": {
+          "value": "forbidden",
+          "severity": "error",
+          "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+          "checked": "2026-11-14",
+          "status": "verified",
+          "note": "Wear OS: the app's interface only, no added backgrounds or graphics, no masking."
+        }
+      }
+    },
+    "captions": {
+      "value": "allowed",
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Taglines only if necessary (maxTextShare). No rankings, awards, testimonials, prices, promotions, calls to action or time-bound words (google.captions.promotional). Localise the words.",
+      "bySlot": {
+        "tablet7": {
+          "value": "discouraged",
+          "severity": "warning",
+          "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+          "checked": "2026-11-14",
+          "status": "verified",
+          "note": "Large screens: exclude text that isn't part of the core app experience; it can get cut off on Play's home pages."
+        },
+        "tablet10": {
+          "value": "discouraged",
+          "severity": "warning",
+          "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+          "checked": "2026-11-14",
+          "status": "verified",
+          "note": "Large screens: exclude text that isn't part of the core app experience; it can get cut off on Play's home pages."
+        },
+        "wear": {
+          "value": "forbidden",
+          "severity": "error",
+          "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+          "checked": "2026-11-14",
+          "status": "verified",
+          "note": "Wear OS: no extra text (a requirement)."
+        },
+        "tv": {
+          "value": "oneUnaltered",
+          "severity": "warning",
+          "source": "https://developer.android.com/docs/quality-guidelines/tv-app-quality",
+          "checked": "2026-11-14",
+          "status": "verified",
+          "note": "TV quality TV-G4: at least one unaltered, full-resolution TV screenshot (no caption or art over it)."
+        }
+      }
+    },
+    "maxTextShare": {
+      "value": 0.2,
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Taglines no more than 20% of the image: highly recommended, and needed for recommendation formats. check.py compares the render's textShare (every text box's area over the picture's)."
+    },
+    "awards": {
+      "value": "forbidden",
+      "severity": "error",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Screenshots and the feature graphic: no awards, rankings, testimonials or store badges. Google lists them as highly recommended; its metadata policy covers ranking and award claims in promotional images, so they're treated as errors, like google.captions.promotional. Laurels drawn in the art are for a person to judge."
+    },
+    "deviceArt": {
+      "value": "none",
+      "severity": "warning",
+      "source": "https://developer.android.com/distribute/marketing-tools/device-art-generator",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Google's Device Art Generator: don't use its graphics in a Play feature graphic or screenshots; Play's own guidance advises against device imagery. Generic drawn frames are frames (see frames)."
+    },
+    "uiFirst": {
+      "value": 3,
+      "severity": "warning",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "checked": "2026-11-14",
+      "status": "verified",
+      "note": "Prioritise the app's UI in the first three screenshots (panoramas included); check.py flags a hero (brand or claim) layout among a Play set's first three."
+    }
+  },
   "categories": {
     "$comment": "Google Play's categories (32 for apps, 17 for games, read 2026-11-14) and tags. Play Console only: no API sets them. The names are Google's (verified); the ids are Play's own as its category URLs show them (observed). An id starting GAME_ is a game.",
     "source": "https://support.google.com/googleplay/android-developer/answer/9859673",

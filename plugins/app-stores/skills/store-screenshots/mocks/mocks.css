@@ -1,0 +1,120 @@
+/* store-screenshots' mocks: the rendered shots at about the size the stores draw them, to judge legibility.
+   Approximations, not the stores' own rendering. On the phone pages 1 CSS px stands for 1 iOS pt or Android dp. */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Roboto, "Segoe UI", Arial, sans-serif;
+  background: #fff;
+  color: #000;
+  -webkit-font-smoothing: antialiased;
+}
+.notice {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 9px;
+  line-height: 1.35;
+  color: #5c4b00;
+  background: #fff4c2;
+  border-bottom: 1px solid #e8d77a;
+}
+.placeholder-icon {
+  display: flex; align-items: center; justify-content: center; flex: none;
+  font-weight: 700; color: #fff; background: linear-gradient(135deg, #8e8e93, #3a3a3c);
+}
+.icon { flex: none; object-fit: cover; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.15); }
+.missing-shot {
+  display: flex; align-items: center; justify-content: center; text-align: center; flex: none;
+  font-size: 10px; color: #8a1c1c; background: #fde8e8; border: 1px dashed #d77;
+}
+
+/* ---- caption sizes under a phone mock ----------------------------------------------------------- */
+.sizes { margin: 14px 12px 16px; font-size: 11px; line-height: 1.4; }
+.sizes h2 { margin: 0 0 4px; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #6c6c70; }
+.sizes table { width: 100%; border-collapse: collapse; }
+.sizes td { padding: 3px 4px; border-top: 1px solid #e5e5ea; vertical-align: top; }
+.sizes td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sizes .ok { color: #1d7a35; font-weight: 600; }
+.sizes .low { color: #b3261e; font-weight: 700; }
+.sizes .none { color: #8a8a8e; }
+.sizes p { margin: 6px 0 0; color: #6c6c70; font-size: 10px; }
+
+/* ---- App Store ---------------------------------------------------------------------------------- */
+.phone-page { position: relative; }
+.as { padding-bottom: 4px; }
+.as .search-bar {
+  margin: 10px 16px 2px; padding: 7px 10px; border-radius: 10px;
+  background: #eeeef0; color: #3c3c43; font-size: 17px;
+}
+.as .result { padding: 12px 16px 14px; border-bottom: 1px solid #e5e5ea; }
+.as .result-head { display: flex; align-items: center; gap: 12px; }
+.as .result-text { flex: 1; min-width: 0; }
+.as .name-1 { font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.as .subtitle-1 { margin-top: 2px; font-size: 13px; color: #8a8a8e; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.as .get { flex: none; padding: 5px 18px; border-radius: 15px; background: #eeeef3; color: #007aff;
+  font-weight: 700; font-size: 15px; }
+.as .get.blue { align-self: flex-start; margin-top: auto; background: #007aff; color: #fff; }
+.as .search-shots { display: flex; gap: 8px; margin-top: 12px; }
+.as .search-shots img, .as .carousel img { display: block; flex: none; border-radius: 10px;
+  box-shadow: 0 0 0 0.5px rgba(0,0,0,0.18); }
+.as .ghost .ghost-icon { width: 64px; height: 64px; border-radius: 14px; background: #f2f2f7; flex: none; }
+.as .ghost-line { height: 12px; border-radius: 6px; background: #f2f2f7; margin: 4px 0; width: 70%; }
+.as .ghost-line.short { width: 45%; }
+
+.as .product-head { display: flex; gap: 16px; padding: 16px 16px 0; }
+.as .product-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.as .name-2 { font-size: 22px; font-weight: 700; line-height: 1.2; }
+.as .subtitle-2 { margin-top: 3px; font-size: 15px; color: #8a8a8e; }
+.as .facts { display: flex; justify-content: space-between; margin: 16px 16px 0; padding: 8px 0;
+  border-top: 1px solid #e5e5ea; border-bottom: 1px solid #e5e5ea; text-align: center; }
+.as .facts div { flex: 1; display: flex; flex-direction: column; font-size: 10px; color: #8a8a8e; }
+.as .facts b { font-size: 17px; color: #3c3c43; }
+.as .carousel { display: flex; gap: 10px; padding: 16px 16px 8px; overflow: hidden; }
+
+.first-screen { position: relative; padding-bottom: 8px; }
+.first-screen + .fold + .sizes { margin-top: 24px; }
+.fold { position: absolute; left: 0; right: 0; height: 0; border-top: 2px dashed #b3261e; }
+.fold span { position: absolute; right: 8px; bottom: 3px; font-size: 10px; font-weight: 600; color: #b3261e;
+  background: rgba(255,255,255,0.9); padding: 1px 4px; }
+
+/* ---- Google Play -------------------------------------------------------------------------------- */
+.play-page { font-family: Roboto, "Google Sans", -apple-system, "Segoe UI", Arial, sans-serif; }
+.gp { padding: 16px 0 4px; }
+.gp-head { display: flex; gap: 16px; padding: 0 24px; align-items: center; }
+.gp-text { flex: 1; min-width: 0; }
+.gp-title { font-size: 22px; font-weight: 500; line-height: 1.25; }
+.gp-dev { margin-top: 4px; font-size: 14px; font-weight: 500; color: #01875f; }
+.gp-facts { display: flex; justify-content: space-around; margin: 16px 24px 0; text-align: center; }
+.gp-facts div { display: flex; flex-direction: column; font-size: 11px; color: #5f6368; }
+.gp-facts b { font-size: 14px; color: #202124; }
+.install { margin: 14px 24px 0; padding: 9px; border-radius: 20px; background: #01875f; color: #fff;
+  font-size: 14px; font-weight: 500; text-align: center; }
+.gp-shots { display: flex; gap: 8px; padding: 18px 24px 8px; overflow: hidden; }
+.gp-shots img { display: block; flex: none; border-radius: 8px; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.18); }
+.gp-about { display: flex; justify-content: space-between; margin: 10px 24px 0; font-size: 17px; }
+
+/* ---- the contact sheet -------------------------------------------------------------------------- */
+.sheet-page { background: #f4f4f6; padding: 0 0 32px; }
+.sheet-head { padding: 20px 28px 8px; }
+.sheet-head h1 { margin: 0 0 6px; font-size: 22px; }
+.sheet-head p { margin: 0 0 6px; font-size: 13px; color: #3c3c43; max-width: 1100px; line-height: 1.45; }
+.target { margin: 14px 28px 0; padding: 14px 16px 16px; background: #fff; border-radius: 10px;
+  box-shadow: 0 0 0 1px #e2e2e8; }
+.target h2 { margin: 0 0 2px; font-size: 16px; }
+.target h2 small { font-size: 12px; font-weight: 400; color: #6c6c70; }
+.locales { display: flex; flex-wrap: wrap; gap: 0 40px; }
+.locale-row { margin-top: 12px; }
+.locale-row h3 { margin: 0 0 6px; font-size: 12px; color: #3c3c43; }
+.strip { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
+.pano { display: flex; gap: 0; }
+.seam { width: 10px; flex: none; margin: 0 3px;
+  background: repeating-linear-gradient(180deg, #d93025 0 6px, transparent 6px 10px); }
+.cell { display: flex; flex-direction: column; gap: 4px; flex: none; }
+.cell img { display: block; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); background: #ddd; }
+.cell .label { font-size: 11px; color: #3c3c43; font-weight: 600; }
+.badges { display: flex; flex-wrap: wrap; gap: 3px; max-width: 100%; }
+.badge { font-size: 10px; padding: 1px 5px; border-radius: 8px; white-space: nowrap; }
+.badge.fallback { background: #e8f0fe; color: #174ea6; }
+.badge.warn { background: #fef7e0; color: #8a5a00; }
+.badge.bad { background: #fce8e6; color: #a50e0e; font-weight: 600; }

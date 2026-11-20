@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="${lang}">
+<head>
+<meta charset="utf-8">
+<title>${title}</title>
+<link rel="stylesheet" href="mocks.css">
+</head>
+<body class="phone-page">
+<p class="notice">Approximation, not Apple's rendering: App Store search on an iPhone ${screen_pt} pt wide (1 CSS px here
+is 1 pt). Each portrait shot is about ${shot_pt} pt wide; one landscape shot fills the row. Captions under 11 pt are
+flagged. ${locale} &middot; ${target}</p>
+<div class="as">
+  <div class="search-bar">&#x2315; ${query}</div>
+  <div class="result">
+    <div class="result-head">
+      ${icon}
+      <div class="result-text">
+        <div class="name-1">${name}</div>
+        <div class="subtitle-1">${subtitle}</div>
+      </div>
+      <div class="get">Get</div>
+    </div>
+    <div class="search-shots">${shots}</div>
+  </div>
+  <div class="result ghost">
+    <div class="result-head">
+      <div class="ghost-icon"></div>
+      <div class="result-text"><div class="ghost-line"></div><div class="ghost-line short"></div></div>
+      <div class="get">Get</div>
+    </div>
+  </div>
+</div>
+${sizes}
+</body>
+</html>

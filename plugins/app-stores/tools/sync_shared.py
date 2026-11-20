@@ -33,6 +33,8 @@ ITEMS = {
 # Which skills get which shared items.
 SYNC = {
     "store-listings": ("appstores_lib", "rules"),
+    "store-screenshots": ("appstores_lib", "rules"),
+    "store-capture": ("appstores_lib", "rules"),
 }
 
 # Never copied, never counted as drift.

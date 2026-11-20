@@ -1,0 +1,10 @@
+name: sample_recipes
+description: Plan a week of meals in minutes.
+version: 1.4.0+42
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter
+  go_router: ^14.0.0
+  ailoha_agent: ^0.1.0

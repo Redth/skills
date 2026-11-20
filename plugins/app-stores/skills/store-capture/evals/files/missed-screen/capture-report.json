@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-14T12:05:03Z",
+  "plan": "capture-plan.json",
+  "shots": [
+    { "locale": "en-US", "device": "iphone-6.9", "screen": "plan", "status": "taken",
+      "path": "en-US/iphone-6.9/plan.png", "width": 1320, "height": 2868, "sha256": "…",
+      "driver": "devflow", "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2" }, "statusBar": "verified",
+      "fixes": [], "warnings": [] },
+    { "locale": "en-US", "device": "iphone-6.9", "screen": "shopping", "status": "missed",
+      "reason": "tap: id 'tab-shopping' didn't appear in 10 s", "kept": "previous",
+      "path": "en-US/iphone-6.9/shopping.png", "driver": "devflow" },
+    { "locale": "en-US", "device": "iphone-6.9", "screen": "recipe", "status": "taken",
+      "path": "en-US/iphone-6.9/recipe.png", "width": 1320, "height": 2868, "sha256": "…",
+      "driver": "devflow", "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2" }, "statusBar": "verified",
+      "fixes": [], "warnings": [] }
+  ]
+}

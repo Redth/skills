@@ -1,0 +1,468 @@
+{
+  "version": 1,
+  "renderedAt": "2026-11-14T10:00:00Z",
+  "config": "store-screenshots.json",
+  "inputsSha256": "fixture-not-a-real-hash",
+  "files": [
+    {
+      "path": "en-US/iphone/plan.png",
+      "locale": "en-US",
+      "target": "iphone",
+      "store": "apple",
+      "shot": "plan",
+      "layout": "framed-bleed",
+      "width": 1320,
+      "height": 2868,
+      "captureFallback": false,
+      "stringFallback": false,
+      "caption": {
+        "text": "Plan a week of meals in minutes",
+        "lines": 2,
+        "fontPx": 118.8,
+        "floorPx": 79.2,
+        "atFloor": false,
+        "fits": true,
+        "box": [
+          79,
+          115,
+          1162,
+          285
+        ],
+        "textShare": 0.09,
+        "missingGlyphs": []
+      },
+      "frame": {
+        "name": "phone",
+        "box": [
+          132,
+          574,
+          1056,
+          2438
+        ]
+      },
+      "callout": null,
+      "captureScale": 1.0,
+      "seams": [],
+      "sha256": "fixture-not-a-real-hash"
+    },
+    {
+      "path": "en-US/iphone/recipe.png",
+      "locale": "en-US",
+      "target": "iphone",
+      "store": "apple",
+      "shot": "recipe",
+      "layout": "framed-bleed",
+      "width": 1320,
+      "height": 2868,
+      "captureFallback": false,
+      "stringFallback": false,
+      "caption": {
+        "text": "Every recipe you love, organised step by step with timers, notes and photos",
+        "lines": 3,
+        "fontPx": 79.2,
+        "floorPx": 79.2,
+        "atFloor": true,
+        "fits": false,
+        "box": [
+          79,
+          115,
+          1162,
+          285
+        ],
+        "textShare": 0.17,
+        "missingGlyphs": []
+      },
+      "frame": {
+        "name": "phone",
+        "box": [
+          132,
+          574,
+          1056,
+          2438
+        ]
+      },
+      "callout": null,
+      "captureScale": 1.0,
+      "seams": [],
+      "sha256": "fixture-not-a-real-hash"
+    },
+    {
+      "path": "en-US/iphone/shopping.png",
+      "locale": "en-US",
+      "target": "iphone",
+      "store": "apple",
+      "shot": "shopping",
+      "layout": "callout",
+      "width": 1320,
+      "height": 2868,
+      "captureFallback": false,
+      "stringFallback": false,
+      "caption": {
+        "text": "Your list, sorted by aisle",
+        "lines": 1,
+        "fontPx": 118.8,
+        "floorPx": 79.2,
+        "atFloor": false,
+        "fits": true,
+        "box": [
+          79,
+          115,
+          1162,
+          143
+        ],
+        "textShare": 0.09,
+        "missingGlyphs": []
+      },
+      "frame": {
+        "name": "phone",
+        "box": [
+          132,
+          574,
+          1056,
+          2438
+        ]
+      },
+      "callout": null,
+      "captureScale": 1.0,
+      "seams": [],
+      "sha256": "fixture-not-a-real-hash"
+    },
+    {
+      "path": "en-US/iphone/profile.png",
+      "locale": "en-US",
+      "target": "iphone",
+      "store": "apple",
+      "shot": "profile",
+      "layout": "framed-bleed",
+      "width": 1320,
+      "height": 2868,
+      "captureFallback": false,
+      "stringFallback": false,
+      "caption": {
+        "text": "Your tastes, remembered",
+        "lines": 1,
+        "fontPx": 118.8,
+        "floorPx": 79.2,
+        "atFloor": false,
+        "fits": true,
+        "box": [
+          79,
+          115,
+          1162,
+          143
+        ],
+        "textShare": 0.09,
+        "missingGlyphs": []
+      },
+      "frame": {
+        "name": "phone",
+        "box": [
+          132,
+          574,
+          1056,
+          2438
+        ]
+      },
+      "callout": null,
+      "captureScale": 1.0,
+      "seams": [],
+      "sha256": "fixture-not-a-real-hash"
+    },
+    {
+      "path": "en-US/iphone-medium/plan.png",
+      "locale": "en-US",
+      "target": "iphone-medium",
+      "store": "apple",
+      "shot": "plan",
+      "layout": "framed-bleed",
+      "width": 1206,
+      "height": 2622,
+      "captureFallback": false,
+      "stringFallback": false,
+      "caption": {
+        "text": "Plan a week of meals in minutes",
+        "lines": 2,
+        "fontPx": 108.5,
+        "floorPx": 72.4,
+        "atFloor": false,
+        "fits": true,
+        "box": [
+          72,
+          105,
+          1061,
+          260
+        ],
+        "textShare": 0.09,
+        "missingGlyphs": []
+      },
+      "frame": {
+        "name": "phone",
+        "box": [
+          121,
+          524,
+          965,
+          2229
+        ]
+      },
+      "callout": null,
+      "captureScale": 0.914,
+      "seams": [],
+      "sha256": "fixture-not-a-real-hash"
+    },
+    {
+      "path": "en-US/iphone-medium/recipe.png",
+      "locale": "en-US",
+      "target": "iphone-medium",
+      "store": "apple",
+      "shot": "recipe",
+      "layout": "framed-bleed",
+      "width": 1206,
+      "height": 2622,
+      "captureFallback": false,
+      "stringFallback": false,
+      "caption": {
+        "text": "Every recipe you love, organised step by step with timers, notes and photos",
+        "lines": 3,
+        "fontPx": 72.4,
+        "floorPx": 72.4,
+        "atFloor": true,
+        "fits": false,
+        "box": [
+          72,
+          105,
+          1061,
+          261
+        ],
+        "textShare": 0.17,
+        "missingGlyphs": []
+      },
+      "frame": {
+        "name": "phone",
+        "box": [
+          121,
+          524,
+          965,
+          2229
+        ]
+      },
+      "callout": null,
+      "captureScale": 0.914,
+      "seams": [],
+      "sha256": "fixture-not-a-real-hash"
+    },
+    {
+      "path": "en-US/iphone-medium/shopping.png",
+      "locale": "en-US",
+      "target": "iphone-medium",
+      "store": "apple",
+      "shot": "shopping",
+      "layout": "callout",
+      "width": 1206,
+      "height": 2622,
+      "captureFallback": false,
+      "stringFallback": false,
+      "caption": {
+        "text": "Your list, sorted by aisle",
+        "lines": 1,
+        "fontPx": 108.5,
+        "floorPx": 72.4,
+        "atFloor": false,
+        "fits": true,
+        "box": [
+          72,
+          105,
+          1061,
+          130
+        ],
+        "textShare": 0.09,
+        "missingGlyphs": []
+      },
+      "frame": {
+        "name": "phone",
+        "box": [
+          121,
+          524,
+          965,
+          2229
+        ]
+      },
+      "callout": null,
+      "captureScale": 0.914,
+      "seams": [],
+      "sha256": "fixture-not-a-real-hash"
+    },
+    {
+      "path": "en-US/iphone-medium/profile.png",
+      "locale": "en-US",
+      "target": "iphone-medium",
+      "store": "apple",
+      "shot": "profile",
+      "layout": "framed-bleed",
+      "width": 1206,
+      "height": 2622,
+      "captureFallback": false,
+      "stringFallback": false,
+      "caption": {
+        "text": "Your tastes, remembered",
+        "lines": 1,
+        "fontPx": 108.5,
+        "floorPx": 72.4,
+        "atFloor": false,
+        "fits": true,
+        "box": [
+          72,
+          105,
+          1061,
+          130
+        ],
+        "textShare": 0.09,
+        "missingGlyphs": []
+      },
+      "frame": {
+        "name": "phone",
+        "box": [
+          121,
+          524,
+          965,
+          2229
+        ]
+      },
+      "callout": null,
+      "captureScale": 0.914,
+      "seams": [],
+      "sha256": "fixture-not-a-real-hash"
+    },
+    {
+      "path": "en-US/android-phone/plan.png",
+      "locale": "en-US",
+      "target": "android-phone",
+      "store": "google",
+      "shot": "plan",
+      "layout": "framed-bleed",
+      "width": 1080,
+      "height": 1920,
+      "captureFallback": false,
+      "stringFallback": false,
+      "caption": {
+        "text": "Plan a week of meals in minutes",
+        "lines": 2,
+        "fontPx": 97.2,
+        "floorPx": 64.8,
+        "atFloor": false,
+        "fits": true,
+        "box": [
+          65,
+          77,
+          950,
+          233
+        ],
+        "textShare": 0.09,
+        "missingGlyphs": []
+      },
+      "frame": null,
+      "callout": null,
+      "captureScale": 1.0,
+      "seams": [],
+      "sha256": "fixture-not-a-real-hash"
+    },
+    {
+      "path": "en-US/android-phone/recipe.png",
+      "locale": "en-US",
+      "target": "android-phone",
+      "store": "google",
+      "shot": "recipe",
+      "layout": "framed-bleed",
+      "width": 1080,
+      "height": 1920,
+      "captureFallback": false,
+      "stringFallback": false,
+      "caption": {
+        "text": "Every recipe you love, organised step by step with timers, notes and photos",
+        "lines": 3,
+        "fontPx": 64.8,
+        "floorPx": 64.8,
+        "atFloor": true,
+        "fits": false,
+        "box": [
+          65,
+          77,
+          950,
+          233
+        ],
+        "textShare": 0.17,
+        "missingGlyphs": []
+      },
+      "frame": null,
+      "callout": null,
+      "captureScale": 1.0,
+      "seams": [],
+      "sha256": "fixture-not-a-real-hash"
+    },
+    {
+      "path": "en-US/android-phone/shopping.png",
+      "locale": "en-US",
+      "target": "android-phone",
+      "store": "google",
+      "shot": "shopping",
+      "layout": "callout",
+      "width": 1080,
+      "height": 1920,
+      "captureFallback": false,
+      "stringFallback": false,
+      "caption": {
+        "text": "Your list, sorted by aisle",
+        "lines": 1,
+        "fontPx": 97.2,
+        "floorPx": 64.8,
+        "atFloor": false,
+        "fits": true,
+        "box": [
+          65,
+          77,
+          950,
+          117
+        ],
+        "textShare": 0.09,
+        "missingGlyphs": []
+      },
+      "frame": null,
+      "callout": null,
+      "captureScale": 1.0,
+      "seams": [],
+      "sha256": "fixture-not-a-real-hash"
+    },
+    {
+      "path": "en-US/android-phone/profile.png",
+      "locale": "en-US",
+      "target": "android-phone",
+      "store": "google",
+      "shot": "profile",
+      "layout": "framed-bleed",
+      "width": 1080,
+      "height": 1920,
+      "captureFallback": false,
+      "stringFallback": false,
+      "caption": {
+        "text": "Your tastes, remembered",
+        "lines": 1,
+        "fontPx": 97.2,
+        "floorPx": 64.8,
+        "atFloor": false,
+        "fits": true,
+        "box": [
+          65,
+          77,
+          950,
+          117
+        ],
+        "textShare": 0.09,
+        "missingGlyphs": []
+      },
+      "frame": null,
+      "callout": null,
+      "captureScale": 1.0,
+      "seams": [],
+      "sha256": "fixture-not-a-real-hash"
+    }
+  ]
+}

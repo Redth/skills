@@ -1,0 +1,6 @@
+[
+  { "id": "a1", "project": "SampleRecipes.csproj", "tfm": "net10.0-ios", "platform": "iOS", "appName": "Sample Recipes",
+    "port": 10223, "processId": 25102, "connectedAt": "2026-11-14T08:26:43Z" },
+  { "id": "a2", "project": "SampleRecipes.csproj", "tfm": "net10.0-ios", "platform": "iOS", "appName": "Sample Recipes",
+    "port": 10224, "processId": 58016, "connectedAt": "2026-11-14T09:48:37Z" }
+]

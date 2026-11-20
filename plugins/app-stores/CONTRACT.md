@@ -532,7 +532,452 @@ the public lookup, import, diff), `importing.md`, `pitfalls.md`, `agent-rules.md
 
 ---
 
-## 7. Versioning
+## 8. `store-screenshots`
+
+Designs and renders store screenshots from an app's real captures: one design, every store, size and locale.
+Proposal issue #12. Research behind it: screenshot design principles with their evidence (shots 1–3 decide the first
+impression; one message a shot; captions sized for the thumbnail; one set per store; drawn frames only).
+
+### 8.1 Layout
+
+```
+skills/store-screenshots/
+  SKILL.md  VERSION
+  references/      principles.md (each with its evidence grade), store-rules.md (what each store allows in a
+                   screenshot), layouts.md, frames.md (why drawn frames; using your own Apple bezels as they are),
+                   panoramas.md, localisation.md, legibility.md, checklist.md (the pre-ship list), evidence.md,
+                   style.md, baseline.md, current-set.md (reading the listing's current set first)
+  schema/store-screenshots.schema.json
+  templates/       set.html (the engine page), layouts/*.css, base.css
+  frames/          <name>.svg + <name>.json (the screen rectangle and corner radius): phone, phone-landscape,
+                   tablet, tablet-landscape, laptop, desktop, tv, watch. Generic and drawn: no notch, island,
+                   home button, camera bump or brand shape (Apple's guidelines forbid simulating its devices).
+  mocks/           search-row.html, product-page.html, play-listing.html, contact-sheet.html
+  rules/           (copied from shared/rules: the stores' `design` tables)
+  scripts/
+    appstores_lib/ (copied)
+    render.py  check.py  sheet.py  styles.py  baseline.py  samples.py (made-up screens for --styles)  test_*.py
+  evals/  evals.json  trigger-evals.json  files/
+```
+
+### 8.2 The design config: `store-screenshots.json`
+
+Beside `store-listing.json` usually; paths relative to it. Plain JSON, schema in `schema/`.
+
+```json
+{
+  "$schema": "./store-screenshots.schema.json",
+  "version": 1,
+  "captures": "captures",
+  "out": "screenshots",
+  "primaryLocale": "en-US",
+  "locales": ["en-US", "de-DE"],
+  "theme": {
+    "fonts": [ { "family": "Brand Sans", "src": "fonts/BrandSans.woff2", "weight": "400 900", "style": "normal" } ],
+    "palette": { "background": "#0E3B2E", "ink": "#FFFFFF", "accent": "#FFC94D" },
+    "background": { "kind": "color" },
+    "caption": { "placement": "top", "align": "center", "maxLines": 2, "weight": 800, "sizePct": 8.0,
+                 "floorPct": 6.0, "font": "Brand Sans" },
+    "frame": "phone"
+  },
+  "targets": {
+    "iphone":        { "store": "apple",  "width": 1320, "height": 2868, "capture": "iphone-6.9" },
+    "iphone-medium": { "store": "apple",  "width": 1206, "height": 2622, "capture": "iphone-6.3" },
+    "ipad":          { "store": "apple",  "width": 2064, "height": 2752, "capture": "ipad-13", "frame": "tablet" },
+    "android-phone": { "store": "google", "width": 1080, "height": 1920, "capture": "android-phone" }
+  },
+  "shots": [
+    { "id": "plan",   "capture": "plan",   "layout": "hero",         "caption": "cap.plan", "proof": "cap.proof" },
+    { "id": "recipe", "capture": "recipe", "layout": "framed-bleed", "caption": "cap.recipe",
+      "callout": { "rect": [0.08, 0.42, 0.84, 0.12], "scale": 1.35 } },
+    { "id": "shop",   "capture": "shopping", "layout": "tilt", "tilt": "left", "caption": "cap.shop",
+      "targets": ["iphone", "iphone-medium", "ipad"] }
+  ],
+  "panorama": null,
+  "stores": { "google": { "frame": "none" }, "apple": {} },
+  "strings": {
+    "en-US": { "cap.plan": "Plan a week of meals in minutes", "cap.recipe": "Every recipe, step by step",
+               "cap.shop": "Your list, sorted by aisle", "cap.proof": "Loved by home cooks" },
+    "de-DE": { "cap.plan": "Eine Woche Essen in Minuten planen" }
+  }
+}
+```
+
+- **Captures** are `store-capture`'s layout: `<captures>/<locale>/<capture device id>/<capture screen id>.png`; a
+  locale without one falls back to the primary locale's (reported). A capture must be at least the size its target
+  shows it at (never upscaled past 1.0; the check says when it would be).
+- **Targets** are the output screens: each one's id is the `screens` name `store-listing.json` uses, `width`×`height`
+  its exact pixels, `store` which store's rules apply, `capture` which capture device feeds it, optional overrides
+  (`frame`, `layout`, `caption`). Output: `<out>/<locale>/<target id>/<shot id>.png` — exactly the folder layout
+  `store-listings` reads.
+- **Shots** are the ordered set: `capture` (the capture screen id), `layout`, `caption` and `kicker`/`proof` (string
+  keys), `targets` (null = all), layout options (`tilt`: `left`|`right`, `callout`: rect as fractions of the capture
+  and a scale, `pair`: a second capture, `at`: `top`|`bottom` for `fullbleed`).
+- **Strings** per locale, falling back key by key to the primary locale (reported). Placeholders none.
+- **Stores** override theme and per-shot settings for every target of that store (`frame`, `layout`, `caption`:
+  `false` for no words, e.g. a store whose rules want none).
+- **Panorama** (optional): `{ "shots": [ids in order], "background": "path or null", "seam": 6 }` — those shots
+  share one canvas N slots wide; each slot is rendered with the canvas shifted; nothing load-bearing within `seam`
+  units of a seam.
+
+### 8.3 Units and layouts
+
+`--u` is 1% of the slot's width. Aspect classes: `tall` (< 0.6 w/h), `mid` (0.6–0.85), `square` (0.85–1.2), `wide`
+(> 1.2); each layout's CSS has rules per class (`[data-aspect="tall"]` etc.), so one design renders every size.
+
+| Layout | What it is |
+|---|---|
+| `fullbleed` | the capture fills the slot, a caption plate over it (`at` top or bottom) — games' usual |
+| `band` | a caption band, the capture below it, no frame |
+| `framed` | the capture in a drawn frame, whole, caption above |
+| `framed-bleed` | framed and cut off by the bottom edge (the apps' usual) |
+| `tilt` | framed, rotated in 3D (CSS `perspective` + `rotate3d` presets), soft shadow |
+| `pair` | two framed captures at true relative scale |
+| `callout` | `framed-bleed` plus a clipped, enlarged copy of `callout.rect` lifted out with a shadow |
+| `hero` | brand and claim large, `proof` line, and a sliver of real UI (2.3.3: the app in use) |
+| `gameplay` | the capture full-bleed, no words, no frame |
+
+### 8.4 The render report: `<out>/render-report.json`
+
+```json
+{
+  "version": 1, "renderedAt": "…", "config": "store-screenshots.json", "inputsSha256": "…",
+  "files": [
+    { "path": "en-US/iphone/plan.png", "locale": "en-US", "target": "iphone", "store": "apple", "shot": "plan",
+      "layout": "hero", "width": 1320, "height": 2868, "captureFallback": false, "stringFallback": false,
+      "caption": { "text": "Plan a week of meals in minutes", "lines": 2, "fontPx": 105.6, "floorPx": 79.2,
+                   "atFloor": false, "fits": true, "box": [x, y, w, h], "textShare": 0.11,
+                   "missingGlyphs": [] },
+      "frame": { "name": "phone", "box": [x, y, w, h] }, "callout": null, "captureScale": 0.92,
+      "seams": [], "sha256": "…" }
+  ]
+}
+```
+
+The page reports these through `window.__appstoresReport` (`chrome.render` returns it). `textShare` is the summed
+area of every text box over the slot's area. Rendering is cached: a file isn't re-rendered when its inputs'
+hash (config section, strings, capture bytes, fonts, templates, frames) is unchanged.
+
+### 8.5 Commands
+
+- `render.py [--config store-screenshots.json] [--locales …] [--targets …] [--shots …] [--force]`: renders through
+  one `chrome.Chrome`, writes the PNGs (opaque, RGB, exact size) and the report. Exit 0, 1 (a render failed or a
+  caption couldn't fit at the floor), 3 (usage/environment).
+- `check.py [--config …] [--json]`: from the report and the PNG headers: exact size per target, no alpha, counts per
+  store, caption fit/floor/lines/words (≤ 2 lines, warn over 6 words), text share (Google ≤ 20%, from the rules'
+  `design` table), frame rules per store (Apple: drawn frames fine, a user's Apple bezel never tilted, cropped or
+  overlapped; Google: frames discouraged — warning; Wear: none), forbidden words in captions (the rules' `words`
+  rules whose fields include `captions`), missing glyphs, seams, contrast (WCAG ratio of the caption's ink against
+  the median of the pixels behind its box, ≥ 4.5:1, from `png.decode_rgb`), capture upscaling, fallbacks; plus the
+  checklist items a person must judge. Exit codes as `listing.py check`.
+- `sheet.py [--config …] [--png]`: the mocks at real display size from the rendered files: Apple's search row (first
+  three portrait shots at the row's real width, with the caption's size in points computed and shown), the product
+  page's first screen, Play's listing row, and a contact sheet of every target × locale × shot with seams as
+  gutters. `--png` renders them through Chrome to `<out>/sheets/*.png` for an agent to look at. The design sheets
+  (§8.7): `--current [DIR]`, `--inspiration`, `--styles`, `--directions DIRS [--draft]`, `--compare DIR`.
+
+### 8.5a Settled details
+
+- **A user's own device art:** `frame` may be a path (relative to the config) to an SVG or PNG with a JSON beside it in
+  the drawn frames' shape plus `"drawn": false, "maker": "apple"` (or another maker). `render.py` uses it as it is;
+  `check.py` refuses (error) tilt, crop (`framed-bleed`), callout overlap or 3D on a `maker: "apple"` frame for Apple
+  targets, and any maker's device art on Google targets is a warning.
+- **Precedence:** target overrides beat store overrides beat shot settings beat the theme.
+- **Exit codes:** `render.py` and `sheet.py` exit 3 when Chrome is missing. `render.py` writes the report even when it
+  exits 1 for a caption that won't fit at the floor.
+- **Sheets** are `<out>/sheets/search-row-<locale>.png`, `product-page-<locale>-<target>.png`,
+  `play-listing-<locale>.png`, `contact-sheet.png`.
+- **Targets' `store`** is `apple` or `google` in 0.1 (Steam and itch.io are reference only).
+- `store-listings` ignores `render-report.json` and `sheets/` beside the locale folders.
+- `check.py` and `sheet.py` take `--report PATH` (default `<out>/render-report.json`; file paths in it stay relative
+  to `<out>`) and `--listing PATH` (default `store-listing.json` beside the config, if there), from which they read
+  `stores.google.slots` (which Play slot a target fills), the category (Play's featuring counts) and `rules.relax`;
+  `sheet.py` also takes the app's name, subtitle and icon from it.
+- The report's `caption` also carries `ink` and `accent` (#RRGGBB), and `kicker`/`proof` their `ink`, for contrast.
+- Frame JSON: `{name, kind, orientation, drawn, maker, viewBox, screen: {x, y, width, height}, screenRadius, stretch,
+  realWidthMm}`. A user's own art: the same with `"drawn": false` and its `maker`; never stretched.
+- Schema additions to §8.2: `theme.icon`; `theme.palette.{background2, plate, plateInk, band, bandInk}`;
+  `theme.background.kind` ∈ `color` | `gradient` | `glow` (default) | `image` with `src`, `angle`, `dim`;
+  `caption.plate` ∈ `solid` | `scrim` | `none` (fullbleed); `caption.align: "end"`; `shot.frame`, `shot.captionStyle`;
+  `shot.pair` (a capture screen id or `{capture, device, frame}`); `panorama.seam` may be null. In captions, `*word*`
+  takes the accent colour and `\n` breaks the line.
+
+### 8.6 Rules data: the `design` table
+
+Each store's rules file gets a top-level `design` object (beside `slots`), each entry with `source`, `checked`,
+`status` like a rule: `frames` (`allowed` | `discouraged` | `required` | `forbidden`, per slot group where it
+differs, e.g. Google's Wear `forbidden`: Wear OS screenshots must have no frame), `maxTextShare` (Google 0.2 for promotion), `captions` (allowed or not),
+`awards` (allowed or not), `deviceArt` (whose device art may be used and how), `inUseMajority` (Apple: more than
+half of a set shows the app in use), `backgrounds`, and `uiFirst` (Google: real UI in the first three).
+
+### 8.7 Taste, directions and the baseline
+
+A set should look like one family across updates. The skill gets there in five steps, after a step 0 for an app
+that already has a listing; the files live in the user's project beside the config (paths relative to it), under
+`design/` unless the config's `"design"` names another folder.
+
+0. **The current set.** Most apps have a live listing; its screenshots are the baseline for the story. They come from
+   `store-listings`' `push.py pull` (`existing/<store>/screenshots/<locale>/<slot>/<NN>.<ext>`) or any folder (e.g.
+   `assets/screenshots/<device>/Screenshot-NN.png`). `sheet.py --current <folder>` groups the pictures (a pulled
+   listing by store, locale and slot, App Store first, its other pictures left out; any other folder by subfolder),
+   orders each group by the number in the names, writes a skeleton `design/current.json` when there's none, and lays
+   each shot beside its analysis in `design/sheets/current.png` (`--current` alone reads `current.json`'s `source`).
+   The agent fills `design/current.json` (schema `$defs/current` in the style schema): `{"version": 1, "source":
+   "<folder>", "shots": [{"file" (relative to source), "group", "order" (from 1), "screen" (the app screen it
+   shows), "capture" (the capture screen id for it now), "caption" (the words on it, read from the picture), "layout"
+   (the skill's vocabulary; a plain screenshot is gameplay), "traits": {…}, "verdict": "keep"|"change"|"drop"|null,
+   "notes"}], "summary": {"traits": {…}, "look": "keep"|"evolve"|"replace"|null, "whatWorks": [..], "whatDoesnt":
+   [..], "notes", "confirmedByUser": bool}}`. Verdicts, `look` and `confirmedByUser` are the user's. The storyboard
+   starts from it (the screens kept, in order; their captions kept or rewritten); the inspiration board shows it as
+   one example (to keep or move away from).
+1. **Inspiration.** The user provides 3–6 examples they like and 1–2 they don't (images they saved, of any app or game)
+   in `design/inspiration/`. The agent writes `design/inspiration/inspiration.json`:
+   `{"version": 1, "examples": [{"file", "source" (free text: where it came from), "likes": [..], "dislikes": [..],
+   "traits": {…}}], "summary": {"traits": {…}, "confirmedByUser": true|false}}`. `traits` use the vocabulary in the
+   style schema (§ below). Examples inform the style only: never their marks, illustrations or trade dress. Scripts
+   never fetch anything; `sheet.py --inspiration` lays the examples out with their notes for the user to confirm
+   (the current set's card first, when `current.json` exists). With no examples, `sheet.py --styles` renders every
+   starting style on one made-up app (screens drawn at run time by `samples.py`, never committed) into
+   `design/sheets/styles.png`, for the user to pick by eye.
+2. **Directions.** 2–4 candidate styles, each `design/directions/<name>/screenshot-style.json` (from the shipped
+   starting points in `styles/` or written fresh). `render.py --style <file> --out design/explore/<name> --shots
+   <first 3> --targets <one>` renders each; `sheet.py --directions design/explore/a,design/explore/b,…` shows them side
+   by side at search-row size and full size. When the user asks for directions up front, the agent may in one turn
+   draft the brief and storyboard (from the current set) and render 2–3 directions' first three shots; `--draft`
+   heads the sheet "Drafts for you to correct", and nothing is chosen, logged, approved or locked until the user
+   answers.
+3. **Iterate.** One change a round; `sheet.py --compare <previous out>` shows before and after. Each decision the user
+   makes goes in `design/decisions.md` (date, what, why, in the user's terms).
+4. **Approve the baseline.** `baseline.py approve [--note "…"]`: needs a render report for the current config and style
+   (same `inputsSha256`), copies the renders, the report and the style file into `design/baseline/` (the previous
+   baseline moves to `design/baseline/history/<date>/`), writes `design/baseline/baseline.json`
+   `{version, approvedAt, note, style: "<path>", styleSha256, configSha256, report: "render-report.json",
+   files: [...]}`, and sets the style's `"locked": true`.
+5. **Updates.** Renders use the locked style. `check.py --baseline [design/baseline]` measures drift per target and
+   role (or layout) against the baseline's report — caption size relative to width, caption box top and height, line
+   count, frame name and box (x, y, width, height as fractions), tilt, text share, caption ink and accent, background
+   kind — using the style's `drift` tolerances; drift is a warning (the user decides). A locked style whose hash
+   differs from the baseline's is an **error** ("the locked style changed: approve a new baseline with the user, or
+   put it back"). `sheet.py --compare design/baseline` pairs baseline and current shots. `baseline.py status` says
+   whether the style or config changed since the baseline and which shots have no baseline counterpart.
+   `baseline.py unlock --reason "…"` (only when the user asks) clears `locked` and logs the reason in `decisions.md`.
+
+**The style file `screenshot-style.json`** (schema `schema/screenshot-style.schema.json`):
+
+```json
+{
+  "version": 1, "name": "Bold caption on brand colour", "locked": false,
+  "traits": { "captionPosition": "top", "captionSize": "loud", "captionWeight": "heavy", "captionCase": "sentence",
+              "emphasis": "accent-word", "device": "realistic", "devicePlacement": "bleed-bottom",
+              "background": "brand-colour", "density": "standard", "colour": "monochrome-brand", "mood": "bold" },
+  "theme": { "…": "the same object as the config's theme (§8.2)" },
+  "roles": { "hero": { "layout": "hero" }, "feature": { "layout": "framed-bleed" },
+             "detail": { "layout": "callout" }, "accent": { "layout": "tilt", "maxPerSet": 1 },
+             "gameplay": { "layout": "fullbleed" } },
+  "stores": { "google": { "frame": "none" } },
+  "copy": { "maxWords": 5, "maxLines": 2, "case": "sentence", "emphasis": "one accent word at most" },
+  "drift": { "…": "tolerances: see schema/screenshot-style.schema.json and references/baseline.md" }
+}
+```
+
+- A role may carry `stores`: `{"google": {"layout", "frame"}}`, the role's layout and frame on that store's targets
+  where the shot sets none of its own (between the shot's settings and the config's store overrides). The app
+  starting styles give their `hero` a Play layout of real UI this way, so shot 1 doesn't trip `google.design.ui_first`.
+- The config names it with `"style": "screenshot-style.json"`. With a style, a shot may give a `role` instead of a
+  `layout` (the style's `roles` map it); a shot's own `layout` still works, and with a locked style one that isn't in
+  `roles` is a warning. The config's `theme` and `stores` are merged under the style's (the style wins); with a locked
+  style, a config `theme` key that differs from the style's is a check error.
+- `traits` values come from a fixed vocabulary in the schema (enums), shared with `inspiration.json`.
+- The skill ships starting points in `skills/store-screenshots/styles/*.json` (named directions, each with its traits,
+  numbers and who it suits).
+- `copy` rules are checked on captions (`maxWords`, `maxLines`, `case`) as warnings.
+
+## 10. `store-capture`
+
+Captures an app's screens (and preview videos) at exactly the sizes the stores want, on any stack, by whichever
+technique fits the app. Proposal issue #13. Its output is what `store-screenshots` reads as captures and what
+`store-listings` reads as screenshots when they go up as they are.
+
+### 10.1 Layout
+
+```
+skills/store-capture/
+  SKILL.md  VERSION
+  references/   staging.md (agreeing with the user which screens and how each is staged: sign-in, data, skips,
+                permissions, flags, clock, network, state and verify, confirming on one screen, reuse),
+                choosing.md (which technique for which app: a decision table), screenshot-mode.md (adding a
+                launch-argument / deep-link screenshot mode to an app, per stack), devflow.md, ailoha.md, appium.md,
+                ui-automation.md (XCUITest, UI Automator, Maestro, macOS Accessibility), simctl.md, adb.md, web.md,
+                desktop.md, engines.md (Unity, Godot, Unreal), importing.md, video.md, clean-state.md (status bar,
+                demo data, clock, locale, appearance), sizes.md (which device renders which store size natively),
+                pitfalls.md, config.md (every field of the plan)
+  schema/capture-plan.schema.json
+  scripts/
+    appstores_lib/   (copied)
+    capture.py       plan → drivers → folder + report
+    drivers/         one module per driver (§10.3)
+    import_captures.py  check_captures.py  video.py  test_*.py
+  evals/  evals.json  trigger-evals.json  files/
+```
+
+### 10.2 The capture plan: `capture-plan.json`
+
+```json
+{
+  "$schema": "./capture-plan.schema.json",
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "build/SampleRecipes.app" },
+           "android": { "package": "com.example.samplerecipes", "activity": ".MainActivity", "apk": "build/app.apk" },
+           "web": { "url": "http://localhost:8080" } },
+  "locales": ["en-US", "de-DE"],
+  "appearance": "light",
+  "clock": "09:41",
+  "statusBar": "clean",
+  "seed": "demo",
+  "staging": {
+    "account": { "kind": "demo", "env": ["SAMPLE_DEMO_USER", "SAMPLE_DEMO_PASSWORD"] },
+    "seed": { "kind": "command", "run": "./store/seed-demo.sh" },
+    "launch": { "args": { "DemoUser": "${SAMPLE_DEMO_USER}" }, "env": { "DemoUser": "${SAMPLE_DEMO_USER}" } },
+    "skip": [ { "what": "onboarding", "how": "the screenshot mode marks it seen" } ],
+    "permissions": { "ios": ["photos"], "android": ["android.permission.POST_NOTIFICATIONS"] },
+    "clock": { "now": "2026-11-14T09:41", "how": "ScreenshotNow" },
+    "network": { "kind": "offline" },
+    "confirmed": { "screen": "plan", "device": "iphone-6.9", "on": "2026-11-14" }
+  },
+  "devices": [
+    { "id": "iphone-6.9", "platform": "ios", "driver": "simctl", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max", "runtime": "latest" } },
+    { "id": "android-phone", "platform": "android", "driver": "adb", "width": 1080, "height": 1920,
+      "target": { "avd": "Medium_Phone", "wmSize": "1080x1920", "density": 420 } },
+    { "id": "maui-iphone", "platform": "ios", "driver": "devflow", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max" } }
+  ],
+  "screens": [
+    { "id": "plan", "state": "this week's plan, five invented recipes",
+      "steps": [ { "launch": { "args": { "ScreenshotScreen": "plan" } } }, { "wait": { "text": "This week" } } ],
+      "verify": { "text": "Lemon Pasta" } },
+    { "id": "recipe", "steps": [ { "deepLink": "samplerecipes://recipe/demo" }, { "wait": { "id": "recipe-title" } } ] },
+    { "id": "search", "devices": ["iphone-6.9"],
+      "steps": [ { "launch": {} }, { "tap": { "id": "search" } }, { "type": { "text": "pasta" } },
+                 { "wait": { "ms": 800 } } ] },
+    { "id": "flow-made", "steps": [ { "flow": "flows/onboarding.yaml" } ] }
+  ]
+}
+```
+
+- **Devices** promise an exact `width`×`height` (from the store's rules); a capture that comes out any other size is
+  `failed`, never resized. `driver` picks the technique; `target` is the driver's own settings.
+- **Screens** are reached by **steps**, run in order, then a screenshot. Step kinds: `launch` (`args`, `env`,
+  `clean`: reinstall/clear data first), `deepLink` (a URL), `url` (web), `tap`, `type` (`text`, optional target),
+  `wait` (`ms`, or an element to appear, with `timeout`), `scroll` (`to` an element or `direction`), `back`,
+  `swipe`, `flow` (a Maestro flow or a UI test name, run by the driver that understands it), `script` (a command
+  the user provides, run as is, with `APPSTORES_DEVICE`, `APPSTORES_LOCALE`, `APPSTORES_SCREEN`,
+  `APPSTORES_PLATFORM`, `APPSTORES_APP_ID` and the host's `APPSTORES_UDID` or `ANDROID_SERIAL`/`APPSTORES_SERIAL`),
+  `appFile` (a file copied into the app's own data: the simulator's data container, Android's data folder through
+  `run-as`), `settle` (wait for no animation: two identical frames, optionally ignoring rectangles). Elements are found by
+  `id` (accessibility identifier / automation id / resource id / test id), `text`, `label` or `xpath`; each driver
+  says which it supports and reports `skipped` for steps it can't do.
+- `locales`, `appearance` (`light` | `dark`), `clock`, `statusBar` (`clean` | `as-is`) and `seed` (passed to the
+  app as `ScreenshotSeed` in launch args / extras) are set per device by the driver before the screens and reset
+  after.
+- Any field may be overridden per device or per screen (`devices[].locales`, `screens[].devices`, …).
+- **Staging** (`staging`, agreed with the user before the plan runs): `account` (`kind`: `none`, `guest`, `bypass`,
+  `demo`; a demo account only by the names of its environment variables, `env`, never values and never a real
+  person's account), `seed` (`kind`: `command` run before each screen, `file` copied into the app's data as an
+  `appFile` step, `launch`, `backend`, `none`; `when`: `each-screen` or `once`), `launch` (`args` and `env` added
+  to every `launch` step; `${NAME}` takes one of `account.env`, from the environment, masked in logs and reports),
+  `skip`, `permissions` (by platform: granted before launch, revoked after), `flags`, `clock` (the app's own
+  "now"), `network`, `confirmed` (`{screen, device, on}`: until set, `capture.py` captures one screen at a time),
+  `doc` (the readable copy, default `staging.md`, written by `capture.py --write-staging`; a run warns when it no
+  longer matches). A screen's `"staging": false` leaves it out.
+- **Per screen**: `state` (what it must show, in plain words) and `verify` (an element, or a list, that must be on
+  screen before the shot; otherwise the shot is `missed`, "wrong state"). Overrides may change both.
+
+### 10.3 Drivers
+
+| Driver | Platforms | How it reaches screens | Needs |
+|---|---|---|---|
+| `simctl` | iOS, iPadOS, tvOS, watchOS, visionOS simulators | `launch` args/env, `deepLink` (`simctl openurl`); taps only through another driver | Xcode |
+| `adb` | Android phones, tablets, TV, Wear, Fire (emulators or devices) | `launch` extras, `deepLink` (`am start -d`), `tap`/`type`/`swipe`/`back` via `input` and `uiautomator dump` lookups | Android SDK platform-tools (and emulator) |
+| `devflow` | .NET MAUI apps with the DevFlow agent (dotnet/maui-labs) | the agent's visual tree, actions and screenshots over its local HTTP API / CLI | the agent package in a debug build; its CLI |
+| `ailoha` | MAUI, native Android, Swift, Flutter, React Native/Expo, WinUI, WPF apps with the Ailoha agent | the agent's UI tree, actions and screenshots via the `ailoha` CLI (or its local HTTP API) | the agent package; `@ailoha/cli` |
+| `appium` | iOS (XCUITest driver), Android (UiAutomator2), Mac, Windows; MAUI, RN, Flutter, native | W3C WebDriver JSON over HTTP to a local Appium server (stdlib; no client library) | Appium 2/3 server and drivers |
+| `xcuitest` | iOS/iPadOS/tvOS/macOS native and anything XCUITest drives | `flow`: runs `xcodebuild test -only-testing:` the user's screenshot tests, then exports attachments with `xcresulttool` | Xcode, a UI test target |
+| `uiautomator` | Android | the device's own `uiautomator dump` + `input` (the `adb` driver's element finding, usable on its own) | platform-tools |
+| `maestro` | iOS, Android, web | `flow`: `maestro test` a flow that calls `takeScreenshot`; or steps translated to a generated flow | Maestro CLI |
+| `macos` | Mac apps | `launch`, Accessibility via `osascript` (System Events: click by name, keystrokes), `screencapture -l <window id>` with the shadow off | macOS, Accessibility permission |
+| `chrome` | web apps, PWAs | headless Chrome (shared client): `url`, `tap`/`type`/`wait` by selector via `Runtime.evaluate` | Chrome |
+| `import` | anything that already made screenshots | reads another tool's folder with a mapping (`import_captures.py`) | — |
+
+Each driver is a module in `scripts/drivers/` with `prepare(device, plan)`, `run_screen(device, screen, locale)
+-> Shot`, `reset(device)` (always called, in `finally`) and `capabilities()` (the step kinds and element finders it
+supports). Drivers run external commands only through `drivers/base.py`'s `run()` (logs the command, a timeout,
+a fake for tests) and talk HTTP only to `localhost`/`127.0.0.1` through `web.py`. `base.run_screen` checks the
+screen's `verify` after its steps (`Shot.state_check`: `passed`, `failed`, `unchecked`, `none`) and, with
+`--inspect`, saves its UI tree (`inspect_tree`).
+
+**In-app agents are pinned**: `devflow` and `ailoha` list the agents, read each one's status (device id, package,
+process), and use only the one that is the plan's app on the dedicated device (the simulator's UDID, directly or
+through the process's path; on Android the process `pidof` reports on the serial), passing `--agent-port` (and on
+Android `--device <serial>` and `ANDROID_SERIAL`) on every command; found again after each launch; none or several
+is an error, never a guess. The app is changed only through the CLI (DevFlow's lease), one command at a time,
+retried when another client's command turned it away; a reply of `success: false` fails the step. Status bars:
+`verified` only when confirmed (iOS: `status_bar list`; Android: the bar's pixels moved with demo mode's clock),
+else `unverified`.
+
+**Network**: drivers talk only to the local machine (simulators, emulators, devices over adb, a local Appium
+server, the in-app agents on loopback ports). Nothing reaches the internet.
+
+### 10.4 Output
+
+`<out>/<locale>/<device id>/<screen id>.png` — 8-bit RGB (no alpha, no `tRNS`), sRGB, not interlaced, exactly the
+device's size — and `<out>/capture-report.json`:
+
+```json
+{ "version": 1, "startedAt": "…", "plan": "capture-plan.json",
+  "shots": [ { "locale": "en-US", "device": "iphone-6.9", "screen": "plan", "status": "taken",
+               "path": "en-US/iphone-6.9/plan.png", "width": 1320, "height": 2868, "sha256": "…",
+               "driver": "simctl", "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2" },
+               "statusBar": "verified" | "overridden" | "unverified" | "none", "fixes": [], "warnings": [],
+               "state": "…", "stateCheck": "passed" | "failed" | "unchecked" },
+             { "…": "status missed: not reached (kept: previous|none, reason); failed: wrong size etc.; skipped: a step or device the driver can't do" } ] }
+```
+
+Adapters write into a temp folder and move files into place at the end. `fixes` lists what was changed
+(`alpha-flattened`, `converted-to-srgb`, `16-bit-to-8-bit`), never a resize; an alpha channel that's all opaque is
+flattened without a per-shot mention and counted once in the report's `notes`. `check_captures.py` reads PNG headers
+against the plan (and, with `--rules`, the stores' accepted sizes; a required App Store display type no device fills
+is a note) and lists what's wrong.
+
+### 10.5 Rules every driver keeps
+
+One state for every device of a kind, in one pass, same seed and clock; lay out at the target size (pick the device,
+`wm size`, viewport) and never scale; a clean status bar where there is one, recorded as verified or not; wait for
+the screen to settle (no toasts, spinners, keyboards unless asked); reset everything changed (status bar, demo mode,
+`wm size`, locale, appearance, permissions) in `finally`; never touch the person's own simulators or devices unless
+the plan names them (create and own dedicated ones by default: `appstores-<device id>`); report honestly.
+
+### 10.6 Commands
+
+- `capture.py [--plan capture-plan.json] [--devices …] [--screens …] [--locales …] [--keep-going] [--cleanup]
+  [--dry-run] [--inspect]`: `--dry-run` prints each device's preparation and each step as the driver would run it,
+  running nothing; `--inspect` saves each screen's UI tree to `<out>/.inspect/`. Exit 3 when a staged plan isn't
+  confirmed and the run has more than one screen, or a staging account's variable isn't set.
+- `capture.py --write-staging` (writes `staging.md`); `capture.py --current [folder]` (lists the current store
+  screenshots: `existing/<store>/screenshots/`, `store-screenshots.json`'s shots, `design/current.json`, a folder).
+- `import_captures.py --from fastlane-snapshot|fastlane-screengrab|xcresult|maestro|flutter|detox|playwright|folder
+  <path> [--map mapping.json] [--out captures]`.
+- `check_captures.py [--plan …] [--rules <store>,…] [--json]`.
+- `video.py record|encode|check …`: record (`simctl io recordVideo`, `adb shell screenrecord`, Chrome's screencast),
+  encode to each store's preview spec with ffmpeg (constant frame rate, H.264, a silent audio track when there's
+  none, the exact size), and check with ffprobe against the rules' `video` rules. ffmpeg/ffprobe are detected,
+  never bundled.
+
+Exit codes as the other skills': 0, 1 (a shot failed or missed with nothing kept), 2 (refused: another capture is
+writing to the same folder), 3 (usage/env).
+
+## 9. Versioning
 
 Each skill's `VERSION` starts at `0.1.0`. The repository's `CHANGELOG.md` gets an `app-stores` entry per PR. The
 marketplace's `metadata.version` is bumped on release.

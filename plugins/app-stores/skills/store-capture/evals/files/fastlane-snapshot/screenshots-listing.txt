@@ -1,0 +1,12 @@
+fastlane/screenshots/en-US/iPhone 17 Pro Max-01Plan.png          1320x2868
+fastlane/screenshots/en-US/iPhone 17 Pro Max-02Recipe.png        1320x2868
+fastlane/screenshots/en-US/iPhone 11-01Plan.png                  828x1792
+fastlane/screenshots/en-US/iPhone 11-02Recipe.png                828x1792
+fastlane/screenshots/en-US/iPad Pro 13-inch (M5)-01Plan.png      2064x2752
+fastlane/screenshots/en-US/iPad Pro 13-inch (M5)-02Recipe.png    2064x2752
+fastlane/screenshots/de-DE/iPhone 17 Pro Max-01Plan.png          1320x2868
+fastlane/screenshots/de-DE/iPhone 17 Pro Max-02Recipe.png        1320x2868
+fastlane/screenshots/de-DE/iPhone 11-01Plan.png                  828x1792
+fastlane/screenshots/de-DE/iPhone 11-02Recipe.png                828x1792
+fastlane/screenshots/de-DE/iPad Pro 13-inch (M5)-01Plan.png      2064x2752
+fastlane/screenshots/de-DE/iPad Pro 13-inch (M5)-02Recipe.png    2064x2752

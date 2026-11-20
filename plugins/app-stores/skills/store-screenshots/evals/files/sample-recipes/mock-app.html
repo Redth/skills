@@ -1,0 +1,272 @@
+<!doctype html>
+<!--
+  A mock of the invented "Sample Recipes" app, for making plausible captures to design with (make_captures.py
+  renders it). Everything in it is invented. Query: ?screen=plan|recipe|shopping|pantry|cook&lang=en|de
+  The layout follows the page's width: a phone under 700 CSS px, a tablet over, a TV when it's wider than tall.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --green: #0e3b2e; --green2: #17533f; --cream: #fbf7f0; --card: #ffffff; --ink: #1d2320; --muted: #6f7a74;
+    --line: #ece6db; --accent: #f2a93b; --tomato: #e4573d; --leaf: #3f9a5c; --sky: #4b86c5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--cream); color: var(--ink); overflow: hidden;
+    -webkit-font-smoothing: antialiased; }
+  .status { height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0;
+    font-weight: 600; font-size: 16px; }
+  .status .icons { display: flex; gap: 6px; align-items: center; }
+  .bars { display: flex; gap: 2px; align-items: flex-end; height: 11px; }
+  .bars i { width: 3px; background: currentColor; border-radius: 1px; display: block; }
+  .batt { width: 25px; height: 12px; border: 1.5px solid currentColor; border-radius: 4px; padding: 1.5px; opacity: .9; }
+  .batt i { display: block; height: 100%; width: 80%; background: currentColor; border-radius: 1.5px; }
+  .dark { background: var(--green); color: #fff; }
+  .head { padding: 8px 22px 16px; }
+  .head small { display: block; color: var(--muted); font-weight: 600; font-size: 14px; letter-spacing: .02em; }
+  .dark .head small { color: #a8c7b8; }
+  .head h1 { margin: 2px 0 0; font-size: 32px; letter-spacing: -0.02em; }
+  .days { display: flex; gap: 8px; padding: 4px 22px 18px; }
+  .day { flex: 1; text-align: center; padding: 8px 0 10px; border-radius: 16px; background: rgba(255,255,255,.08);
+    font-size: 12px; font-weight: 600; color: #cfe2d8; }
+  .day b { display: block; font-size: 18px; color: #fff; margin-top: 3px; }
+  .day.on { background: var(--accent); color: #3b2a07; }
+  .day.on b { color: #2a1d03; }
+  .day .dot { width: 5px; height: 5px; border-radius: 50%; background: #9fd3b6; margin: 5px auto 0; }
+  .day.on .dot { background: #3b2a07; }
+  .body { padding: 16px 18px 120px; }
+  .sec { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+    margin: 8px 6px 10px; display: flex; justify-content: space-between; }
+  .sec span { color: var(--leaf); text-transform: none; letter-spacing: 0; }
+  .meal { display: flex; gap: 14px; align-items: center; background: var(--card); border-radius: 20px; padding: 12px;
+    margin-bottom: 12px; box-shadow: 0 1px 2px rgba(30,40,30,.06), 0 6px 18px rgba(30,40,30,.06); }
+  .pic { width: 74px; height: 74px; border-radius: 15px; flex: none; display: grid; place-items: center;
+    font-size: 40px; position: relative; overflow: hidden; }
+  .pic::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 30% 25%, rgba(255,255,255,.45), transparent 55%); }
+  .meal .t { flex: 1; min-width: 0; }
+  .meal .k { font-size: 12px; font-weight: 700; color: var(--leaf); text-transform: uppercase; letter-spacing: .06em; }
+  .meal h3 { margin: 3px 0 5px; font-size: 17px; letter-spacing: -0.01em; }
+  .meta { font-size: 13px; color: var(--muted); display: flex; gap: 10px; }
+  .chev { color: #c4bdb1; font-size: 22px; padding-right: 4px; }
+  .tabs { position: absolute; left: 0; right: 0; bottom: 0; height: 86px; background: #ffffff;
+    border-top: 1px solid var(--line); display: flex; justify-content: space-around; padding-top: 10px; }
+  .tab { text-align: center; font-size: 11px; font-weight: 600; color: #9aa39e; width: 70px; }
+  .tab .ic { width: 26px; height: 26px; margin: 0 auto 4px; border-radius: 8px; border: 2.5px solid currentColor; }
+  .tab.on { color: var(--green); }
+  .tab.on .ic { background: var(--green); }
+  .hero { height: 330px; position: relative; display: grid; place-items: center; font-size: 150px;
+    background: radial-gradient(circle at 50% 45%, #ffd9a8 0, #f2a93b 45%, #d7792a 100%); }
+  .hero .status { position: absolute; top: 0; left: 0; right: 0; color: #fff; }
+  .hero .back { position: absolute; top: 60px; left: 18px; width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(255,255,255,.9); display: grid; place-items: center; font-size: 22px; color: var(--ink); }
+  .sheet { margin-top: -26px; position: relative; background: var(--cream); border-radius: 26px 26px 0 0; padding: 22px 22px 120px; }
+  .sheet h2 { margin: 0 0 6px; font-size: 27px; letter-spacing: -0.02em; }
+  .stats { display: flex; gap: 10px; margin: 14px 0 18px; }
+  .stat { flex: 1; background: #fff; border-radius: 16px; padding: 10px 12px; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .stat b { display: block; font-size: 18px; color: var(--ink); }
+  .seg { display: flex; background: #efe9de; border-radius: 12px; padding: 4px; margin-bottom: 16px; }
+  .seg div { flex: 1; text-align: center; padding: 8px; font-size: 14px; font-weight: 700; color: var(--muted); border-radius: 9px; }
+  .seg .on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .step { display: flex; gap: 14px; margin-bottom: 16px; font-size: 15.5px; line-height: 1.4; }
+  .step .n { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--green); color: #fff;
+    display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+  .step.done .n { background: var(--leaf); }
+  .step.done p { color: var(--muted); text-decoration: line-through; }
+  .step p { margin: 4px 0 0; }
+  .timer { display: inline-block; margin-top: 6px; background: #fff3e0; color: #a3600c; font-weight: 700; font-size: 13px;
+    padding: 4px 10px; border-radius: 99px; }
+  .item { display: flex; align-items: center; gap: 14px; background: #fff; padding: 13px 14px; border-radius: 16px;
+    margin-bottom: 8px; font-size: 16px; font-weight: 600; }
+  .box { width: 24px; height: 24px; border-radius: 7px; border: 2px solid #cfc7b9; flex: none; }
+  .item.got .box { background: var(--leaf); border-color: var(--leaf); }
+  .item.got .name { color: #a19a8e; text-decoration: line-through; }
+  .item .em { font-size: 24px; width: 30px; text-align: center; }
+  .item .name { flex: 1; }
+  .item .q { color: var(--muted); font-weight: 600; font-size: 14px; }
+  .aisle { display: flex; align-items: center; gap: 8px; margin: 18px 6px 10px; font-weight: 800; font-size: 15px; }
+  .aisle i { font-style: normal; background: var(--green); color: #fff; font-size: 12px; padding: 3px 8px; border-radius: 99px; }
+  .progress { height: 8px; border-radius: 99px; background: rgba(255,255,255,.15); margin: 0 22px 18px; overflow: hidden; }
+  .progress b { display: block; height: 100%; width: 38%; background: var(--accent); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .jar { background: #fff; border-radius: 20px; padding: 14px; }
+  .jar .em { font-size: 36px; }
+  .jar h4 { margin: 8px 0 4px; font-size: 16px; }
+  .jar .lvl { height: 6px; border-radius: 99px; background: #efe9de; margin-top: 10px; overflow: hidden; }
+  .jar .lvl b { display: block; height: 100%; border-radius: 99px; }
+  .jar small { color: var(--muted); font-weight: 600; font-size: 12.5px; }
+  .cook { position: absolute; inset: 0; background: #11241d; color: #fff; display: flex; flex-direction: column; }
+  .cook .top { display: flex; justify-content: space-between; padding: 18px 26px; color: #a8c7b8; font-weight: 600; }
+  .cook .main { flex: 1; display: flex; align-items: center; gap: 34px; padding: 0 30px 30px; }
+  .ring { flex: none; width: 210px; height: 210px; border-radius: 50%; display: grid; place-items: center;
+    background: conic-gradient(var(--accent) 0 64%, rgba(255,255,255,.1) 64% 100%); }
+  .ring div { width: 176px; height: 176px; border-radius: 50%; background: #11241d; display: grid; place-items: center;
+    text-align: center; font-size: 46px; font-weight: 800; letter-spacing: -0.02em; }
+  .ring small { display: block; font-size: 14px; color: #a8c7b8; font-weight: 600; letter-spacing: 0; }
+  .cook h2 { font-size: 15px; color: var(--accent); text-transform: uppercase; letter-spacing: .1em; margin: 0 0 10px; }
+  .cook p { font-size: 34px; line-height: 1.22; margin: 0; font-weight: 700; letter-spacing: -0.015em; }
+  .cook .next { margin-top: 18px; color: #a8c7b8; font-size: 16px; }
+  .cook .dots { display: flex; gap: 8px; padding: 0 30px 24px; }
+  .cook .dots i { height: 6px; flex: 1; border-radius: 99px; background: rgba(255,255,255,.14); }
+  .cook .dots i.on { background: var(--accent); }
+  body:not(.tv) .cook .main { flex-direction: column; justify-content: center; text-align: center; gap: 40px; }
+  body:not(.tv) .cook p { font-size: 30px; }
+  /* Tablets: a sidebar and two columns. */
+  .wide-only { display: none; }
+  body.tablet .wide-only { display: block; }
+  body.tablet .app { display: grid; grid-template-columns: 290px 1fr; height: 100%; }
+  body.tablet .side { background: var(--green); color: #fff; padding: 30px 22px; }
+  body.tablet .side h3 { margin: 0 0 26px; font-size: 22px; }
+  body.tablet .side div { padding: 12px 14px; border-radius: 12px; font-weight: 600; color: #cfe2d8; margin-bottom: 4px; }
+  body.tablet .side div.on { background: rgba(255,255,255,.12); color: #fff; }
+  body.tablet .tabs { display: none; }
+  body.tablet .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  body.tablet .pane { position: relative; overflow: hidden; }
+</style>
+</head>
+<body>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var screen = q.get("screen") || "plan";
+  var de = (q.get("lang") || "en").slice(0, 2) === "de";
+  var W = window.innerWidth, H = window.innerHeight;
+  var tv = W > H, tablet = !tv && W >= 700;
+  if (tablet) document.body.classList.add("tablet");
+  if (tv) document.body.classList.add("tv");
+  var T = de ? {
+    week: "Diese Woche", plan: "Wochenplan", days: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
+    tonight: "Heute Abend", next: "Diese Woche", all: "Alle",
+    meals: [["Abendessen", "Lachs mit Zitrone und Kräutern", "25 Min", "520 kcal", "🐟", "#ffd9a8,#f2a93b"],
+            ["Mittag", "Grüne Gemüse-Bowl", "15 Min", "410 kcal", "🥗", "#d8f0c8,#7cc47f"],
+            ["Abendessen", "Pasta mit Tomaten", "30 Min", "640 kcal", "🍝", "#ffd1c4,#e4573d"],
+            ["Frühstück", "Beeren-Porridge", "10 Min", "350 kcal", "🫐", "#d8defa,#6f7fd8"],
+            ["Abendessen", "Curry mit Kichererbsen", "35 Min", "580 kcal", "🍛", "#ffe7a8,#e3a72f"],
+            ["Mittag", "Tacos mit Bohnen", "20 Min", "500 kcal", "🌮", "#ffe0b8,#e78b3a"]],
+    tabs: ["Plan", "Rezepte", "Liste", "Vorrat"],
+    recipe: "Lachs mit Zitrone und Kräutern", by: "Aus deinem Wochenplan · Dienstag",
+    stats: [["25 Min", "Zeit"], ["4", "Portionen"], ["520", "kcal"]], ing: "Zutaten", steps: "Schritte",
+    stepText: ["Ofen auf 200 °C vorheizen und ein Blech mit Backpapier auslegen.",
+               "Lachs mit Öl, Zitronenschale, Salz und Pfeffer würzen.",
+               "Mit Zitronenscheiben belegen und 12 Minuten backen.",
+               "Kräuter hacken, mit Joghurt verrühren und dazu servieren."],
+    timer: "12:00 Timer", list: "Einkaufsliste", items: "Artikel",
+    aisles: [["Obst & Gemüse", [["🥑", "Avocados", "3", 0], ["🍋", "Zitronen", "2", 1], ["🌿", "Petersilie", "1 Bund", 0], ["🍅", "Kirschtomaten", "250 g", 0]]],
+             ["Kühlregal", [["🐟", "Lachsfilets", "4", 0], ["🥛", "Griechischer Joghurt", "500 g", 1]]],
+             ["Bäckerei", [["🥖", "Baguette", "1", 0]]]],
+    pantry: "Vorrat", jars: [["🍚", "Reis", "Noch 1,2 kg", 70, "#3f9a5c"], ["🫒", "Olivenöl", "Fast leer", 12, "#e4573d"],
+             ["🥫", "Tomaten", "3 Dosen", 55, "#3f9a5c"], ["🧂", "Meersalz", "Voll", 92, "#3f9a5c"],
+             ["🍝", "Spaghetti", "Noch 500 g", 40, "#f2a93b"], ["🫘", "Kichererbsen", "2 Dosen", 48, "#3f9a5c"]],
+    cookStep: "Schritt 3 von 4", cookText: "Mit Zitronenscheiben belegen und 12 Minuten backen.",
+    cookNext: "Danach: Kräuter hacken und mit Joghurt verrühren", left: "übrig", cooking: "Kochmodus"
+  } : {
+    week: "This week", plan: "Meal plan", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    tonight: "Tonight", next: "Coming up", all: "See all",
+    meals: [["Dinner", "Lemon herb salmon", "25 min", "520 kcal", "🐟", "#ffd9a8,#f2a93b"],
+            ["Lunch", "Green goddess bowl", "15 min", "410 kcal", "🥗", "#d8f0c8,#7cc47f"],
+            ["Dinner", "Tomato basil pasta", "30 min", "640 kcal", "🍝", "#ffd1c4,#e4573d"],
+            ["Breakfast", "Berry overnight oats", "10 min", "350 kcal", "🫐", "#d8defa,#6f7fd8"],
+            ["Dinner", "Chickpea coconut curry", "35 min", "580 kcal", "🍛", "#ffe7a8,#e3a72f"],
+            ["Lunch", "Black bean tacos", "20 min", "500 kcal", "🌮", "#ffe0b8,#e78b3a"]],
+    tabs: ["Plan", "Recipes", "List", "Pantry"],
+    recipe: "Lemon herb salmon", by: "From your week · Tuesday",
+    stats: [["25 min", "Time"], ["4", "Servings"], ["520", "kcal"]], ing: "Ingredients", steps: "Steps",
+    stepText: ["Heat the oven to 200 °C and line a tray with baking paper.",
+               "Season the salmon with oil, lemon zest, salt and pepper.",
+               "Top with lemon slices and bake for 12 minutes.",
+               "Chop the herbs, stir into the yogurt and serve alongside."],
+    timer: "12:00 timer", list: "Groceries", items: "items",
+    aisles: [["Produce", [["🥑", "Avocados", "3", 0], ["🍋", "Lemons", "2", 1], ["🌿", "Flat-leaf parsley", "1 bunch", 0], ["🍅", "Cherry tomatoes", "250 g", 0]]],
+             ["Dairy & chilled", [["🐟", "Salmon fillets", "4", 0], ["🥛", "Greek yogurt", "500 g", 1]]],
+             ["Bakery", [["🥖", "Sourdough loaf", "1", 0]]]],
+    pantry: "Pantry", jars: [["🍚", "Rice", "1.2 kg left", 70, "#3f9a5c"], ["🫒", "Olive oil", "Running low", 12, "#e4573d"],
+             ["🥫", "Tomatoes", "3 tins", 55, "#3f9a5c"], ["🧂", "Sea salt", "Full", 92, "#3f9a5c"],
+             ["🍝", "Spaghetti", "500 g left", 40, "#f2a93b"], ["🫘", "Chickpeas", "2 tins", 48, "#3f9a5c"]],
+    cookStep: "Step 3 of 4", cookText: "Top with lemon slices and bake for 12 minutes.",
+    cookNext: "Next: chop the herbs and stir into the yogurt", left: "left", cooking: "Cooking mode"
+  };
+  function status(dark) {
+    return '<div class="status"' + (dark ? ' style="color:#fff"' : '') + '><span>9:41</span><span class="icons">' +
+      '<span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>' +
+      '<span class="batt"><i></i></span></span></div>';
+  }
+  function tabs(on) {
+    return '<div class="tabs">' + T.tabs.map(function (t, i) {
+      return '<div class="tab' + (i === on ? ' on' : '') + '"><div class="ic"></div>' + t + '</div>';
+    }).join("") + '</div>';
+  }
+  function meal(m) {
+    var c = m[5].split(",");
+    return '<div class="meal"><div class="pic" style="background:linear-gradient(135deg,' + c[0] + ',' + c[1] + ')">' +
+      m[4] + '</div><div class="t"><div class="k">' + m[0] + '</div><h3>' + m[1] + '</h3><div class="meta"><span>⏱ ' +
+      m[2] + '</span><span>' + m[3] + '</span></div></div><div class="chev">›</div></div>';
+  }
+  function side(on) {
+    return '<div class="side"><h3>Sample Recipes</h3>' + T.tabs.map(function (t, i) {
+      return '<div' + (i === on ? ' class="on"' : '') + '>' + t + '</div>';
+    }).join("") + '</div>';
+  }
+  var html = "";
+  if (screen === "cook" || tv) {
+    html = '<div class="cook">' + (tv ? '' : status(true)) + '<div class="top"><span>' + T.cooking + ' · ' + T.recipe +
+      '</span><span>' + T.cookStep + '</span></div><div class="main"><div class="ring"><div><span>7:42<small>' + T.left +
+      '</small></span></div></div><div><h2>' + T.cookStep + '</h2><p>' + T.cookText + '</p><div class="next">' + T.cookNext +
+      '</div></div></div><div class="dots"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div></div>';
+    if (tv && screen === "plan") {
+      html = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;padding:34px;height:100%;background:var(--green)">' +
+        T.meals.slice(0, 6).map(function (m) {
+          var c = m[5].split(",");
+          return '<div style="border-radius:22px;overflow:hidden;background:#fff;display:flex;flex-direction:column">' +
+            '<div style="flex:1;display:grid;place-items:center;font-size:84px;background:linear-gradient(135deg,' + c[0] + ',' + c[1] + ')">' + m[4] +
+            '</div><div style="padding:12px 16px"><div style="font-size:11px;font-weight:700;color:var(--leaf);text-transform:uppercase;letter-spacing:.06em">' + m[0] +
+            '</div><div style="font-weight:700;font-size:17px;margin-top:3px">' + m[1] + '</div></div></div>';
+        }).join("") + '</div>';
+    }
+  } else if (screen === "plan") {
+    var days = T.days.map(function (d, i) {
+      return '<div class="day' + (i === 1 ? ' on' : '') + '">' + d + '<b>' + (11 + i) + '</b>' + (i < 5 ? '<div class="dot"></div>' : '') + '</div>';
+    }).join("");
+    var top = '<div class="dark">' + status(true) + '<div class="head"><small>' + T.plan + ' · 11–17</small><h1>' + T.week +
+      '</h1></div><div class="days">' + days + '</div></div>';
+    var list = '<div class="body"><div class="sec">' + T.tonight + '</div>' + meal(T.meals[0]) +
+      '<div class="sec">' + T.next + '<span>' + T.all + '</span></div>' +
+      (tablet ? '<div class="cols">' + T.meals.slice(1).map(meal).join("") + '</div>' : T.meals.slice(1).map(meal).join("")) + '</div>';
+    html = tablet ? '<div class="app">' + side(0) + '<div class="pane">' + top + list + '</div></div>' : top + list + tabs(0);
+  } else if (screen === "recipe") {
+    var steps = T.stepText.map(function (s, i) {
+      return '<div class="step' + (i < 2 ? ' done' : '') + '"><div class="n">' + (i + 1) + '</div><div><p>' + s + '</p>' +
+        (i === 2 ? '<span class="timer">⏱ ' + T.timer + '</span>' : '') + '</div></div>';
+    }).join("");
+    var page = '<div class="hero">' + status(true) + '<div class="back">‹</div>🐟</div><div class="sheet"><h2>' + T.recipe +
+      '</h2><div class="meta">' + T.by + '</div><div class="stats">' + T.stats.map(function (s) {
+        return '<div class="stat"><b>' + s[0] + '</b>' + s[1] + '</div>';
+      }).join("") + '</div><div class="seg"><div>' + T.ing + '</div><div class="on">' + T.steps + '</div></div>' + steps + '</div>';
+    html = tablet ? '<div class="app">' + side(1) + '<div class="pane">' + page + '</div></div>' : page + tabs(1);
+  } else if (screen === "shopping") {
+    var n = 0;
+    var rows = T.aisles.map(function (a) {
+      return '<div class="aisle">' + a[0] + ' <i>' + a[1].length + '</i></div>' + a[1].map(function (it) {
+        n += 1;
+        return '<div class="item' + (it[3] ? ' got' : '') + '"><div class="box"></div><span class="em">' + it[0] +
+          '</span><span class="name">' + it[1] + '</span><span class="q">' + it[2] + '</span></div>';
+      }).join("");
+    }).join("");
+    var top2 = '<div class="dark">' + status(true) + '<div class="head"><small>' + n + ' ' + T.items + ' · 3 / ' + n +
+      '</small><h1>' + T.list + '</h1></div><div class="progress"><b></b></div></div>';
+    var body = '<div class="body" style="padding-top:4px">' + rows + '</div>';
+    html = tablet ? '<div class="app">' + side(2) + '<div class="pane">' + top2 + body + '</div></div>' : top2 + body + tabs(2);
+  } else {
+    var jars = '<div class="grid">' + T.jars.map(function (j) {
+      return '<div class="jar"><div class="em">' + j[0] + '</div><h4>' + j[1] + '</h4><small>' + j[2] +
+        '</small><div class="lvl"><b style="width:' + j[3] + '%;background:' + j[4] + '"></b></div></div>';
+    }).join("") + '</div>';
+    var top3 = '<div class="dark">' + status(true) + '<div class="head"><small>Sample Recipes</small><h1>' + T.pantry + '</h1></div></div>';
+    html = tablet ? '<div class="app">' + side(3) + '<div class="pane">' + top3 + '<div class="body">' + jars + '</div></div></div>'
+                  : top3 + '<div class="body">' + jars + '</div>' + tabs(3);
+  }
+  document.body.innerHTML = html;
+})();
+</script>
+</body>
+</html>

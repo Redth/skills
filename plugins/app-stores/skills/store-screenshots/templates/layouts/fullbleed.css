@@ -1,0 +1,38 @@
+/*
+  fullbleed: the capture fills the slot; the words sit on a plate over it, at the top or the bottom (the shot's
+  `at`). The plate is the theme's caption.plate: "solid" (a rounded plate in palette.plate, hugging the words),
+  "scrim" (a fade from palette.plate at that edge, no box) or "none" (the words alone, with a soft shadow).
+  Games' usual; Play-safe.
+*/
+.slot[data-layout="fullbleed"] {
+  --pad-top: 7;
+  --pad-bottom: 7;
+  --pad-side: 6;
+  --plate-pad: 3.6;
+}
+body[data-aspect="mid"] .slot[data-layout="fullbleed"] { --pad-top: 5; --pad-bottom: 5; --plate-pad: 2.6; }
+body[data-aspect="square"] .slot[data-layout="fullbleed"] { --pad-top: 5; --pad-bottom: 5; --plate-pad: 2.8; }
+body[data-aspect="wide"] .slot[data-layout="fullbleed"] { --pad-top: 3.4; --pad-bottom: 3.4; --pad-side: 5; --plate-pad: 1.5; }
+
+.slot[data-layout="fullbleed"] .plate[data-plate="scrim"] {
+  background: none;
+}
+.slot[data-layout="fullbleed"] .plate[data-plate="scrim"]::before {
+  content: "";
+  position: absolute;
+  left: -100vw;
+  right: -100vw;
+  z-index: -1;
+}
+.slot[data-layout="fullbleed"][data-placement="bottom"] .plate[data-plate="scrim"]::before {
+  top: -60%;
+  bottom: -100vh;
+  background: linear-gradient(to bottom, transparent, var(--plate) 55%);
+  opacity: 0.92;
+}
+.slot[data-layout="fullbleed"][data-placement="top"] .plate[data-plate="scrim"]::before {
+  bottom: -60%;
+  top: -100vh;
+  background: linear-gradient(to top, transparent, var(--plate) 55%);
+  opacity: 0.92;
+}

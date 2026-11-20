@@ -1,0 +1,23 @@
+{
+  "$comment": "A generic television: a thin bezel on two feet. Drawn for this skill: generic, no maker's details. Units are the SVG's.",
+  "name": "tv",
+  "kind": "tv",
+  "orientation": "landscape",
+  "drawn": true,
+  "maker": null,
+  "viewBox": [
+    0,
+    0,
+    1900,
+    1125
+  ],
+  "screen": {
+    "x": 14,
+    "y": 14,
+    "width": 1872,
+    "height": 1053
+  },
+  "screenRadius": 3,
+  "stretch": "y",
+  "realWidthMm": 1230
+}

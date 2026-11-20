@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-14T10:02:11Z",
+  "finishedAt": "2026-11-14T10:06:40Z",
+  "plan": "capture-plan.json",
+  "shots": [
+    { "locale": "en-US", "device": "iphone-6.9", "screen": "plan", "driver": "devflow", "status": "missed",
+      "reason": "wrong state: text 'Lemon Pasta' wasn't on screen within 5 s (the screen should show: this week's plan, five invented dinners, Tuesday open)",
+      "kept": "previous", "state": "this week's plan, five invented dinners, Tuesday open", "stateCheck": "failed",
+      "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2", "via": "devflow" }, "statusBar": "verified",
+      "fixes": [], "warnings": [] },
+    { "locale": "en-US", "device": "iphone-6.9", "screen": "recipe", "driver": "devflow", "status": "missed",
+      "reason": "not attempted: the run stopped after en-US/iphone-6.9/plan.png (pass --keep-going to go on)", "kept": "previous",
+      "source": {}, "statusBar": "none", "fixes": [], "warnings": [] }
+  ]
+}

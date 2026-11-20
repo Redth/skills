@@ -1,0 +1,89 @@
+{
+  "$schema": "../schema/screenshot-style.schema.json",
+  "$comment": "Suits cameras, finance, developer and pro tools, and apps with a dark UI (Apple asks for a dark-mode shot when the app has one). Near-black with a deep gradient, white words, one bright accent, a drawn phone shown whole. The pattern of Halide, Revolut, Superlist and Flighty (described, never copied). Without a brand idea it becomes the generic dark gradient: give it the brand's accent and font.",
+  "version": 1,
+  "name": "Dark pro",
+  "locked": false,
+  "traits": {
+    "captionPosition": "top",
+    "captionAlign": "center",
+    "captionSize": "standard",
+    "captionWeight": "bold",
+    "captionCase": "sentence",
+    "emphasis": "accent-word",
+    "lines": "two",
+    "support": "none",
+    "device": "realistic",
+    "devicePlacement": "whole",
+    "deviceSize": "small",
+    "background": "dark",
+    "colour": "dark-neon",
+    "density": "standard",
+    "decoration": "none",
+    "mood": "technical",
+    "story": "feature-a-shot"
+  },
+  "theme": {
+    "palette": {
+      "background": "#0A0C11",
+      "background2": "#1B2130",
+      "ink": "#FFFFFF",
+      "accent": "#6EF0C0"
+    },
+    "background": {
+      "kind": "gradient",
+      "angle": 180
+    },
+    "caption": {
+      "placement": "top",
+      "align": "center",
+      "maxLines": 2,
+      "weight": 700,
+      "sizePct": 9.5,
+      "floorPct": 7.0
+    },
+    "frame": "phone"
+  },
+  "roles": {
+    "hero": {
+      "$comment": "Brand and claim large on Apple; on Google Play the same shot as framed, the app's own screen, because Play wants UI in the first three shots (its claim must fit two lines there).",
+      "layout": "hero",
+      "stores": {
+        "google": {
+          "layout": "framed"
+        }
+      }
+    },
+    "feature": {
+      "layout": "framed"
+    },
+    "bleed": {
+      "layout": "framed-bleed"
+    },
+    "detail": {
+      "layout": "callout"
+    },
+    "accent": {
+      "layout": "tilt",
+      "maxPerSet": 1
+    }
+  },
+  "stores": {
+    "google": {
+      "frame": "none"
+    }
+  },
+  "copy": {
+    "maxWords": 5,
+    "maxLines": 2,
+    "case": "sentence",
+    "emphasis": "one accent word at most"
+  },
+  "drift": {
+    "captionSize": 0.05,
+    "captionPosition": 0.005,
+    "deviceBox": 0.01,
+    "textShare": 0.03,
+    "colour": 2
+  }
+}

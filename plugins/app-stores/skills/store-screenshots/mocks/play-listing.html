@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="${lang}">
+<head>
+<meta charset="utf-8">
+<title>${title}</title>
+<link rel="stylesheet" href="mocks.css">
+</head>
+<body class="phone-page play-page">
+<p class="notice">Approximation, not Google's rendering: a Google Play listing on a phone ${screen_dp} dp wide (1 CSS px
+is 1 dp). Screenshots about ${shot_dp} dp tall; the row scrolls sideways. Captions under 11 dp are flagged.
+${locale} &middot; ${target}</p>
+<div class="gp">
+  <div class="gp-head">
+    ${icon}
+    <div class="gp-text">
+      <div class="gp-title">${name}</div>
+      <div class="gp-dev">${developer}</div>
+    </div>
+  </div>
+  <div class="gp-facts"><div><b>&mdash;</b><span>reviews</span></div><div><b>&mdash;</b><span>downloads</span></div>
+    <div><b>E</b><span>rating</span></div></div>
+  <div class="install">Install</div>
+  <div class="gp-shots">${shots}</div>
+  <div class="gp-about"><b>About this app</b><span>&rarr;</span></div>
+</div>
+${sizes}
+</body>
+</html>

@@ -1,0 +1,903 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "screenshot-style.json: the look a screenshot set keeps across updates (CONTRACT.md 8.7). The config names it with \"style\"; its theme and stores merge over the config's (the style wins); roles map a shot's role to a layout; copy rules are checked on captions; drift says how far a later render may move from the approved baseline before check.py --baseline says so. The traits vocabulary lives in $defs (trait-*) and is shared with inspiration.json and current.json. theme and stores are validated against store-screenshots.schema.json's own theme and overrides. Uses only the subset appstores_lib/schema.py validates.",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "theme"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "$comment": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "locked": {
+      "$comment": "Set by baseline.py approve; cleared only by baseline.py unlock --reason. While true, changing the look is a new approval.",
+      "type": "boolean"
+    },
+    "traits": {
+      "$ref": "#/$defs/traits"
+    },
+    "theme": {
+      "$comment": "The same object as the config's theme (store-screenshots.schema.json $defs/theme).",
+      "type": "object"
+    },
+    "roles": {
+      "type": "object",
+      "properties": {
+        "$comment": {
+          "type": "string"
+        }
+      },
+      "patternProperties": {
+        "^[a-z][a-z0-9-]*$": {
+          "$ref": "#/$defs/role"
+        }
+      },
+      "additionalProperties": false
+    },
+    "stores": {
+      "$comment": "Per-store overrides, as the config's stores (each validated against its overrides).",
+      "type": "object",
+      "properties": {
+        "$comment": {
+          "type": "string"
+        }
+      },
+      "patternProperties": {
+        "^[a-z]+$": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "copy": {
+      "$comment": "Rules for the words, checked as warnings.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "maxWords": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 20
+        },
+        "maxLines": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 6
+        },
+        "case": {
+          "enum": [
+            "sentence",
+            "title",
+            "upper",
+            "lower",
+            "any",
+            null
+          ]
+        },
+        "emphasis": {
+          "$comment": "Free text the agent follows, e.g. 'one accent word at most'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "drift": {
+      "$comment": "Tolerances against the baseline. captionSize: relative (0.05 = 5%); captionPosition and deviceBox: fractions of the slot's width (0.01 = 1u); textShare: an absolute share of the picture; colour: CIE76 delta E.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "captionSize": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "captionPosition": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "deviceBox": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "textShare": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "colour": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    }
+  },
+  "$defs": {
+    "trait-captionPosition": {
+      "$comment": "Where the words sit. top: above the device; bottom-band: in a band or pill at the foot; bottom-plate: on a plate over the shot's foot; side: beside the device (wide slots); over-shot: over a full-bleed shot; none: no words. Maps to the layout and caption.placement.",
+      "enum": [
+        "top",
+        "bottom-band",
+        "bottom-plate",
+        "side",
+        "over-shot",
+        "none"
+      ]
+    },
+    "trait-captionAlign": {
+      "$comment": "center or start (left in left-to-right languages). Maps to caption.align.",
+      "enum": [
+        "center",
+        "start"
+      ]
+    },
+    "trait-captionSize": {
+      "$comment": "The headline on a tall slot: quiet (7u or less), standard (8-10u), loud (11u or more); u is 1% of the slot's width. Maps to caption.sizePct.",
+      "enum": [
+        "quiet",
+        "standard",
+        "loud"
+      ]
+    },
+    "trait-captionWeight": {
+      "$comment": "regular (400), medium (500), bold (700), heavy (800-900). Maps to caption.weight.",
+      "enum": [
+        "regular",
+        "medium",
+        "bold",
+        "heavy"
+      ]
+    },
+    "trait-captionCase": {
+      "$comment": "sentence, title, upper (all caps) or lower case. Maps to caption.case and copy.case.",
+      "enum": [
+        "sentence",
+        "title",
+        "upper",
+        "lower"
+      ]
+    },
+    "trait-emphasis": {
+      "$comment": "Stress inside a caption: none, accent-word (one word in the accent colour: *word*), bold-lead (a bold lead and regular rest), lead-and-grey (a bright lead, the rest muted), hand-drawn-mark (an underline or mark), highlighter.",
+      "enum": [
+        "none",
+        "accent-word",
+        "bold-lead",
+        "lead-and-grey",
+        "hand-drawn-mark",
+        "highlighter"
+      ]
+    },
+    "trait-lines": {
+      "$comment": "How many lines a caption takes: one, two, or three-with-subtitle. Maps to caption.maxLines and copy.maxLines.",
+      "enum": [
+        "one",
+        "two",
+        "three-with-subtitle"
+      ]
+    },
+    "trait-support": {
+      "$comment": "What sits with the headline: none, eyebrow (a small label above: kicker), tag-pill, icon-above (theme.icon), subtitle (proof).",
+      "enum": [
+        "none",
+        "eyebrow",
+        "tag-pill",
+        "icon-above",
+        "subtitle"
+      ]
+    },
+    "trait-device": {
+      "$comment": "How the app's screen is shown: none (the UI fills the slot), frameless (a bare rounded screen), outline (a thin frame), realistic (a drawn device), panel (a phone on a coloured card). Maps to frame.",
+      "enum": [
+        "none",
+        "frameless",
+        "outline",
+        "realistic",
+        "panel"
+      ]
+    },
+    "trait-devicePlacement": {
+      "$comment": "whole, bleed-bottom, bleed-top, bleed-side, tilted, pair or callout. Maps to the layout.",
+      "enum": [
+        "whole",
+        "bleed-bottom",
+        "bleed-top",
+        "bleed-side",
+        "tilted",
+        "pair",
+        "callout"
+      ]
+    },
+    "trait-deviceSize": {
+      "$comment": "The device's width on a tall slot: small (74u or less), standard (75-86u), big (87u or more).",
+      "enum": [
+        "small",
+        "standard",
+        "big"
+      ]
+    },
+    "trait-background": {
+      "$comment": "light (white or off-white), brand-colour (flat), colour-per-shot, gradient, dark, photo, illustration (shapes or art), continuous (one canvas across shots). Maps to theme.background and the palette.",
+      "enum": [
+        "light",
+        "brand-colour",
+        "colour-per-shot",
+        "gradient",
+        "dark",
+        "photo",
+        "illustration",
+        "continuous"
+      ]
+    },
+    "trait-colour": {
+      "$comment": "The colour approach: monochrome-brand, one-accent, rotating (a palette in a fixed order), photographic, dark-neon (dark with one bright accent). Maps to the palette.",
+      "enum": [
+        "monochrome-brand",
+        "one-accent",
+        "rotating",
+        "photographic",
+        "dark-neon"
+      ]
+    },
+    "trait-density": {
+      "$comment": "airy (caption top 19u or lower, a gap of 20u or more to the device), standard, packed (badges, chips, fine print).",
+      "enum": [
+        "airy",
+        "standard",
+        "packed"
+      ]
+    },
+    "trait-decoration": {
+      "$comment": "none, shapes, hand-drawn, mascot, chips (floating UI chips), awards-hero (awards on the hero only, where the store allows them).",
+      "enum": [
+        "none",
+        "shapes",
+        "hand-drawn",
+        "mascot",
+        "chips",
+        "awards-hero"
+      ]
+    },
+    "trait-mood": {
+      "$comment": "The feeling the other traits add up to: calm, premium, technical, playful, bold, warm, editorial.",
+      "enum": [
+        "calm",
+        "premium",
+        "technical",
+        "playful",
+        "bold",
+        "warm",
+        "editorial"
+      ]
+    },
+    "trait-story": {
+      "$comment": "How the set's words run: feature-a-shot, parallel (the same grammatical shape every shot), problem-answer, strip (one continuous story across shots).",
+      "enum": [
+        "feature-a-shot",
+        "parallel",
+        "problem-answer",
+        "strip"
+      ]
+    },
+    "traits": {
+      "$comment": "A look described in the fixed vocabulary: each trait one value (or a list where an example mixes two). Every trait is optional.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "captionPosition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-captionPosition"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-captionPosition"
+              }
+            }
+          ]
+        },
+        "captionAlign": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-captionAlign"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-captionAlign"
+              }
+            }
+          ]
+        },
+        "captionSize": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-captionSize"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-captionSize"
+              }
+            }
+          ]
+        },
+        "captionWeight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-captionWeight"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-captionWeight"
+              }
+            }
+          ]
+        },
+        "captionCase": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-captionCase"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-captionCase"
+              }
+            }
+          ]
+        },
+        "emphasis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-emphasis"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-emphasis"
+              }
+            }
+          ]
+        },
+        "lines": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-lines"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-lines"
+              }
+            }
+          ]
+        },
+        "support": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-support"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-support"
+              }
+            }
+          ]
+        },
+        "device": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-device"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-device"
+              }
+            }
+          ]
+        },
+        "devicePlacement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-devicePlacement"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-devicePlacement"
+              }
+            }
+          ]
+        },
+        "deviceSize": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-deviceSize"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-deviceSize"
+              }
+            }
+          ]
+        },
+        "background": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-background"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-background"
+              }
+            }
+          ]
+        },
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-colour"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-colour"
+              }
+            }
+          ]
+        },
+        "density": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-density"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-density"
+              }
+            }
+          ]
+        },
+        "decoration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-decoration"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-decoration"
+              }
+            }
+          ]
+        },
+        "mood": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-mood"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-mood"
+              }
+            }
+          ]
+        },
+        "story": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/trait-story"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/trait-story"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "layout": {
+      "$comment": "The skill's layouts (CONTRACT.md 8.3, references/layouts.md).",
+      "enum": [
+        "fullbleed",
+        "band",
+        "framed",
+        "framed-bleed",
+        "tilt",
+        "pair",
+        "callout",
+        "hero",
+        "gameplay"
+      ]
+    },
+    "role": {
+      "$comment": "What a kind of shot gets: its layout, and optionally its frame, tilt and fullbleed plate side. A shot's own settings win. 'stores' gives the role another layout or frame on one store (a hero that's real UI on Google Play, which wants the app's UI in its first three shots); the config's store and target overrides still beat it.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "layout": {
+          "$ref": "#/$defs/layout"
+        },
+        "frame": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tilt": {
+          "enum": [
+            "left",
+            "right",
+            null
+          ]
+        },
+        "at": {
+          "enum": [
+            "top",
+            "bottom",
+            null
+          ]
+        },
+        "stores": {
+          "$comment": "Per store (apple, google): the layout and frame this role takes on that store's targets, where the shot sets none of its own.",
+          "type": "object",
+          "properties": {
+            "$comment": {
+              "type": "string"
+            }
+          },
+          "patternProperties": {
+            "^[a-z][a-z0-9-]*$": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "$comment": {
+                  "type": "string"
+                },
+                "layout": {
+                  "$ref": "#/$defs/layout"
+                },
+                "frame": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "maxPerSet": {
+          "$comment": "At most this many shots of a set in this role (check warns).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "inspiration": {
+      "$comment": "design/inspiration/inspiration.json: the examples the user likes (and one or two they don't), each described in the traits vocabulary, and the summary the user confirms. Examples inform the style only: never their marks, illustrations or trade dress.",
+      "type": "object",
+      "required": [
+        "version",
+        "examples"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "$comment": {
+          "type": "string"
+        },
+        "version": {
+          "const": 1
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "file"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "$comment": {
+                "type": "string"
+              },
+              "file": {
+                "$comment": "The image, relative to the inspiration folder.",
+                "type": "string",
+                "minLength": 1
+              },
+              "source": {
+                "$comment": "Where it came from, in free text (an app's listing, a saved screenshot).",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "verdict": {
+                "$comment": "like (the default) or dislike: an example of what the user doesn't want.",
+                "enum": [
+                  "like",
+                  "dislike",
+                  null
+                ]
+              },
+              "likes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "dislikes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "traits": {
+                "$ref": "#/$defs/traits"
+              }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {
+              "type": "string"
+            },
+            "traits": {
+              "$ref": "#/$defs/traits"
+            },
+            "notes": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "confirmedByUser": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "current": {
+      "$comment": "design/current.json: the app's current screenshot set (the live listing, pulled to existing/<store>/screenshots/<locale>/<slot>/, or a folder in the repo) read shot by shot: which screen each shows, the words on it, its layout and look in the skill's vocabulary, and what the user wants to keep. The storyboard starts from it; the inspiration step treats it as one example. sheet.py --current lays the set out and writes a skeleton of this file.",
+      "type": "object",
+      "required": [
+        "version",
+        "source",
+        "shots"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "$comment": {
+          "type": "string"
+        },
+        "version": {
+          "const": 1
+        },
+        "source": {
+          "$comment": "The folder the set was read from, relative to the config (existing/apple/screenshots/en-US/APP_IPHONE_67, assets/screenshots).",
+          "type": "string",
+          "minLength": 1
+        },
+        "shots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "file",
+              "order"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "$comment": {
+                "type": "string"
+              },
+              "file": {
+                "$comment": "The picture, relative to source.",
+                "type": "string",
+                "minLength": 1
+              },
+              "group": {
+                "$comment": "Which set it belongs to: store/locale/slot for a pulled listing, else its folder (sheet.py writes it).",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "order": {
+                "$comment": "Its place in its set, from 1.",
+                "type": "integer",
+                "minimum": 1
+              },
+              "screen": {
+                "$comment": "Which screen of the app it shows, in the user's words (the plan, a recipe, settings), or null for art with no app in it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "capture": {
+                "$comment": "The capture screen id that shows the same screen now, once known (for the storyboard).",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "caption": {
+                "$comment": "The words on it as they read in the picture (null for none); a second line after \\n.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "layout": {
+                "$comment": "The nearest of the skill's layouts (a plain screenshot with no words or frame is gameplay), or null when none is near (say how in notes).",
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/layout"
+                  }
+                ]
+              },
+              "traits": {
+                "$ref": "#/$defs/traits"
+              },
+              "verdict": {
+                "$comment": "What the user wants done with it: keep (the screen and its words as they are), change (the screen or the words), drop; null until they say.",
+                "enum": [
+                  "keep",
+                  "change",
+                  "drop",
+                  null
+                ]
+              },
+              "notes": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {
+              "type": "string"
+            },
+            "traits": {
+              "$ref": "#/$defs/traits"
+            },
+            "look": {
+              "$comment": "What the new set does with the current look: keep it (a direction made from it), evolve it (keep what works, fix what doesn't), replace it; null until the user says.",
+              "enum": [
+                "keep",
+                "evolve",
+                "replace",
+                null
+              ]
+            },
+            "whatWorks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "whatDoesnt": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "notes": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "confirmedByUser": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  }
+}

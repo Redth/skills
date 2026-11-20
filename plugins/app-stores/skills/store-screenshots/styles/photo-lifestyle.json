@@ -1,0 +1,93 @@
+{
+  "$schema": "../schema/screenshot-style.schema.json",
+  "$comment": "Suits aspiration-led categories (travel, wellness, fitness, finance cards). A photo behind everything, darkened behind the words, medium-weight words, a drawn phone bleeding or tilted. The pattern of Calm's and Monzo's later shots (described, never copied). Ships with a gradient: put a photo the user owns in theme.background ({\"kind\": \"image\", \"src\": \"...\", \"dim\": 0.35}). Contrast is where it fails: check.py measures it against the photo's pixels. Play forbids people using the device in the art.",
+  "version": 1,
+  "name": "Photo / lifestyle",
+  "locked": false,
+  "traits": {
+    "captionPosition": "top",
+    "captionAlign": "center",
+    "captionSize": "standard",
+    "captionWeight": "medium",
+    "captionCase": "sentence",
+    "emphasis": "none",
+    "lines": "two",
+    "support": "none",
+    "device": "realistic",
+    "devicePlacement": "bleed-bottom",
+    "deviceSize": "standard",
+    "background": "photo",
+    "colour": "photographic",
+    "density": "standard",
+    "decoration": "none",
+    "mood": "calm",
+    "story": "feature-a-shot"
+  },
+  "theme": {
+    "palette": {
+      "background": "#173246",
+      "background2": "#5F8FA8",
+      "ink": "#FFFFFF",
+      "accent": "#FFE2A0"
+    },
+    "background": {
+      "kind": "gradient",
+      "angle": 180
+    },
+    "caption": {
+      "placement": "top",
+      "align": "center",
+      "maxLines": 2,
+      "weight": 500,
+      "sizePct": 9.5,
+      "floorPct": 7.0
+    },
+    "frame": "phone"
+  },
+  "roles": {
+    "hero": {
+      "$comment": "Brand and claim large on Apple; on Google Play the same shot as framed-bleed, the app's own screen, because Play wants UI in the first three shots (its claim must fit two lines there).",
+      "layout": "hero",
+      "stores": {
+        "google": {
+          "layout": "framed-bleed"
+        }
+      }
+    },
+    "feature": {
+      "layout": "framed-bleed"
+    },
+    "whole": {
+      "layout": "framed"
+    },
+    "detail": {
+      "layout": "callout"
+    },
+    "accent": {
+      "layout": "tilt",
+      "maxPerSet": 1
+    },
+    "pair": {
+      "layout": "pair",
+      "maxPerSet": 1
+    }
+  },
+  "stores": {
+    "google": {
+      "frame": "none"
+    }
+  },
+  "copy": {
+    "maxWords": 5,
+    "maxLines": 2,
+    "case": "sentence",
+    "emphasis": "none"
+  },
+  "drift": {
+    "captionSize": 0.05,
+    "captionPosition": 0.005,
+    "deviceBox": 0.01,
+    "textShare": 0.03,
+    "colour": 2
+  }
+}

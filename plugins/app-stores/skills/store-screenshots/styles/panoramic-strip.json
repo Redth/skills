@@ -1,0 +1,86 @@
+{
+  "$schema": "../schema/screenshot-style.schema.json",
+  "$comment": "Suits a set whose second and third shots tell one story, when shot 1 is strong on its own. One background (and sometimes a device) runs across two or three slots, each still a whole ad, nothing with words across a seam. The pattern of Calm's shots 3-4 and MyFitnessPal's photo across shots 1-2 (described, never copied). The strip itself is the config's panorama (its shots, an optional background image, the seam margin): this style gives the look around it.",
+  "version": 1,
+  "name": "Panoramic story strip",
+  "locked": false,
+  "traits": {
+    "captionPosition": "top",
+    "captionAlign": "center",
+    "captionSize": "standard",
+    "captionWeight": "heavy",
+    "captionCase": "sentence",
+    "emphasis": "accent-word",
+    "lines": "two",
+    "support": "none",
+    "device": "realistic",
+    "devicePlacement": "bleed-bottom",
+    "deviceSize": "standard",
+    "background": "continuous",
+    "colour": "monochrome-brand",
+    "density": "standard",
+    "decoration": "none",
+    "mood": "warm",
+    "story": "strip"
+  },
+  "theme": {
+    "palette": {
+      "background": "#123C35",
+      "background2": "#2D6D5E",
+      "ink": "#FFFFFF",
+      "accent": "#FFC94D"
+    },
+    "background": {
+      "kind": "gradient",
+      "angle": 90
+    },
+    "caption": {
+      "placement": "top",
+      "align": "center",
+      "maxLines": 2,
+      "weight": 800,
+      "sizePct": 9.5,
+      "floorPct": 7.0
+    },
+    "frame": "phone"
+  },
+  "roles": {
+    "hero": {
+      "$comment": "Brand and claim large on Apple; on Google Play the same shot as framed-bleed, the app's own screen, because Play wants UI in the first three shots (its claim must fit two lines there).",
+      "layout": "hero",
+      "stores": {
+        "google": {
+          "layout": "framed-bleed"
+        }
+      }
+    },
+    "feature": {
+      "layout": "framed-bleed"
+    },
+    "strip": {
+      "layout": "framed-bleed"
+    },
+    "accent": {
+      "layout": "tilt",
+      "maxPerSet": 1
+    }
+  },
+  "stores": {
+    "google": {
+      "frame": "none"
+    }
+  },
+  "copy": {
+    "maxWords": 5,
+    "maxLines": 2,
+    "case": "sentence",
+    "emphasis": "one accent word at most"
+  },
+  "drift": {
+    "captionSize": 0.05,
+    "captionPosition": 0.005,
+    "deviceBox": 0.01,
+    "textShare": 0.03,
+    "colour": 2
+  }
+}

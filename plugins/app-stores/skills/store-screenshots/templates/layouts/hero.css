@@ -1,0 +1,17 @@
+/*
+  hero: the claim large (caption.sizePct x --caption-scale, a line more allowed), a kicker above it (the brand or a
+  label), a proof line below, the theme's icon on top if it has one, and a sliver of the real app rising from the
+  bottom edge (Apple 2.3.3 wants the app in use, not only title art).
+*/
+.slot[data-layout="hero"] {
+  --device-w: 80;
+  --bleed: 0.34;
+  --caption-scale: 1.12;
+  --caption-extra-lines: 1;
+  --caption-bias: 0.4;
+  --caption-leading: 1.04;
+}
+body[data-aspect="tall"] .slot[data-layout="hero"] { --anchor-gap: 24; }
+body[data-aspect="mid"] .slot[data-layout="hero"] { --device-w: 80; --bleed: 0.36; --anchor-gap: 18; }
+body[data-aspect="square"] .slot[data-layout="hero"] { --device-w: 62; --bleed: 0.5; }
+body[data-aspect="wide"] .slot[data-layout="hero"] { --device-w: 64; --bleed: 0.42; --caption-scale: 1.3; }

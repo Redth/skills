@@ -1,0 +1,88 @@
+{
+  "$schema": "../../../schema/store-screenshots.schema.json",
+  "$comment": "Eval fixture for the invented app Sample Recipes: an update after the approved baseline. The recipe caption was lengthened and allowed three lines; screenshots/render-report.json is that render (its PNGs aren't kept here). Captures are the recipes fixture's.",
+  "version": 1,
+  "captures": "../recipes/captures",
+  "out": "screenshots",
+  "primaryLocale": "en-US",
+  "locales": [
+    "en-US"
+  ],
+  "style": "screenshot-style.json",
+  "theme": {
+    "fonts": []
+  },
+  "targets": {
+    "iphone": {
+      "store": "apple",
+      "width": 1320,
+      "height": 2868,
+      "capture": "iphone-6.9"
+    },
+    "iphone-medium": {
+      "store": "apple",
+      "width": 1206,
+      "height": 2622,
+      "capture": "iphone-6.9"
+    },
+    "android-phone": {
+      "store": "google",
+      "width": 1080,
+      "height": 1920,
+      "capture": "android-phone"
+    }
+  },
+  "shots": [
+    {
+      "id": "plan",
+      "capture": "plan",
+      "role": "feature",
+      "caption": "cap.plan"
+    },
+    {
+      "id": "recipe",
+      "capture": "recipe",
+      "role": "feature",
+      "caption": "cap.recipe",
+      "captionStyle": {
+        "maxLines": 3
+      }
+    },
+    {
+      "id": "shopping",
+      "capture": "shopping",
+      "role": "detail",
+      "caption": "cap.shop",
+      "callout": {
+        "rect": [
+          0.05,
+          0.17,
+          0.9,
+          0.06
+        ],
+        "scale": 1.35
+      }
+    },
+    {
+      "id": "profile",
+      "capture": "profile",
+      "role": "feature",
+      "caption": "cap.profile"
+    }
+  ],
+  "panorama": null,
+  "stores": {
+    "apple": {},
+    "google": {
+      "frame": "none"
+    }
+  },
+  "strings": {
+    "en-US": {
+      "cap.plan": "Plan a week in *minutes*",
+      "cap.recipe": "Every recipe, step by step, with timers for each stage",
+      "cap.shop": "Your list, sorted by aisle",
+      "cap.profile": "Your tastes, remembered"
+    }
+  }
+}

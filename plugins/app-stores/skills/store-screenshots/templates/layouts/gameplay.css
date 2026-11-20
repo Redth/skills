@@ -1,0 +1,6 @@
+/*
+  gameplay: the capture full-bleed, no words, no frame. Steam, Play's TV slot, Wear OS, and games' wordless shots.
+*/
+.slot[data-layout="gameplay"] .fill-capture > img.capture {
+  object-position: center;
+}
