@@ -776,17 +776,6 @@ def store_locales(listing, store, report):
     return out
 
 
-def design_rule_ids(store):
-    """The ids of a store's design rules (``<store>.design.<name>``, from its rules file's ``design`` table), which
-    store-screenshots' check.py applies to the screenshots: a ``rules.relax`` naming one is relaxed there."""
-    try:
-        data = jsonio.load(os.path.join(RULES_DIR, "%s.json" % store))
-    except (OSError, ValueError):
-        return set()
-    names = [k for k in (data.get("design") or {}) if not k.startswith("$")]
-    return set("%s.design.%s" % (store, re.sub(r"([A-Z])", lambda m: "_" + m.group(1).lower(), k)) for k in names)
-
-
 class StoreCheck:
     """One store's check: the rules (relaxed), the locales, the pictures in each slot, and the findings."""
 
@@ -799,11 +788,7 @@ class StoreCheck:
         self.rules = rules.relaxed(full, relax)
         for rule, reason in self.rules.relaxed_rules:
             report.relaxed.append(collections.OrderedDict([("store", store), ("id", rule.id), ("reason", reason)]))
-        design = design_rule_ids(store)
         for rid in self.rules.unknown_relaxed:
-            if rid in design:
-                # A design rule of store-screenshots' check (frames, text share...): relaxed there, not a typo here.
-                continue
             report.add(store, config_finding(
                 "config.relax", "rules.relax", "relaxes %s, which isn't one of %s's rules (a typo, or since renamed?)"
                 % (rid, store), "warning"))

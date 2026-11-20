@@ -104,8 +104,6 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   `check.py --out` and `sheet.py --out` for an exploration (files resolve beside its report, its style used, its
   sheets beside it, counts left to the full set); targets and current-set groups ordered App Store first, iPhone
   before foldables, iPads and the rest; the report notes a role that takes another layout on Play.
-- `store-listings`: `rules.relax` may name store-screenshots' design rules (`google.design.frames`) without a
-  "not one of the rules" warning.
 - `store-listings`: start from what's live. `push.py pull apple|google` reads the live listing (read-only, like
   `plan`; on Google an edit opened to read and deleted) into `existing/<store>/`: `listing.json` in the contract's
   vocabulary, every screenshot and preview downloaded per locale and slot, and a `README.md` summary. App Review's
