@@ -11,23 +11,30 @@
     { "version": 1, "index": 0, "lang": "de-DE", "dir": "ltr",
       "slot": { "width": 1320, "height": 2868 },
       "theme": { "palette": {...}, "background": {...}, "fonts": [ {family, url, weight, style} ],
-                 "icon": url|null },
+                 "icon": url|null, "logo": null | { "url", "fit": "wide"|"tile", "widthPct", "maxHeightPct" } },
       "panorama": null | { "count": N, "seam": 6, "background": url|null },
       "slots": [ { "shot": "plan", "layout": "hero",
                    "caption": null | { "text", "kicker", "proof", "placement", "align", "maxLines", "weight",
                                        "sizePct", "floorPct", "font", "plate" },
                    "capture": { "url", "width", "height" },
-                   "frame": null | { "name", "kind": "svg"|"image"|"none", "svg", "url", "meta": {...} },
+                   "frame": null | { "name", "kind": "svg"|"image"|"none", "svg", "url", "meta": {...}, "fit" },
                    "pair": null | { "capture": {...}, "frame": {...} },
-                   "tilt": "left"|"right"|null, "at": "top"|"bottom"|null,
-                   "callout": null | { "rect": [x, y, w, h], "scale": 1.35 } } ] }
+                   "tilt": "left"|"right"|null, "tiltAngles": null | { "y", "x", "z", "perspective" },
+                   "at": "top"|"bottom"|null,
+                   "callout": null | { "rect": [x, y, w, h], "scale": 1.35 },
+                   "fold": null | { "hinge": "vertical"|"horizontal", "angle", "turn", "pitch",
+                                    "outer": null | { "url", "width", "height", "radius" } } } ] }
+
+  A drawn frame (kind "svg") comes fitted from render.py (frames.py): its screen is the capture's exact size, so it
+  is never stretched; its corner radius shrinks here if the capture has content its corners would cut.
 
   `slots` has one entry, or N for a panorama (the shots sharing the canvas, in order); `index` is the slot shown.
 
   Outputs. `window.__appstoresReady` resolves once everything is drawn; `window.__appstoresReport` then holds what
   was drawn, in slot pixels ([x, y, w, h], the slot's top left at 0, 0): the caption's size, lines, fit and box,
-  the text's share of the slot, the frame's and callout's boxes, how much each capture was scaled, the seams, and
-  any errors. render.py turns it into render-report.json's entry for the file.
+  the text's share of the slot, the share showing the app (uiShare), the frame's and callout's boxes (a frame's
+  class, corner radius and what its corners would have cut), how much each capture was scaled, the seams, and any
+  errors. render.py turns it into render-report.json's entry for the file.
 -->
 <html>
 <head>
@@ -42,6 +49,7 @@
 <link rel="stylesheet" href="layouts/callout.css">
 <link rel="stylesheet" href="layouts/hero.css">
 <link rel="stylesheet" href="layouts/gameplay.css">
+<link rel="stylesheet" href="layouts/fold.css">
 <script>
 (function () {
   "use strict";
@@ -53,7 +61,7 @@
   function fail(message) { report.errors.push(String(message)); }
   window.addEventListener("error", function (e) { fail(e.message || e); });
 
-  var LAYOUTS = ["fullbleed", "band", "framed", "framed-bleed", "tilt", "pair", "callout", "hero", "gameplay"];
+  var LAYOUTS = ["fullbleed", "band", "framed", "framed-bleed", "tilt", "pair", "callout", "hero", "gameplay", "fold"];
   var SYSTEM_STACK = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", ' +
     'Arial, "Noto Sans", sans-serif';
 
@@ -70,12 +78,13 @@
   function escapeHtml(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
-  // Captions may mark words to stress with *asterisks* (drawn in the accent) and break a line with "\n". A soft
-  // hyphen, U+00AD (in JSON "\u00ad") or written "&shy;", marks where a long word may break with a hyphen: it works
-  // in every Chrome, where hyphens: auto needs the language's dictionary (Linux builds often lack them).
+  // Captions may mark words to stress with *asterisks* (drawn in the accent) and break a line with "\n", inside an
+  // accent too ("*whole week\nof meals*"). A soft hyphen, U+00AD (in JSON "\u00ad") or written "&shy;", marks where
+  // a long word may break with a hyphen: it works in every Chrome, where hyphens: auto needs the language's
+  // dictionary (Linux builds often lack them).
   var SOFT = "\u00ad";
   function richText(s) {
-    var parts = String(s).replace(/&shy;/g, SOFT).split(/\*([^*\n]+)\*/);
+    var parts = String(s).replace(/&shy;/g, SOFT).split(/\*([^*]+)\*/);
     var html = "";
     for (var i = 0; i < parts.length; i++) {
       var piece = escapeHtml(parts[i]).replace(/[ \t]*\n[ \t]*/g, "<br>");
@@ -84,7 +93,7 @@
     return html;
   }
   function plainText(s) {
-    return String(s).replace(/&shy;|\u00ad/g, "").replace(/\*([^*\n]+)\*/g, "$1").replace(/\s*\n\s*/g, " ").trim();
+    return String(s).replace(/&shy;|\u00ad/g, "").replace(/\*([^*]+)\*/g, "$1").replace(/\s*\n\s*/g, " ").trim();
   }
 
   // Whether this Chrome hyphenates a language with hyphens: auto (it needs that language's dictionary): a long
@@ -255,8 +264,10 @@
   // ---------------------------------------------------------------------------------------------- devices
 
   var svgCount = 0;
-  // A drawn frame's SVG, with its ids made unique (a pair puts two on one page) and stretched along its long
-  // side to the capture's shape: elements with class "s" grow, groups with class "m" move, the rest stay.
+  // A drawn frame's SVG, with its ids made unique (a pair puts two on one page). A fitted frame (render.py draws
+  // each for its capture: the screen opening is the capture's exact size) is used as it is; an older frame whose
+  // screen differs from the capture's shape is stretched along its long side: elements with class "s" grow, groups
+  // with class "m" move, the rest stay.
   function svgFrame(markup, meta, captureAspect) {
     svgCount += 1;
     var prefix = "f" + svgCount + "-";
@@ -267,8 +278,10 @@
     var vb = meta.viewBox.slice();
     var screen = { x: meta.screen.x, y: meta.screen.y, width: meta.screen.width, height: meta.screen.height };
     var delta = 0;
-    if (meta.stretch === "x") delta = screen.height * captureAspect - screen.width;
-    else delta = screen.width / captureAspect - screen.height;
+    if (!meta.fitted) {
+      if (meta.stretch === "x") delta = screen.height * captureAspect - screen.width;
+      else delta = screen.width / captureAspect - screen.height;
+    }
     if (Math.abs(delta) > 0.5) {
       var sizeAttr = meta.stretch === "x" ? "width" : "height";
       Array.prototype.forEach.call(svg.querySelectorAll(".s"), function (n) {
@@ -301,9 +314,11 @@
     if (kind === "svg") {
       var f = svgFrame(frame.svg, frame.meta, cAspect);
       device.appendChild(f.node);
+      d.svg = f.node;
       d.viewBox = f.viewBox; d.screenRect = f.screen; d.screenRadius = frame.meta.screenRadius || 0;
+      d.fitted = !!frame.meta.fitted;
     } else if (kind === "image") {
-      // A user's own device art, as it is: never stretched; the capture is fitted into its screen.
+      // A maker's device art, as it is: never stretched; the capture goes under its screen opening.
       d.viewBox = frame.meta.viewBox; d.screenRect = frame.meta.screen; d.screenRadius = frame.meta.screenRadius || 0;
     } else {
       device.classList.add("frameless");
@@ -311,13 +326,26 @@
       d.screenRect = { x: 0, y: 0, width: capture.width, height: capture.height };
       d.screenRadius = capture.width * 0.075;
     }
+    d.radiusFrom = d.screenRadius;
     d.aspect = d.viewBox[2] / d.viewBox[3];
     var screen = make("div", "screen", device);
     var img = make("img", "capture", screen);
     img.src = capture.url;
     img.alt = "";
     d.screen = screen; d.img = img;
+    var hole = kind === "svg" && frame.meta.hardware ? frame.meta.hardware.cutout : null;
+    if (hole) {
+      // A generic camera cutout (a punch-hole or a pill) over the status bar, only when the frame asks for one.
+      var c = make("div", "cutout", screen);
+      c.dataset.shape = hole.shape;
+      c.style.left = (hole.x / capture.width * 100) + "%";
+      c.style.top = (hole.y / capture.height * 100) + "%";
+      c.style.width = (hole.width / capture.width * 100) + "%";
+      c.style.height = (hole.height / capture.height * 100) + "%";
+    }
     if (kind === "image") {
+      // As it is: no shadow or reflection added to a maker's art.
+      wrap.classList.add("with-art");
       var art = make("img", "frame-art", device);
       art.src = frame.url;
       art.alt = "";
@@ -340,6 +368,299 @@
     var k = w / d.viewBox[2];
     d.screen.style.borderRadius = (d.screenRadius * k) + "px";
     d.screenPx = { width: d.screenRect.width * k, height: d.screenRect.height * k };
+  }
+
+  // ---------------------------------------------------------------------------------------------- corners
+
+  // A capture is never cut by its screen's rounded corners: what a corner's curve would cut off (a status bar's
+  // clock in the very corner, an icon) is found in the capture's pixels, and a drawn frame's radius shrinks until
+  // nothing is cut. Content is a pixel unlike most of its corner (more than 48 levels in a channel); a corner
+  // "cuts" when more than a few such pixels lie outside its curve. A maker's art can't be changed, so there what
+  // its corners hide is only counted (the report's hiddenPx). Returns { radius, clipped } in capture pixels.
+  var cornerCanvas = null;
+  function cornerBlocks(img, cw, ch, R, mask) {
+    if (!cornerCanvas) cornerCanvas = document.createElement("canvas");
+    cornerCanvas.width = R; cornerCanvas.height = R;
+    var ctx = cornerCanvas.getContext("2d", { willReadFrequently: true });
+    var at = [[0, 0], [cw - R, 0], [0, ch - R], [cw - R, ch - R]];
+    return at.map(function (p, k) {
+      ctx.clearRect(0, 0, R, R);
+      ctx.drawImage(img, p[0], p[1], R, R, 0, 0, R, R);
+      var data = ctx.getImageData(0, 0, R, R).data;
+      var hidden = null;
+      if (mask) {
+        ctx.clearRect(0, 0, R, R);
+        ctx.drawImage(mask.img, mask.x + p[0] * mask.k, mask.y + p[1] * mask.k, R * mask.k, R * mask.k, 0, 0, R, R);
+        hidden = ctx.getImageData(0, 0, R, R).data;
+      }
+      var rs = [], gs = [], bs = [];
+      for (var i = 0; i < data.length; i += 16) { rs.push(data[i]); gs.push(data[i + 1]); bs.push(data[i + 2]); }
+      function med(a) { a.sort(function (x, y) { return x - y; }); return a[a.length >> 1] || 0; }
+      return { k: k, data: data, hidden: hidden, ref: [med(rs), med(gs), med(bs)] };
+    });
+  }
+  function isContent(block, i) {
+    var d = block.data, r = block.ref;
+    return Math.max(Math.abs(d[i] - r[0]), Math.abs(d[i + 1] - r[1]), Math.abs(d[i + 2] - r[2])) > 48;
+  }
+  // The capture's own corner tip is never content: a simulator's framebuffer can carry a few pure-black pixels
+  // there (the display's own mask), and a phone's rounded display hides that tip anyway. So pixels nearer the very
+  // corner than the tip (ux + uy under it), and pure-black ones within twice it, don't count; and a corner cuts only
+  // when more than a few pixels (relative to the radius) of content lie outside its curve.
+  function tipOf(r0) { return Math.max(8, 0.06 * r0); }
+  function cutAt(blocks, R, r, tip) {
+    var worst = 0;
+    blocks.forEach(function (b) {
+      var n = 0;
+      for (var y = 0; y < R; y++) {
+        for (var x = 0; x < R; x++) {
+          var ux = (b.k === 0 || b.k === 2) ? x : R - 1 - x;
+          var uy = (b.k === 0 || b.k === 1) ? y : R - 1 - y;
+          if (ux >= r || uy >= r || ux + uy < tip) continue;
+          var dx = r - ux - 0.5, dy = r - uy - 0.5;
+          if (dx * dx + dy * dy <= r * r) continue;
+          var i = (y * R + x) * 4, dd = b.data;
+          if (ux + uy < 2 * tip && dd[i] <= 12 && dd[i + 1] <= 12 && dd[i + 2] <= 12) continue;
+          if (isContent(b, i)) n++;
+        }
+      }
+      worst = Math.max(worst, n);
+    });
+    return worst;
+  }
+  function guardCorners(d) {
+    var cw = d.capture.width, ch = d.capture.height;
+    d.guard = null;
+    if (!d.img.naturalWidth) return;
+    try {
+      if (d.frame && d.frame.kind === "image" && d.art && d.art.naturalWidth) {
+        // The art's own corners: count the capture's content the opaque bezel hides.
+        var k = d.screenRect.width / cw;
+        var R0 = Math.max(4, Math.min(Math.round(cw / 4), Math.ceil((d.screenRadius || 0) / k * 1.2) + 4));
+        var blocks = cornerBlocks(d.img, cw, ch, R0, { img: d.art, x: d.screenRect.x, y: d.screenRect.y, k: k });
+        var hidden = 0;
+        blocks.forEach(function (b) {
+          for (var i = 0; i < b.data.length; i += 4) {
+            if (b.hidden[i + 3] > 160 && isContent(b, i)) hidden++;
+          }
+        });
+        d.guard = { radius: d.screenRadius, from: d.screenRadius, reduced: false, hiddenPx: hidden };
+        return;
+      }
+      if (!d.fitted || d.screenRadius < 1) return;
+      var r0 = d.screenRadius, R = Math.min(Math.ceil(r0) + 1, Math.floor(Math.min(cw, ch) / 2));
+      var blocks2 = cornerBlocks(d.img, cw, ch, R, null);
+      var tip = tipOf(r0), allow = Math.max(2, 0.0002 * r0 * r0);
+      var r = r0, cut = cutAt(blocks2, R, r, tip);
+      var first = cut;
+      // A radius the config sets is kept: what it cuts is only reported (and check.py warns).
+      var fixed = !!(d.frame && d.frame.meta && d.frame.meta.radiusSet);
+      while (!fixed && cut > allow && r > 1) {
+        r = r * 0.85 < 2 ? 0 : r * 0.85;
+        cut = r > 0 ? cutAt(blocks2, R, r, tip) : 0;
+      }
+      d.screenRadius = r;
+      if (d.svg) {
+        var back = d.svg.querySelector(".screen-back");
+        if (back) back.setAttribute("rx", String(r));
+      }
+      d.guard = { radius: r, from: r0, reduced: r < r0 - 0.01, clippedPx: cut > allow ? cut : 0,
+                  clippedAtFrom: first, fixed: fixed };
+    } catch (e) {
+      d.guard = { error: String(e && e.message || e) };
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------- fold
+
+  // A foldable's inner display, partly folded: the capture split at the hinge (vertical: left and right halves;
+  // horizontal: top and bottom), each half on a panel of the device turned about the hinge with CSS 3D, so the two
+  // halves meet at the seam and read as one screen. The panels have thickness (their edges), a drawn generic hinge
+  // behind the fold, and shading: darker toward the crease, the far panel a little darker than the near one. With
+  // fold.outer, one panel is lifted past upright (an angle under 90) and its back shows the outer display.
+  function buildFold(parent, spec, job) {
+    var f = spec.fold || {}, cap = spec.capture, meta = (spec.frame && spec.frame.meta) || {};
+    var short = Math.min(cap.width, cap.height);
+    var wrap = make("div", "device-wrap fold-wrap", parent);
+    wrap.dataset.role = "main";
+    var scene = make("div", "fold-scene", wrap);
+    var body = make("div", "fold-body", scene);
+    var vertical = f.hinge !== "horizontal";
+    var b = typeof meta.bezel === "number" ? meta.bezel : 0.028 * short;
+    var d = { wrap: wrap, device: scene, body: body, capture: cap, role: "main", frame: spec.frame, fold: f,
+              vertical: vertical, fitted: true, panels: [], bezel: b,
+              screenRadius: typeof meta.screenRadius === "number" ? meta.screenRadius : 0.05 * short,
+              rim: typeof meta.rim === "number" ? meta.rim : b * 0.28,
+              colours: meta.finishColours || { band: ["#5b5f68", "#2c2f35", "#1c1e22", "#34373e", "#4c5059"],
+                                               glass: "#08090b", edge: "#26282d" } };
+    d.radiusFrom = d.screenRadius;
+    d.bodyRadius = typeof meta.bodyRadius === "number" ? meta.bodyRadius : d.screenRadius + b;
+    d.viewBox = [0, 0, cap.width + 2 * b, cap.height + 2 * b];
+    d.screenRect = { x: b, y: b, width: cap.width, height: cap.height };
+    d.aspect = d.viewBox[2] / d.viewBox[3];
+    d.realWidth = meta.realWidthMm || 150;
+    [0, 1].forEach(function (i) {
+      var panel = make("div", "fold-panel", body);
+      panel.dataset.side = i ? "b" : "a";
+      var face = make("div", "fold-face", panel);
+      var glass = make("div", "fold-glass", face);
+      var screen = make("div", "screen fold-screen", face);
+      var img = make("img", "capture", screen);
+      img.src = cap.url;
+      img.alt = "";
+      var shade = make("div", "fold-shade", screen);
+      var back = make("div", "fold-back", panel);
+      var edges = [make("div", "fold-edge", panel), make("div", "fold-edge", panel), make("div", "fold-edge", panel)];
+      d.panels.push({ panel: panel, face: face, glass: glass, screen: screen, img: img, shade: shade, back: back,
+                      edges: edges });
+    });
+    d.img = d.panels[0].img;
+    d.screen = d.panels[0].screen;
+    d.hinge = make("div", "fold-hinge", body);
+    if (f.outer && f.outer.url) {
+      var os = make("div", "screen fold-outer", d.panels[1].back);
+      var oi = make("img", "capture", os);
+      oi.src = f.outer.url;
+      oi.alt = "";
+      d.outer = { screen: os, img: oi, capture: f.outer };
+    }
+    return d;
+  }
+
+  function px(v) { return v + "px"; }
+  function radii(list) { return list.map(px).join(" "); }
+
+  function layFold(d, x, y, w) {
+    var k = w / d.viewBox[2];
+    var cw = d.capture.width * k, ch = d.capture.height * k;
+    var DW = d.viewBox[2] * k, DH = d.viewBox[3] * k;
+    var b = d.bezel * k, r = d.screenRadius * k, R = Math.max(r + b, d.bodyRadius * k), rim = d.rim * k;
+    var T = Math.max(2, 0.03 * Math.min(DW, DH));
+    var f = d.fold, cover = !!d.outer;
+    var angle = typeof f.angle === "number" ? f.angle : (cover ? 70 : 120);
+    d.x = x; d.y = y; d.w = DW; d.h = DH;
+    var st = d.wrap.style;
+    st.left = px(x); st.top = px(y); st.width = px(DW); st.height = px(DH);
+    d.device.style.perspective = px(2.4 * Math.max(DW, DH));
+    var v = d.vertical;
+    var yaw = typeof f.turn === "number" ? f.turn : (cover ? -10 : v ? -12 : -5);
+    var pitch = typeof f.pitch === "number" ? f.pitch : (v ? -6 : -10);
+    d.body.style.transform = v ? "rotateX(" + pitch + "deg) rotateY(" + yaw + "deg)"
+                               : "rotateY(" + yaw + "deg) rotateX(" + pitch + "deg)";
+    var lift = [cover ? 0 : (180 - angle) / 2, cover ? 180 - angle : (180 - angle) / 2];
+    var c = d.colours;
+    var band = "linear-gradient(135deg, " + c.band[0] + " 0%, " + c.band[1] + " 18%, " + c.band[2] + " 55%, " +
+      c.band[3] + " 85%, " + c.band[4] + " 100%)";
+    d.panels.forEach(function (p, i) {
+      var pw = v ? DW / 2 : DW, ph = v ? DH : DH / 2;
+      var ps = p.panel.style;
+      ps.left = px(v && i ? DW / 2 : 0); ps.top = px(!v && i ? DH / 2 : 0);
+      ps.width = px(pw); ps.height = px(ph);
+      ps.transformOrigin = v ? (i ? "0% 50%" : "100% 50%") : (i ? "50% 0%" : "50% 100%");
+      ps.transform = v ? "rotateY(" + (i ? -lift[1] : lift[0]) + "deg)" : "rotateX(" + (i ? lift[1] : -lift[0]) + "deg)";
+      // The outer corners are round, the hinge side square (the screen runs on across the fold).
+      var outerR = v ? (i ? [0, R, R, 0] : [R, 0, 0, R]) : (i ? [0, 0, R, R] : [R, R, 0, 0]);
+      p.face.style.borderRadius = radii(outerR);
+      p.face.style.background = band;
+      var gs = p.glass.style;
+      gs.left = px(v && i ? 0 : rim); gs.top = px(!v && i ? 0 : rim);
+      gs.width = px(pw - (v ? rim : 2 * rim)); gs.height = px(ph - (v ? 2 * rim : rim));
+      gs.borderRadius = radii(outerR.map(function (q) { return q ? Math.max(0, R - rim) : 0; }));
+      gs.background = c.glass;
+      var ss = p.screen.style;
+      ss.left = px(v ? (i ? 0 : b) : b); ss.top = px(v ? b : (i ? 0 : b));
+      ss.width = px(v ? cw / 2 : cw); ss.height = px(v ? ch : ch / 2);
+      ss.borderRadius = radii(outerR.map(function (q) { return q ? r : 0; }));
+      var is = p.img.style;
+      is.position = "absolute"; is.objectFit = "fill";
+      is.width = px(cw); is.height = px(ch);
+      is.left = px(v && i ? -cw / 2 : 0); is.top = px(!v && i ? -ch / 2 : 0);
+      // Shading: a crease toward the hinge on both halves; the near half lit, the far one shaded.
+      var toHinge = v ? (i ? "left" : "right") : (i ? "top" : "bottom");
+      var away = { left: "right", right: "left", top: "bottom", bottom: "top" }[toHinge];
+      var shades = i ?
+        ["linear-gradient(to " + away + ", rgba(0,0,0,0.26) 0%, rgba(255,255,255,0.10) 1.4%, rgba(255,255,255,0) 22%)",
+         "linear-gradient(to " + away + ", rgba(255,255,255,0) 60%, rgba(255,255,255,0.05) 100%)"] :
+        ["linear-gradient(to " + toHinge + ", rgba(0,0,0,0) 72%, rgba(0,0,0,0.14) 95%, rgba(0,0,0,0.3) 100%)",
+         "linear-gradient(rgba(0,0,0,0.07), rgba(0,0,0,0.07))"];
+      if (cover) shades = ["linear-gradient(to " + toHinge + ", rgba(0,0,0,0) 40%, rgba(0,0,0,0.32) 100%)"];
+      p.shade.style.background = shades.join(", ");
+      var bs = p.back.style;
+      bs.borderRadius = radii(v ? [outerR[1], outerR[0], outerR[3], outerR[2]] : [outerR[3], outerR[2], outerR[1], outerR[0]]);
+      bs.background = band;
+      bs.transform = "translateZ(" + (-T) + "px) " + (v ? "rotateY(180deg)" : "rotateX(180deg)");
+      // The panel's edges: its outer edge and the two ends, standing back from the face by its thickness.
+      var e = p.edges.map(function (n) { return n.style; });
+      e.forEach(function (es) { es.background = c.edge; });
+      if (v) {
+        e[0].left = px(i ? pw - T : 0); e[0].top = px(R); e[0].width = px(T); e[0].height = px(ph - 2 * R);
+        e[0].transformOrigin = i ? "100% 50%" : "0% 50%"; e[0].transform = "rotateY(" + (i ? -90 : 90) + "deg)";
+        e[1].left = px(i ? 0 : R); e[1].top = px(0); e[1].width = px(pw - R); e[1].height = px(T);
+        e[1].transformOrigin = "50% 0%"; e[1].transform = "rotateX(-90deg)";
+        e[2].left = px(i ? 0 : R); e[2].top = px(ph - T); e[2].width = px(pw - R); e[2].height = px(T);
+        e[2].transformOrigin = "50% 100%"; e[2].transform = "rotateX(90deg)";
+      } else {
+        e[0].left = px(R); e[0].top = px(i ? ph - T : 0); e[0].width = px(pw - 2 * R); e[0].height = px(T);
+        e[0].transformOrigin = i ? "50% 100%" : "50% 0%"; e[0].transform = "rotateX(" + (i ? 90 : -90) + "deg)";
+        e[1].left = px(0); e[1].top = px(i ? 0 : R); e[1].width = px(T); e[1].height = px(ph - R);
+        e[1].transformOrigin = "0% 50%"; e[1].transform = "rotateY(90deg)";
+        e[2].left = px(pw - T); e[2].top = px(i ? 0 : R); e[2].width = px(T); e[2].height = px(ph - R);
+        e[2].transformOrigin = "100% 50%"; e[2].transform = "rotateY(-90deg)";
+      }
+    });
+    // The hinge: a rounded spine behind the fold, its ends showing past the panels.
+    var hs = d.hinge.style, hw = T * 1.5;
+    if (v) {
+      hs.left = px(DW / 2 - hw / 2); hs.top = px(-T * 0.35); hs.width = px(hw); hs.height = px(DH + T * 0.7);
+      hs.background = "linear-gradient(90deg, " + c.band[2] + ", " + c.band[0] + " 45%, " + c.band[1] + " 70%, " +
+        c.band[2] + ")";
+    } else {
+      hs.top = px(DH / 2 - hw / 2); hs.left = px(-T * 0.35); hs.height = px(hw); hs.width = px(DW + T * 0.7);
+      hs.background = "linear-gradient(180deg, " + c.band[2] + ", " + c.band[0] + " 45%, " + c.band[1] + " 70%, " +
+        c.band[2] + ")";
+    }
+    hs.borderRadius = px(hw / 2);
+    hs.transform = "translateZ(" + (-T * 0.55) + "px)";
+    if (d.outer) {
+      // The outer display on the lifted panel's back, whole (fitted inside the bezel, never cut).
+      var o = d.outer.capture, pw2 = v ? DW / 2 : DW, ph2 = v ? DH : DH / 2;
+      var room = { w: pw2 - 2 * b, h: ph2 - 2 * b };
+      var sc = Math.min(room.w / o.width, room.h / o.height);
+      var ow = o.width * sc, oh = o.height * sc;
+      var os = d.outer.screen.style;
+      os.left = px((pw2 - ow) / 2); os.top = px((ph2 - oh) / 2); os.width = px(ow); os.height = px(oh);
+      os.borderRadius = px((o.radius || 0.1 * Math.min(o.width, o.height)) * sc);
+      os.background = "#000";
+      d.outer.scale = sc;
+      d.outer.px = { width: ow, height: oh };
+    }
+    d.screenPx = { width: cw, height: ch };
+    d.foldAngle = angle;
+  }
+
+  // The fold's drawn extent: the union of its panels and hinge as projected (getBoundingClientRect follows 3D).
+  function foldRect(d) {
+    var l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+    d.panels.map(function (p) { return p.panel; }).concat([d.hinge]).forEach(function (n) {
+      var q = n.getBoundingClientRect();
+      l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+    });
+    return { left: l, top: t, right: r, bottom: b, width: r - l, height: b - t };
+  }
+
+  // Fit a fold into a region (x, y, w, h in slot pixels, under the words): drawn once at a trial size, measured as
+  // projected, then drawn at the size whose projection fills the region, centred across it and at its top.
+  function fitFold(d, origin, x, y, w, h, maxW) {
+    var trial = 1000;
+    layFold(d, 0, 0, trial);
+    var q = foldRect(d);
+    var scale = Math.min(Math.min(w, maxW) / q.width, h / q.height);
+    layFold(d, 0, 0, trial * scale);
+    q = foldRect(d);
+    var dx = x + (w - q.width) / 2 - (q.left - origin.left);
+    var dy = y - (q.top - origin.top);
+    layFold(d, dx, dy, trial * scale);
+    return foldRect(d);
   }
 
   // ---------------------------------------------------------------------------------------------- captions
@@ -481,7 +802,26 @@
       if (layout === "band") { s.band = make("div", "band", slot); }
       var block = make("div", "caption-block", host);
       block.dataset.align = cap.align || "center";
-      if (layout === "hero" && job.theme.icon) {
+      var logo = layout === "hero" ? job.theme.logo : null;
+      if (logo && logo.url) {
+        // The brand's own mark: "wide" at its own shape, no tile (a wordmark, a logo with words), or "tile" as the
+        // app's icon is drawn.
+        s.icon = make("img", logo.fit === "tile" ? "icon" : "logo", block);
+        s.icon.src = logo.url;
+        s.icon.alt = "";
+        if (logo.fit !== "tile") {
+          // widthPct: the mark's width in u (up to 60), its height following its shape up to maxHeightPct (by
+          // default as tall as it's wide, so a stacked, squarish logo can match a measured set).
+          if (logo.widthPct) {
+            var lw = Math.min(60, logo.widthPct);
+            s.icon.dataset.sized = "1";
+            s.icon.style.setProperty("--logo-w", String(lw));
+            s.icon.style.setProperty("--logo-max-h", String(logo.maxHeightPct || lw));
+          } else if (logo.maxHeightPct) {
+            s.icon.style.setProperty("--logo-max-h", String(logo.maxHeightPct));
+          }
+        }
+      } else if (layout === "hero" && job.theme.icon) {
         s.icon = make("img", "icon", block);
         s.icon.src = job.theme.icon;
         s.icon.alt = "";
@@ -508,6 +848,10 @@
     } else {
       var stage = make("div", "stage", slot);
       s.stage = stage;
+      if (layout === "fold") {
+        s.devices.push(buildFold(stage, spec, job));
+        return s;
+      }
       if (layout === "pair" && spec.pair) {
         s.devices.push(buildDevice(stage, spec.pair.frame, spec.pair.capture, "pair"));
       }
@@ -517,8 +861,13 @@
         stage.insertBefore(s.devices[1].wrap, s.devices[0].wrap);
       }
       if (layout === "tilt") {
-        s.devices[0].device.style.setProperty("--tilt-sign",
-          ((spec.tilt === "right") !== (job.dir === "rtl")) ? "-1" : "1");
+        var dev = s.devices[0].device.style;
+        dev.setProperty("--tilt-sign", ((spec.tilt === "right") !== (job.dir === "rtl")) ? "-1" : "1");
+        // The theme's (or the shot's) own angles, in degrees, and perspective, in u: a style's tilt.
+        var angles = spec.tiltAngles || {};
+        [["y", "--tilt-y"], ["x", "--tilt-x"], ["z", "--tilt-z"], ["perspective", "--perspective"]].forEach(function (p) {
+          if (typeof angles[p[0]] === "number") dev.setProperty(p[1], String(angles[p[0]]));
+        });
       }
     }
     return s;
@@ -562,11 +911,34 @@
     s.el.dataset.placement = placement;
     s.fit = null;
 
-    // 1. The caption: its block's width, then its size.
+    // A hero on a wide or square slot sets its words beside the app (a column at the start side) rather than
+    // over a sliver of it, so the shot still shows the app in use.
+    var aspectCls = document.body.dataset.aspect;
+    var side = s.layout === "hero" && (aspectCls === "wide" || aspectCls === "square") && s.devices.length > 0;
+    s.el.dataset.arrange = side ? "side" : "stack";
+    var colGap = cssNum(style, "--side-gap", 4) * u;
+    var textW = side ? availW * cssNum(style, "--side-text", 0.44) : availW;
+
+    // 1. The caption: its block's width (the caption's maxWidthPct of the slot, if set), then its size.
     var ch = 0, chR = 0;
+    s.blockLeft = L;
     if (s.block) {
-      var blockW = availW;
+      var blockW = textW;
       if (s.plate) blockW = availW - 2 * P.platePad;
+      else if (cap.widthPct || cap.maxWidthPct) {
+        // widthPct: the caption's box this wide (narrower or wider than the layout's, to a measured set's width),
+        // never past 2u from the slot's edges (or a panorama's seam); maxWidthPct: at most this wide.
+        var widest = W - Math.max(2 * u, seamLeft) - Math.max(2 * u, seamRight);
+        if (cap.widthPct && !side) blockW = Math.min(widest, cap.widthPct / 100 * W);
+        if (cap.maxWidthPct) blockW = Math.min(blockW, cap.maxWidthPct / 100 * W);
+        var align = cap.align || "center";
+        var leftEdge = (align === "start" && !rtl) || (align === "end" && rtl);
+        var rightEdge = (align === "end" && !rtl) || (align === "start" && rtl);
+        var lo = Math.max(2 * u, seamLeft), hi = W - Math.max(2 * u, seamRight) - blockW;
+        var want = leftEdge ? L : rightEdge ? L + textW - blockW : L + (textW - blockW) / 2;
+        s.blockLeft = Math.max(lo, Math.min(hi, want));
+      }
+      if (side && rtl) s.blockLeft += availW - textW;
       s.block.style.width = blockW + "px";
       var base = (cap.sizePct || 9.5) / 100 * W * P.factor * P.captionScale;
       var floor = (cap.floorPct || 7) / 100 * W * P.factor * P.captionScale;
@@ -576,6 +948,13 @@
       if (s.caption && cap.text) {
         s.fit = fitCaption(s, base, floor, maxLines, P.leading);
         s.fit.sizePx = base; s.fit.floorPx = floor; s.fit.maxLines = maxLines;
+      }
+      if (s.layout === "hero") {
+        // The hero's words, mark and app share the height: beside the app the block may take the slot less its top
+        // and bottom margins; above it, enough to leave --hero-device-min of the slot for the app.
+        var roomH = side ? H - 2 * P.padTop
+                         : H - P.padTop - P.gap - cssNum(style, "--hero-device-min", 0.3) * H;
+        fitHeroBlock(s, roomH, u, P.leading);
       }
       ch = s.block.getBoundingClientRect().height;
       // The block keeps room for --caption-reserve-lines lines at the starting size even when the words take
@@ -603,7 +982,7 @@
           s.band.style.top = "0px"; s.band.style.height = bandH + "px";
           s.block.style.top = P.padTop + "px";
         }
-        s.block.style.left = L + "px";
+        s.block.style.left = s.blockLeft + "px";
       }
       holder.left = "0px"; holder.top = top + "px"; holder.width = W + "px"; holder.height = (bottom - top) + "px";
       s.fill.box = { width: W, height: bottom - top };
@@ -619,7 +998,7 @@
         s.block.style.top = P.platePad + "px";
         if (s.plate.dataset.plate === "solid") shrinkPlate(s, P, L, availW);
       } else if (s.block && s.layout === "fullbleed") {
-        s.block.style.left = L + "px";
+        s.block.style.left = s.blockLeft + "px";
         s.block.style.top = (placement === "top" ? P.padTop : H - P.padBottom - ch) + "px";
       }
       return;
@@ -627,8 +1006,45 @@
 
     var devs = s.devices;
     var main = devs[0];
+    if (s.layout === "fold") {
+      // The words above, the folded device under them, the two centred together like framed.
+      var origin = s.el.getBoundingClientRect();
+      var regionTop = P.padTop + (chR ? chR + P.gap : 0);
+      var q = fitFold(main, origin, SL, regionTop, stageW, H - P.padBottom - regionTop, P.deviceW);
+      var total = (chR ? chR + P.gap : 0) + q.height;
+      var start = P.padTop + Math.max(0, H - P.padTop - P.padBottom - total) * 0.5;
+      if (s.block) { s.block.style.top = start + "px"; s.block.style.left = s.blockLeft + "px"; }
+      fitFold(main, origin, SL, start + (chR ? chR + P.gap : 0), stageW, H - P.padBottom - regionTop, P.deviceW);
+      return;
+    }
     var group = groupShape(s, P);   // the devices' arrangement, in a unit box: { w, h, items: [...] }
     var gw, gh, gx, gy;
+    if (side) {
+      // The hero beside its words: the device in the end-side column, cut off by the bottom edge by --bleed, the
+      // words centred down the start-side column.
+      var colL = rtl ? L : L + textW + colGap, colW = availW - textW - colGap;
+      var sideBleed = cssNum(style, "--side-bleed", 0.1);
+      if (group.w > group.h) {
+        // A landscape device stands up to --side-height of the slot's height, centred down it, and runs off the
+        // end side rather than shrinking into its column (at most --side-overrun of its width off the slot).
+        gh = Math.min(H * cssNum(style, "--side-height", 0.66), colW * (1 + cssNum(style, "--side-overrun", 0.3)) * group.h / group.w);
+        gw = gh * group.w / group.h;
+        gy = (H - gh) / 2;
+        gx = rtl ? colL + colW - gw : colL;
+      } else {
+        gw = Math.min(colW, (H - P.padTop) / (1 - sideBleed) * group.w / group.h);
+        gh = gw * group.h / group.w;
+        gy = H - (1 - sideBleed) * gh;
+        gx = colL + (colW - gw) / 2;
+      }
+      if (s.block) {
+        s.block.style.top = Math.max(P.padTop, (H - ch) / 2) + "px";
+        s.block.style.left = s.blockLeft + "px";
+      }
+      var kk = gw / group.w;
+      group.items.forEach(function (it) { place(it.d, gx + it.x * kk, gy + it.y * kk, it.w * kk); });
+      return;
+    }
     if (s.layout === "framed") {
       var regionH = H - P.padTop - P.padBottom - (chR ? chR + P.gap : 0);
       gw = Math.min(P.deviceW, stageW, regionH * group.w / group.h);
@@ -667,7 +1083,7 @@
       }
     }
     gx = SL + (stageW - gw) / 2;
-    if (s.block) s.block.style.left = L + "px";
+    if (s.block) s.block.style.left = s.blockLeft + "px";
     var k = gw / group.w;
     group.items.forEach(function (it) {
       var x = gx + it.x * k;
@@ -675,6 +1091,35 @@
       place(it.d, x, gy + it.y * k, it.w * k);
     });
     if (s.layout === "callout" && s.spec.callout) placeCallout(s, main, job, W, H, u, SL, SR);
+  }
+
+  // When a hero's block (mark, kicker, claim, proof) is taller than its room, the mark shrinks first (to 4u tall at
+  // the least), then the claim, never below its floor. What still doesn't fit is reported by slotReport.
+  function fitHeroBlock(s, roomH, u, leading) {
+    function blockH() { return s.block.getBoundingClientRect().height; }
+    if (blockH() <= roomH + 0.5) return;
+    if (s.icon) {
+      var h = s.icon.getBoundingClientRect().height, least = 4 * u;
+      var from = h;
+      while (blockH() > roomH + 0.5 && h > least + 0.5) {
+        h = Math.max(least, h * 0.88);
+        if (s.icon.classList.contains("icon")) {
+          s.icon.style.width = h + "px"; s.icon.style.height = h + "px";
+        } else {
+          s.icon.style.width = "auto"; s.icon.style.maxWidth = "100%"; s.icon.style.maxHeight = h + "px";
+        }
+      }
+      if (h < from - 0.5) s.logoShrunk = { from: from, to: h };
+    }
+    if (blockH() > roomH + 0.5 && s.fit && s.caption) {
+      var px = s.fit.px;
+      while (blockH() > roomH + 0.5 && px > s.fit.floorPx + 1e-6) {
+        px = Math.max(s.fit.floorPx, px - Math.max(0.5, px * 0.03));
+        s.caption.style.fontSize = px + "px";
+      }
+      s.fit.px = px;
+      s.fit.lines = Math.max(1, Math.round(s.caption.getBoundingClientRect().height / (px * leading)));
+    }
   }
 
   // A solid plate hugs its words: as wide as the longest line plus its padding, placed by the caption's alignment.
@@ -772,6 +1217,16 @@
     var kicker = textItem(s.kicker, "kicker");
     var captionItem = textItem(s.caption, "caption");
     var proof = textItem(s.proof, "proof");
+    // Anything of the words (or the hero's mark) leaving the slot doesn't fit, whatever the line count says.
+    var outside = [];
+    textBoxes.forEach(function (t) {
+      var q = t.rect;
+      if (q.left < -1 || q.top < -1 || q.right > W + 1 || q.bottom > H + 1) outside.push(t.role);
+    });
+    if (s.icon) {
+      var lq = rel(s.icon.getBoundingClientRect(), origin);
+      if (lq.width > 0 && (lq.left < -1 || lq.top < -1 || lq.right > W + 1 || lq.bottom > H + 1)) outside.push("logo");
+    }
     var share = 0;
     textBoxes.forEach(function (t) { share += clipArea(t.rect, W, H); });
     share /= W * H;
@@ -787,7 +1242,8 @@
         sizePx: fit ? round(fit.sizePx, 1) : 0,
         floorPx: fit ? round(fit.floorPx, 1) : 0,
         atFloor: fit ? fit.px <= fit.floorPx + 0.05 : false,
-        fits: fit ? fit.ok : true,
+        fits: (fit ? fit.ok : true) && !outside.length,
+        outside: outside,
         hyphenated: !!(fit && fit.ok && fit.hyphens === "auto"),
         hyphenationAvailable: cap.text ? hyphenationAvailable(job.lang, cap.text) : null,
         softHyphens: /&shy;|\u00ad/.test(cap.text || ""),
@@ -803,6 +1259,11 @@
         "case": cap["case"] || "none"
       };
       if (s.plate) r.caption.plate = box(rel(s.plate.getBoundingClientRect(), origin));
+      if (s.block) r.caption.blockBox = box(rel(s.block.getBoundingClientRect(), origin));
+      if (s.icon) r.caption.logo = { box: box(rel(s.icon.getBoundingClientRect(), origin)),
+                                     kind: s.icon.className,
+                                     shrunk: s.logoShrunk ? { from: round(s.logoShrunk.from, 1),
+                                                              to: round(s.logoShrunk.to, 1) } : null };
       if (s.band) r.caption.band = box(rel(s.band.getBoundingClientRect(), origin));
     } else {
       r.caption = null;
@@ -812,23 +1273,65 @@
     var frames = [], scales = [];
     var items = [];   // what mustn't sit in a seam: [name, rect]
     textBoxes.forEach(function (t) { items.push([t.role, t.rect]); });
+    var ui = 0;
     s.devices.forEach(function (d) {
-      var q = rel(d.wrap.getBoundingClientRect(), origin);
+      var q = rel(d.panels ? foldRect(d) : d.wrap.getBoundingClientRect(), origin);
       var tilted = s.layout === "tilt";
       var cropped = q.left < -0.5 || q.top < -0.5 || q.right > W + 0.5 || q.bottom > H + 0.5;
       var over = textBoxes.some(function (t) { return overlaps(t.rect, q); }) ||
         (s.callout ? overlaps(rel(s.callout.el.getBoundingClientRect(), origin), q) : false) ||
         s.devices.some(function (o) { return o !== d && overlaps(rel(o.wrap.getBoundingClientRect(), origin), q); });
       var f = d.frame || { name: "none", kind: "none", meta: {} };
-      frames.push({ name: f.name || "none", role: d.role, box: box(q),
+      var meta = f.meta || {};
+      // How big the capture is drawn: its screen's size over the capture's (for a fold, as projected: the near
+      // edge of a turned panel is drawn larger).
+      var scale = Math.max(d.screenPx.width / d.capture.width, d.screenPx.height / d.capture.height);
+      if (d.panels) {
+        d.panels.forEach(function (p) {
+          var r = p.screen.getBoundingClientRect();
+          var flat = d.vertical ? d.screenPx.height : d.screenPx.width;
+          scale = Math.max(scale, (d.vertical ? r.height : r.width) / flat * (d.screenPx.width / d.capture.width));
+        });
+      }
+      var entry = { name: f.name || "none", role: d.role, box: box(q),
                     kind: f.kind === "svg" ? "drawn" : f.kind === "image" ? "art" : "none",
-                    drawn: f.kind === "svg" ? true : f.kind === "image" ? (f.meta && f.meta.drawn === true) : null,
-                    maker: (f.meta && f.meta.maker) || null, tilted: tilted, cropped: cropped, overlapped: over,
-                    captureScale: round(Math.max(d.screenPx.width / d.capture.width,
-                                                 d.screenPx.height / d.capture.height), 3) });
-      scales.push(Math.max(d.screenPx.width / d.capture.width, d.screenPx.height / d.capture.height));
+                    drawn: f.kind === "svg" ? true : f.kind === "image" ? (meta.drawn === true) : null,
+                    maker: meta.maker || null, tilted: tilted, threeD: tilted || !!d.panels, cropped: cropped,
+                    overlapped: over, captureScale: round(scale, 3) };
+      if (meta["class"]) entry["class"] = meta["class"];
+      if (meta.fitted) entry.fitted = true;
+      if (f.kind === "svg" || f.kind === "image" || d.panels) {
+        entry.screenRadius = round(d.screenRadius, 1);
+        if (d.guard) {
+          entry.corners = { radiusFrom: round(d.guard.from || 0, 1), reduced: !!d.guard.reduced,
+                            clippedPx: d.guard.clippedPx || 0 };
+          if (d.guard.fixed) entry.corners.radiusSet = true;
+          if (typeof d.guard.hiddenPx === "number") entry.corners.hiddenPx = d.guard.hiddenPx;
+          if (d.guard.error) entry.corners.error = d.guard.error;
+        }
+      }
+      if (meta.hardware) entry.hardware = meta.hardware;
+      if (f.kind === "image") {
+        entry.art = { scale: round(d.w / d.viewBox[2], 3), fit: f.fit || null, screenSource: meta.screenSource || null };
+      }
+      if (d.panels) {
+        entry.fold = { hinge: d.vertical ? "vertical" : "horizontal", angle: d.foldAngle,
+                       pose: d.outer ? "cover" : "open", outer: d.outer ? { box: box(rel(d.outer.screen.getBoundingClientRect(), origin)),
+                                                                            captureScale: round(d.outer.scale, 3) } : null };
+        if (d.outer) scale = Math.max(scale, d.outer.scale);
+      }
+      frames.push(entry);
+      scales.push(scale);
       items.push(["frame", q]);
+      // The share of the slot showing the app's screen (each screen's drawn box, inside the slot).
+      (d.panels ? d.panels.map(function (p) { return p.screen; }) : [d.screen]).forEach(function (sc) {
+        ui += clipArea(rel(sc.getBoundingClientRect(), origin), W, H);
+      });
     });
+    if (s.fill) ui += clipArea({ left: 0, top: parseFloat(s.fill.holder.style.top) || 0,
+                                 right: W, bottom: (parseFloat(s.fill.holder.style.top) || 0) + s.fill.box.height },
+                               W, H);
+    r.uiShare = round(Math.min(1, ui / (W * H)), 4);
     if (s.fill) {
       scales.push(Math.max(s.fill.box.width / s.fill.capture.width, s.fill.box.height / s.fill.capture.height));
     }
@@ -912,6 +1415,7 @@
       }).then(function () { return img.decode ? img.decode().catch(function () {}) : null; });
     });
     return Promise.all(images).then(function () {
+      built.forEach(function (s) { s.devices.forEach(guardCorners); });
       built.forEach(function (s, i) {
         var start = i > 0 ? seamPx : 0, end = i < count - 1 ? seamPx : 0;
         lay(s, job, W, H, u, start, end);

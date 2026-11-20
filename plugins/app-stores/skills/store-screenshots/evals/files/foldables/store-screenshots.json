@@ -1,0 +1,75 @@
+{
+  "$comment": "The invented app Sample Recipes on foldables: an iPhone Duo (inner display landscape, outer display) and an Android book foldable, beside a Play phone whose status bar clock sits in the very corner. Nothing here is a real app or person.",
+  "version": 1,
+  "captures": "captures",
+  "out": "screenshots",
+  "primaryLocale": "en-US",
+  "locales": [
+    "en-US"
+  ],
+  "theme": {
+    "palette": {
+      "background": "#0E3B2E",
+      "ink": "#FFFFFF",
+      "accent": "#FFC94D"
+    },
+    "background": {
+      "kind": "glow"
+    },
+    "caption": {
+      "placement": "top",
+      "align": "center",
+      "maxLines": 2,
+      "weight": 800,
+      "sizePct": 9.5,
+      "floorPct": 7.0
+    },
+    "frame": "phone"
+  },
+  "targets": {
+    "iphone-duo-inner": {
+      "store": "apple",
+      "width": 2853,
+      "height": 2007,
+      "capture": "iphone-duo-inner"
+    },
+    "iphone-duo-outer": {
+      "store": "apple",
+      "width": 1398,
+      "height": 2034,
+      "capture": "iphone-duo-outer"
+    },
+    "android-phone": {
+      "store": "google",
+      "width": 1080,
+      "height": 1920,
+      "capture": "android-phone"
+    },
+    "android-fold-inner": {
+      "store": "google",
+      "width": 1840,
+      "height": 2208,
+      "capture": "android-fold-inner"
+    }
+  },
+  "shots": [
+    {
+      "id": "plan",
+      "capture": "plan",
+      "layout": "framed-bleed",
+      "caption": "cap.plan"
+    }
+  ],
+  "panorama": null,
+  "stores": {
+    "apple": {},
+    "google": {
+      "frame": "phone"
+    }
+  },
+  "strings": {
+    "en-US": {
+      "cap.plan": "Plan a week of meals in minutes"
+    }
+  }
+}

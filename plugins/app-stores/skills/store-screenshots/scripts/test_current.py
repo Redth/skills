@@ -105,6 +105,20 @@ class Groups(Case):
         everything = [f for g in groups for f in g["files"]]
         self.assertFalse(any("icon" in f for f in everything))  # the graphics aren't screenshots
 
+    def test_iphones_come_before_ipads_and_watches(self):
+        root = os.path.join(self.tmp, "app")
+        for slot, size in (("APP_WATCH_ULTRA", (41, 50)), ("APP_IPAD_PRO_3GEN_129", (60, 80)),
+                           ("APP_IPHONE_67", (43, 93)), ("IPHONE_DUO_INNER", (93, 66))):
+            tk.write_png(os.path.join(root, "existing", "apple", "screenshots", "en-US", slot, "01.png"), *size)
+        groups = sheet.current_groups(os.path.join(root, "existing"))
+        self.assertEqual([g["slot"] for g in groups], ["APP_IPHONE_67", "IPHONE_DUO_INNER", "APP_IPAD_PRO_3GEN_129",
+                                                       "APP_WATCH_ULTRA"])
+        for device, size in (("ipad", (60, 80)), ("apple-watch", (41, 50)), ("pixel-phone", (43, 93)),
+                             ("iphone", (43, 93))):
+            tk.write_png(os.path.join(root, "assets", device, "1.png"), *size)
+        self.assertEqual([g["id"] for g in sheet.current_groups(os.path.join(root, "assets"))],
+                         ["iphone", "ipad", "apple-watch", "pixel-phone"])
+
     def test_one_slot_of_a_pulled_listing_is_still_named_by_its_path(self):
         root = self.pulled()
         groups = sheet.current_groups(os.path.join(root, "existing", "google", "screenshots", "en-US", "phone"))
@@ -113,9 +127,9 @@ class Groups(Case):
     def test_a_repository_folder_groups_by_device_in_number_order(self):
         root = self.repo_folder()
         groups = sheet.current_groups(os.path.join(root, "assets", "screenshots"))
-        self.assertEqual([g["id"] for g in groups], ["android", "iphone"])
-        self.assertEqual(groups[1]["files"], ["iphone/Screenshot-%d.png" % n for n in (1, 2, 3, 10)])
-        self.assertIsNone(groups[1]["store"])
+        self.assertEqual([g["id"] for g in groups], ["iphone", "android"])   # the App Store's first
+        self.assertEqual(groups[0]["files"], ["iphone/Screenshot-%d.png" % n for n in (1, 2, 3, 10)])
+        self.assertIsNone(groups[0]["store"])
         flat = sheet.current_groups(os.path.join(root, "assets", "screenshots", "iphone"))
         self.assertEqual(flat[0]["id"], "iphone")
         self.assertEqual(flat[0]["files"], ["Screenshot-1.png", "Screenshot-2.png", "Screenshot-3.png",
@@ -176,7 +190,7 @@ class CurrentJson(Case):
     def test_the_schema_uses_only_supported_keywords_and_shares_the_layouts(self):
         defs = styles.style_schema()["$defs"]
         self.assertEqual(defs["layout"]["enum"], ["fullbleed", "band", "framed", "framed-bleed", "tilt", "pair",
-                                                  "callout", "hero", "gameplay"])
+                                                  "callout", "hero", "gameplay", "fold"])
         config_layouts = jsonio.load(styles.CONFIG_SCHEMA_PATH)["$defs"]["layout"]
         self.assertEqual(sorted(defs["layout"]["enum"]), sorted(x for x in config_layouts["enum"] if x))
 

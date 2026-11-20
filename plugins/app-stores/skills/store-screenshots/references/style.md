@@ -38,7 +38,7 @@ use the same words.
 | `locked` | set by `baseline.py approve`, cleared only by `baseline.py unlock --reason` ([baseline.md](baseline.md)) |
 | `traits` | the look in the fixed vocabulary below; for people and the sheets, not the renderer |
 | `theme` | the same object as the config's `theme` ([config.md](config.md)); the renderer uses it |
-| `roles` | `{role: {layout, frame?, tilt?, at?, maxPerSet?, stores?}}`: the layout each kind of shot gets; `stores` gives the role another `layout` or `frame` on one store |
+| `roles` | `{role: {layout, frame?, tilt?, at?, fold?, maxPerSet?, stores?}}`: the layout each kind of shot gets; `stores` gives the role another `layout` or `frame` on one store |
 | `stores` | per-store overrides, as the config's |
 | `copy` | `maxWords`, `maxLines`, `case` (`sentence`, `title`, `upper`, `lower`, `any`): `check.py` warns on captions that break them; `emphasis` is guidance in words |
 | `drift` | tolerances against the baseline: `captionSize` relative (0.05 = 5%), `captionPosition` and `deviceBox` as fractions of the slot's width (0.01 = 1u), `textShare` an absolute share, `colour` a CIE76 delta E |
@@ -61,6 +61,16 @@ use the same words.
   error, a shot whose own layout none of the roles use is a warning, and a change to the style itself is an error until
   a new baseline is approved with the user.
 - `caption.case` (`upper` or `lower`) draws the words in that case without changing the strings.
+- **Matching a measured set.** `theme.tilt` (`{"y", "x", "z", "perspective"}`) sets the tilt's angles for every
+  tilted shot, and a shot's own `tilt` object varies one (a live set that tilts most phones, each a little
+  differently); `caption.widthPct` sets the caption's box to a measured set's width (wider or narrower than the
+  layout's) so its lines break where the set's do; `theme.hero.logo` with `fit: "wide"` and `widthPct` puts the
+  brand's mark on the hero at its own shape and a measured width.
+- **Relaxing a store's design rule** (Play's frames, say, by the user's choice): it's relaxed in `store-listing.json`'s
+  `rules.relax` with the user's reason, not in the style; `check.py` reads it from there, and `store-listings`'
+  check knows the design rules' ids.
+- **Foldables.** The app starting styles have a `foldable` role: the `fold` layout (a foldable's inner display shown
+  partly folded) on Apple, the capture flat on Play. Give the shot `targets` for the foldable's devices only.
 
 ## The traits vocabulary
 
@@ -112,6 +122,15 @@ safe to delete. The colours there are the styles' own. The public apps named are
 
 The app styles share role names (`hero`, `feature`, `whole`, `detail`, `accent`, `pair`), so one config's shots render
 in any of them; the game styles use `key-art`, `gameplay` and `banner`.
+
+## Matching a live set's font
+
+The scripts never fetch a font; the user brings it, with the right to use it. To find what a live set uses: look at
+the letterforms at full size (a two-storey or one-storey "a" and "g", the "R"'s leg, the "t"'s top, the dots' shape)
+and compare with a type identifier (a "what font is this" service, run by the user) or the brand's own guidelines. If
+the font isn't one the user owns, an open-licence near match from the SIL Open Font Library or Google Fonts' own
+repository (each family's licence file beside it, OFL or Apache) is the usual stand-in: the user downloads it, keeps
+its licence with it, and names it in `theme.fonts`. Say it's a match by eye, not the same font.
 
 ## The numbers behind the defaults
 

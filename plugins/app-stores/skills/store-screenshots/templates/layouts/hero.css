@@ -1,7 +1,10 @@
 /*
   hero: the claim large (caption.sizePct x --caption-scale, a line more allowed), a kicker above it (the brand or a
-  label), a proof line below, the theme's icon on top if it has one, and a sliver of the real app rising from the
-  bottom edge (Apple 2.3.3 wants the app in use, not only title art).
+  label), a proof line below, the theme's logo (theme.hero.logo: "wide" at its own shape, or "tile") or icon on top,
+  and the real app (Apple 2.3.3 wants the app in use, not only title art). On a tall or mid slot the app rises from
+  the bottom edge under the words; on a wide or square slot the words take a column at the start side
+  (--side-text of the width) and the app stands in the other: a portrait device cut off by the bottom edge by
+  --side-bleed, a landscape one --side-height of the slot tall, running off the end side by up to --side-overrun.
 */
 .slot[data-layout="hero"] {
   --device-w: 80;
@@ -15,3 +18,6 @@ body[data-aspect="tall"] .slot[data-layout="hero"] { --anchor-gap: 24; }
 body[data-aspect="mid"] .slot[data-layout="hero"] { --device-w: 80; --bleed: 0.36; --anchor-gap: 18; }
 body[data-aspect="square"] .slot[data-layout="hero"] { --device-w: 62; --bleed: 0.5; }
 body[data-aspect="wide"] .slot[data-layout="hero"] { --device-w: 64; --bleed: 0.42; --caption-scale: 1.3; }
+
+body[data-aspect="wide"] .slot[data-layout="hero"] { --side-text: 0.42; --side-bleed: 0.1; --side-gap: 4; --side-height: 0.66; --side-overrun: 0.3; }
+body[data-aspect="square"] .slot[data-layout="hero"] { --side-text: 0.46; --side-bleed: 0.14; --side-gap: 3; }

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """sheet.py: the rendered set at the size the stores show it, for judging legibility (and a contact sheet).
 
-    sheet.py [--config store-screenshots.json] [--report render-report.json] [--listing store-listing.json] [--png]
+    sheet.py [--config store-screenshots.json] [--report render-report.json | --out DIR] [--listing ...] [--png]
     sheet.py --inspiration [--design design] [--png]
     sheet.py --directions design/explore/a,design/explore/b [--png]
     sheet.py --compare design/baseline [--png]
+    sheet.py --compare current | existing/apple/screenshots/en-US | assets/screenshots [--png]
     sheet.py --current [existing/apple/screenshots/en-US | assets/screenshots] [--png]
     sheet.py --styles [--png]
 
@@ -27,7 +28,9 @@ The design sheets, for choosing and keeping a look (references/baseline.md):
   Apple's search-row size (each caption's size in points) and the product page's, with the direction's name and
   traits;
 - ``--compare <folder>``: ``<out>/sheets/compare-<target>.png``, each shot beside its counterpart in the baseline
-  (or a previous render), with what drifted past the style's tolerances under the pair;
+  (or a previous render), with what drifted past the style's tolerances under the pair; or, when the folder has no
+  render report (the live set: a pulled listing or any folder of screenshots; ``current`` for ``current.json``'s
+  source), each new shot beside the live one it replaces, paired by the screen it shows, else by its place;
 - ``--current [folder]``: ``<design>/sheets/current.png``, the app's current set (a live listing pulled to
   ``existing/<store>/screenshots/<locale>/<slot>/<NN>.<ext>``, or any folder of screenshots, e.g.
   ``assets/screenshots/<device>/Screenshot-NN.png``) laid out by store and device in order, each shot beside its
@@ -43,7 +46,8 @@ The design sheets, for choosing and keeping a look (references/baseline.md):
 rendered before the user agreed the brief and storyboard. Nothing on it is approved.
 
 With ``--png`` each page is rendered through headless Chrome to ``<out>/sheets/<name>.png`` (the whole page), for
-an agent to look at. Every mock is an approximation of the store, labelled as such; the sizes are derived, not
+an agent to look at. ``--out design/explore/<name>`` (or ``--report`` there) shows an exploration: its sheets go
+in its own ``sheets/``. Targets come App Store first, phones before foldables, tablets and the rest. Every mock is an approximation of the store, labelled as such; the sizes are derived, not
 measured on devices. App name, subtitle and icon come from ``store-listing.json`` when it's there.
 
 Exit codes: 0 done; 3 usage or environment (no config, no render report, no Chrome with --png).
@@ -63,6 +67,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import check  # noqa: E402
+import frames  # noqa: E402
 import render  # noqa: E402
 import samples  # noqa: E402
 import styles  # noqa: E402
@@ -141,7 +146,7 @@ class Sheets:
         rs = self.inputs.rulesets.get("apple")
         order = list(rs.slots) if rs else []
         out = []
-        for tid in self.inputs.targets:
+        for tid in self.inputs.ordered_targets():
             if self.inputs.target_store(tid) != "apple":
                 continue
             slot = self.inputs.apple_slot(self.inputs.target_size(tid))
@@ -153,7 +158,7 @@ class Sheets:
 
     def play_phone_target(self):
         """The target that fills Play's phone slot, or ``None``."""
-        for tid in self.inputs.targets:
+        for tid in self.inputs.ordered_targets():
             if self.inputs.target_store(tid) == "google" and self.inputs.google_slot(tid)[0] == "phone":
                 return tid
         return None
@@ -332,7 +337,7 @@ class Sheets:
         """Every target x locale x shot, panoramas' seams as red gutters."""
         pano = check._get(self.inputs.config, "panorama", "shots") or []
         rows = []
-        for tid in self.inputs.targets:
+        for tid in self.inputs.ordered_targets():
             store = self.inputs.target_store(tid) or "?"
             size = self.inputs.target_size(tid)
             slot = self.inputs.slot_for(store, tid) if store in check.STORES else None
@@ -598,7 +603,7 @@ def compare_pages(inputs, folder):
     label = "Baseline (%s)" % (meta.get("approvedAt") or "")[:10] if meta else "Before"
     pages = []
     order = inputs.shot_order()
-    for tid in inputs.targets:
+    for tid in inputs.ordered_targets():
         cur = [f for f in inputs.files if f.get("target") == tid]
         if not cur:
             continue
@@ -636,6 +641,127 @@ def compare_pages(inputs, folder):
                     " In the baseline but gone now: %s." % _esc(", ".join(g for g in gone if g.startswith(tid + "/")))
                     if any(g.startswith(tid + "/") for g in gone) else ""))
         pages.append(("compare-%s" % tid, _page("Compare: %s" % tid, lede, '<div class="pairs">%s</div>' %
+                                                "".join(cards)), (COMPARE_WIDTH, 2)))
+    return sheets, pages
+
+
+def is_render_folder(folder):
+    """True when a folder holds a render (a baseline or a previous render): its render-report.json."""
+    return os.path.isfile(os.path.join(folder, "render-report.json"))
+
+
+def _match_group(inputs, tid, groups):
+    """The current set's group a target's new shots replace: a pulled listing's slot (Apple's display type for
+    the target's size, Play's slot for it), else a folder named for the target, else one of the same kind of
+    device, else the nearest shape."""
+    store = inputs.target_store(tid)
+    size = inputs.target_size(tid) or (1, 2)
+    want = inputs.slot_for(store, tid) if store in check.STORES else None
+    pulled = [g for g in groups if g["store"] == store]
+    for g in pulled:
+        if want and g["slot"] == want:
+            return g, "the listing's %s" % want
+    if pulled and store == "apple":
+        kind = inputs.slot_kind("apple", want)
+        for g in pulled:
+            if kind and inputs.slot_kind("apple", g["slot"]) == kind:
+                return g, "the listing's %s (the same kind of device)" % g["slot"]
+    for g in groups:
+        if g["id"] == tid or os.path.basename(g["id"]) == tid:
+            return g, "the folder %s" % g["id"]
+    kind = frames.device_kind(tid, inputs.targets.get(tid))
+    others = [g for g in groups if _group_store(g) == store] + [g for g in groups if _group_store(g) is None]
+
+    def shape(g):
+        sz = image_size(os.path.join(g["dir"], os.path.basename(g["files"][0]))) or (1, 2)
+        return sz
+    for g in others:
+        w, h = shape(g)
+        if frames.device_kind(g["id"], {"width": w, "height": h}) == kind:
+            return g, "%s (the same kind of device)" % g["id"]
+    if others:
+        best = min(others, key=lambda g: abs(shape(g)[0] / float(shape(g)[1]) - size[0] / float(size[1])))
+        return best, "%s (the nearest shape)" % best["id"]
+    return None, None
+
+
+def compare_current_pages(inputs, folder, current):
+    """Pairs per target: the current (live) set's picture on the left, the new render on the right. Each target's
+    shots are paired with the live group it replaces (``_match_group``), shot by shot by the screen they show
+    (``current.json``'s ``capture`` against the shot's capture, or its ``screen`` against the shot's id), else by
+    order. No render report is needed on the left: it's the pictures as they are."""
+    groups = current_groups(folder)
+    if not groups:
+        raise check.UsageError("no pictures (%s) under %s to compare with" % (", ".join(IMAGE_EXTS), folder))
+    sheets = os.path.join(inputs.out, "sheets")
+    shots_cfg = dict((s["id"], s) for s in inputs.shots)
+    by_group = {}
+    for sh in (current or {}).get("shots") or []:
+        by_group.setdefault(sh.get("group"), []).append(sh)
+    pages = []
+    for tid in inputs.ordered_targets():
+        cur = [f for f in inputs.files if f.get("target") == tid and f.get("locale") == inputs.primary] or \
+            [f for f in inputs.files if f.get("target") == tid]
+        if not cur:
+            continue
+        cur.sort(key=lambda f: inputs.shot_order().get(f.get("shot"), 1 << 20))
+        group, why = _match_group(inputs, tid, groups)
+        live = list(group["files"]) if group else []
+        notes = dict((sh.get("file"), sh) for sh in by_group.get(group["id"], [])) if group else {}
+        # First every shot that shows a screen the live set shows (by current.json), then the rest by place.
+        pairs = {}
+        used = set()
+        for f in cur:
+            shot = shots_cfg.get(f.get("shot")) or {}
+            for rel in live:
+                sh = notes.get(rel) or {}
+                if rel in used:
+                    continue
+                if (sh.get("capture") and sh["capture"] == shot.get("capture")) or (
+                        sh.get("screen") and sh["screen"] in (f.get("shot"), shot.get("capture"))):
+                    pairs[id(f)] = (rel, "the same screen (%s)" % (sh.get("capture") or sh.get("screen")))
+                    used.add(rel)
+                    break
+        for n, f in enumerate(cur):
+            if id(f) in pairs:
+                continue
+            rest = [rel for rel in live if rel not in used]
+            pick = live[n] if n < len(live) and live[n] not in used else (rest[0] if rest else None)
+            if pick:
+                pairs[id(f)] = (pick, "its place in the set (#%d)" % (live.index(pick) + 1))
+                used.add(pick)
+        cards = []
+        for f in cur:
+            match, how = pairs.get(id(f), (None, None))
+            right = '<img src="%s" alt="">' % _esc(_rel(inputs.path(f.get("path") or ""), sheets))
+            found = []
+            if match is None:
+                left = '<div class="missing">nothing live in its place</div>'
+                found.append('<li class="note">new: the live set has no shot here</li>')
+            else:
+                left = '<img src="%s" alt="">' % _esc(_rel(os.path.join(folder, match), sheets))
+                found.append('<li class="note">paired by %s</li>' % _esc(how))
+                sh = notes.get(match) or {}
+                if sh.get("caption"):
+                    found.append('<li class="note">live words: &ldquo;%s&rdquo;</li>'
+                                 % _esc(sh["caption"]).replace("\n", " "))
+                if sh.get("verdict"):
+                    found.append('<li class="note">the user said: %s</li>' % _esc(sh["verdict"]))
+            cap = f.get("caption") if isinstance(f.get("caption"), dict) else None
+            if cap and cap.get("text"):
+                found.append('<li class="note">new words: &ldquo;%s&rdquo;</li>' % _esc(cap["text"]))
+            cards.append('<div class="pair"><h3>%s <small>%s</small></h3><div class="sides"><div class="side">'
+                         '<p class="row-label">Live now</p>%s</div><div class="side"><p class="row-label">New</p>%s'
+                         '</div></div><ul class="findings">%s</ul></div>' % (
+                             _esc(f.get("shot")), _esc(f.get("locale")), left, right, "".join(found)))
+        left_over = [rel for rel in live if rel not in used]
+        lede = ("The live set on the left (%s, from %s), the new render of %s on the right, each new shot beside the "
+                "live one it replaces (by the screen it shows, else by its place). Judge them together with the "
+                "user: the story, the words, the look.%s" % (
+                    _esc(why or "no live group matched"), _esc(_rel(folder, os.path.dirname(sheets))), _esc(tid),
+                    " Live but not in the new set: %s." % _esc(", ".join(os.path.basename(x) for x in left_over))
+                    if left_over else ""))
+        pages.append(("compare-%s" % tid, _page("Live and new: %s" % tid, lede, '<div class="pairs">%s</div>' %
                                                 "".join(cards)), (COMPARE_WIDTH, 2)))
     return sheets, pages
 
@@ -718,9 +844,44 @@ def current_groups(folder):
 
     def key(g):
         store = STORE_ORDER.index(g["store"]) if g["store"] in STORE_ORDER else len(STORE_ORDER)
-        return (0 if g["store"] else 1, store, g["store"] or "", g["locale"] or "", _natural(g["slot"] or g["id"]))
+        return (0 if g["store"] else 1, store, g["store"] or "", g["locale"] or "", _group_rank(g),
+                _natural(g["slot"] or g["id"]))
     groups.sort(key=key)
     return groups
+
+
+def _slot_order(store):
+    """A store's slots in its rules' order (the App Store's largest iPhone first, then the other iPhones, the
+    Duo, the iPads, the watches...; Play's phone first)."""
+    try:
+        data = jsonio.load(os.path.join(SKILL_DIR, "rules", "%s.json" % store))
+    except (OSError, jsonio.JsonError):
+        return []
+    return [k for k in (data.get("slots") or {}) if not k.startswith("$")]
+
+
+def _group_rank(g):
+    """Where a current-set group comes: a pulled listing's by its store's slot order, any other folder's by the
+    device its name and pictures suggest (phones first)."""
+    if g["store"]:
+        order = _slot_order(g["store"])
+        return (0, order.index(g["slot"]) if g["slot"] in order else len(order) + 1)
+    size = image_size(os.path.join(g["dir"], os.path.basename(g["files"][0])))
+    w, h = size or (1, 2)
+    store = {"apple": 0, "google": 1}.get(_group_store(g), 2)
+    return (store, frames.DEVICE_RANK.get(frames.device_kind(g["id"], {"width": w, "height": h}), 3))
+
+
+def _group_store(g):
+    """The store a group's pictures are for: a pulled listing's, else the one its folder's name suggests."""
+    if g.get("store"):
+        return g["store"]
+    words = set(re.split(r"[^a-z0-9]+", g["id"].lower()))
+    if words & {"apple", "ios", "iphone", "ipad", "mac", "macos", "appletv", "tvos", "watchos", "duo"}:
+        return "apple"
+    if words & {"android", "google", "play", "pixel", "galaxy", "wear", "chromebook"}:
+        return "google"
+    return None
 
 
 def current_skeleton(source, groups):
@@ -1052,8 +1213,23 @@ def design_main(args):
         folder, pages = styles_page(design, draft=args.draft, log=lambda m: sys.stdout.write("  %s\n" % m))
         prefixes = ["styles"]
     else:
-        inputs = check.Inputs(args.config, args.listing, report_path=args.report)
-        folder, pages = compare_pages(inputs, _resolve_dir(args.compare, base))
+        inputs = check.Inputs(args.config, args.listing, report_path=check.report_path_for(args))
+        target = args.compare
+        if (target == "current" and not os.path.isdir(_resolve_dir(target, base))) or target.endswith(CURRENT_NAME):
+            # The current (live) set, from current.json's source (design/current.json, or the one named).
+            path = os.path.join(design, CURRENT_NAME) if target == "current" else _resolve_dir(target, base)
+            if not os.path.isfile(path):
+                raise check.UsageError("no %s: read the current set first (sheet.py --current <folder>)" % path)
+            current = jsonio.load(path)
+            folder, pages = compare_current_pages(inputs, _resolve_dir(current["source"], base), current)
+        else:
+            where = _resolve_dir(target, base)
+            if is_render_folder(where):
+                folder, pages = compare_pages(inputs, where)
+            elif os.path.isdir(where):
+                folder, pages = compare_current_pages(inputs, where, load_current(design))
+            else:
+                raise check.UsageError("no folder %s to compare with" % where)
         prefixes = ["compare-"]
     return folder, _write_pages(folder, pages, prefixes)
 
@@ -1064,13 +1240,16 @@ def parser():
                                 "screenshots, and a contact sheet of the set. Offline.")
     p.add_argument("--config", default="store-screenshots.json", help="the design config (default: %(default)s)")
     p.add_argument("--report", help="the render report (default: <out>/render-report.json)")
+    p.add_argument("--out", help="a rendered folder to show instead of the config's out (an exploration: "
+                   "design/explore/<name>), relative to the config; its sheets go in <it>/sheets")
     p.add_argument("--listing", help="store-listing.json, for the app's name and icon (default: beside the config)")
     p.add_argument("--png", action="store_true", help="render the pages to PNG through headless Chrome")
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--inspiration", action="store_true", help="the inspiration board (<design>/inspiration)")
     mode.add_argument("--directions", metavar="DIRS", help="explored render folders, comma-separated, side by side")
     mode.add_argument("--compare", metavar="DIR", help="pair the current render with a baseline or previous render "
-                      "folder, with the drift under each pair")
+                      "folder (the drift under each pair), or with the live set: a folder of its pictures (a pulled "
+                      "listing, assets/screenshots), 'current' or a current.json (its source)")
     mode.add_argument("--current", metavar="DIR", nargs="?", const="",
                       help="the app's current set (a pulled listing's existing/<store>/screenshots/..., or any folder "
                       "of screenshots) beside its analysis in <design>/current.json; without DIR, current.json's source")
@@ -1093,7 +1272,7 @@ def main(argv=None):
             folder, pages = design_main(args)
             render_with = lambda: render_pages(folder, pages)  # noqa: E731
         else:
-            inputs = check.Inputs(args.config, args.listing, report_path=args.report)
+            inputs = check.Inputs(args.config, args.listing, report_path=check.report_path_for(args))
             sheets = Sheets(inputs)
             pages = sheets.write()
             folder = sheets.folder

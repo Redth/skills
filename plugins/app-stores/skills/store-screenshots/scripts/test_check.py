@@ -518,6 +518,103 @@ class RenderShape(CheckCase):
         self.assertIn("failed to load", self.finding(report, "design.render.errors").message)
 
 
+class FitAndFold(CheckCase):
+    """What render.py reports about a frame's fit and a fold, and the trial's check fixes."""
+
+    def test_corners_that_still_cut_and_art_that_doesnt_fit(self):
+        f = self.set.find("en-US/iphone/plan.png")
+        f["frame"].update({"kind": "art", "drawn": False, "maker": "apple", "screenRadius": 40,
+                           "corners": {"radiusFrom": 40, "reduced": False, "clippedPx": 0, "hiddenPx": 300},
+                           "art": {"scale": 1.4, "fit": {"captureAspect": 0.5625, "screenAspect": 0.46, "cut": 0.18}}})
+        g = self.set.find("en-US/iphone/recipe.png")
+        g["frame"].update({"kind": "drawn", "drawn": True, "corners": {"radiusFrom": 150, "reduced": True,
+                                                                       "clippedPx": 12}, "screenRadius": 0})
+        report = self.run_check()
+        for rule in ("design.frame.hidden", "design.frame.art_upscaled", "design.frame.art_fit",
+                     "design.frame.clipped", "design.frame.corners_squared"):
+            self.assertEqual(self.finding(report, rule).severity, "warning", rule)
+
+    def test_corners_squared_by_the_check_are_a_warning(self):
+        f = self.set.find("en-US/iphone/plan.png")
+        f["frame"].update({"screenRadius": 0, "corners": {"radiusFrom": 158.4, "reduced": True, "clippedPx": 0}})
+        g = self.set.find("en-US/iphone/recipe.png")
+        g["frame"].update({"screenRadius": 120, "corners": {"radiusFrom": 158.4, "reduced": True, "clippedPx": 0}})
+        report = self.run_check()
+        squared = [x for _, x in report.findings if x.rule_id == "design.frame.corners_squared"]
+        self.assertEqual([x.where for x in squared], ["en-US/iphone/plan.png"])
+        self.assertEqual(squared[0].severity, "warning")
+        self.assertTrue([n for n in report.notes if "recipe" in n and "rounded less" in n])
+
+    def test_buttons_or_a_cutout_on_apple_are_errors(self):
+        f = self.set.find("en-US/iphone/plan.png")
+        f["frame"]["hardware"] = {"buttons": False, "cutout": {"shape": "punch-hole"}}
+        report = self.run_check()
+        self.assertEqual(self.finding(report, "design.frame.apple_details").severity, "error")
+
+    def test_art_of_no_said_maker_is_held_to_apples_terms(self):
+        f = self.set.find("en-US/iphone/plan.png")
+        f["layout"] = "tilt"
+        f["frame"].update({"name": "bezels/someone.png", "kind": "art", "drawn": False, "maker": None,
+                           "tilted": True})
+        report = self.run_check()
+        found = self.finding(report, "apple.design.device_art")
+        self.assertEqual(found.severity, "error")
+        self.assertIn("whose isn't said", found.message)
+
+    def test_a_fold_on_a_phone_capture_and_the_outer_at_too_wide_an_angle(self):
+        cap = os.path.join(self.tmp, "captures", "en-US", "iphone-6.9", "plan.png")
+        tk.write_png(cap, 132, 287)
+        f = self.set.find("en-US/iphone/plan.png")
+        f.update({"layout": "fold", "capture": "captures/en-US/iphone-6.9/plan.png"})
+        f["frame"].update({"threeD": True, "fold": {"hinge": "vertical", "angle": 120, "pose": "cover",
+                                                    "outer": {"box": [1, 1, 5, 5]}}})
+        report = self.run_check()
+        self.assertIn("design.fold.shape", self.ids(report, "warning"))
+        self.assertIn("design.fold.outer", self.ids(report, "warning"))
+
+    def test_a_hero_counts_as_in_use_when_its_ui_fills_enough(self):
+        for f in self.set.files:
+            if f["shot"] in ("plan", "recipe"):
+                f["layout"] = "hero"
+                f["uiShare"] = 0.36
+        report = self.run_check()
+        self.assertNotIn("apple.design.in_use_majority", self.ids(report))
+        for f in self.set.files:
+            if f["shot"] in ("plan", "recipe"):
+                f["uiShare"] = 0.12
+        report = self.run_check()
+        self.assertIn("apple.design.in_use_majority", self.ids(report))
+
+    def test_a_target_the_listing_leaves_out_of_plays_slots_is_not_counted(self):
+        config = self.set.config
+        config["targets"]["android-fold-outer"] = {"store": "google", "width": 1080, "height": 1920,
+                                                   "capture": "fold-outer"}
+        config["shots"] = config["shots"] * 1
+        self.set = tk.SetBuilder(self.tmp, config)
+        # Three shots on each of two Play phones would be six in the phone slot if the second were guessed in.
+        extra = [dict(f, shot=f["shot"] + "-%d" % i, path=f["path"].replace(".png", "-%d.png" % i))
+                 for i in range(2) for f in self.set.files if f["target"] == "android-fold-outer"]
+        self.set.files += extra
+        guessed = self.run_check()
+        self.assertIn("google.screenshots.count", self.ids(guessed, "error"))   # twelve guessed into one slot
+        self.set.listing = {"stores": {"google": {"slots": {"phone": "android-phone"}}}}
+        report = self.run_check()
+        self.assertFalse([n for n in report.notes if "a guess" in n])
+        self.assertTrue([n for n in report.notes if "android-fold-outer is in no Play slot" in n])
+        self.assertNotIn("google.screenshots.count", self.ids(report))
+
+    def test_an_exploration_folder_is_checked_where_it_is(self):
+        path = self.set.write()
+        explore = os.path.join(self.tmp, "design", "explore", "a")
+        shutil.copytree(self.set.out, explore)
+        shutil.rmtree(self.set.out)
+        report = check.run_check(path, report_path=os.path.join(explore, "render-report.json"))
+        self.assertNotIn("design.missing", self.ids(report))       # the files are found beside the report
+        self.assertTrue([n for n in report.notes if "exploration" in n])
+        code = Cli.main(self, "--config", path, "--out", "design/explore/a")[0]
+        self.assertEqual(code, 0)
+
+
 class Cli(CheckCase):
     def main(self, *argv):
         out, err = io.StringIO(), io.StringIO()

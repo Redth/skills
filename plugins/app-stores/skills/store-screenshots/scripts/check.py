@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """check.py: check a rendered screenshot set against each store's rules and the design's own limits.
 
-    check.py [--config store-screenshots.json] [--listing store-listing.json] [--report render-report.json]
+    check.py [--config store-screenshots.json] [--listing store-listing.json] [--report render-report.json | --out DIR]
              [--baseline [design/baseline] | --no-baseline] [--json]
 
 Reads ``<out>/render-report.json`` (what ``render.py`` wrote: every file with its caption, frame and boxes) and
@@ -26,9 +26,15 @@ the PNGs themselves, then decides what a script can:
   device's box and frame, tilt, text share, ink, accent, background, layout) past the style's ``drift``
   tolerances (warnings: the user decides).
 
+- frames: a drawn frame's corners cutting the capture (they shrink by themselves; what's left is a warning), a
+  maker's art drawn larger than its pixels, cut to fit a capture of another shape, or hiding content in its
+  corners, a drawn frame's buttons or cutout on Apple; a fold on a capture that isn't a foldable's inner display;
+- an exploration (``--out design/explore/<name>``): only its files, against the style it was rendered with.
+
 What it can't decide is listed for a person to check by eye. ``store-listing.json`` (beside the config, or
 ``--listing``) is read when present: its ``stores.google.slots`` say which Play slot each target fills, its
-category whether the app is a game, and its ``rules.relax`` relaxes rules by id here too.
+category whether the app is a game, and its ``rules.relax`` relaxes rules by id here too. Once it gives Play slots,
+a target it puts in none isn't sent to Play, so it's counted in no slot (never guessed into one).
 
 Exit codes: 0 no errors; 1 an error found; 3 usage or environment (no config, no render report).
 """
@@ -48,6 +54,7 @@ from appstores_lib import jsonio  # noqa: E402
 from appstores_lib import png  # noqa: E402
 from appstores_lib import rules  # noqa: E402
 from appstores_lib import text as textlib  # noqa: E402
+import frames  # noqa: E402
 import styles  # noqa: E402
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -78,7 +85,7 @@ FIRST_SHOTS_MIN_U = {"tall": 9.5, "mid": 6.0, "wide": 4.0}
 # Inside one set: the device box (x, y, width) and the caption's top across non-hero shots of a layout (u).
 SET_DEVICE_TOLERANCE_U = 0.2
 SET_CAPTION_TOLERANCE_U = 0.5
-DEVICE_LAYOUTS = ("framed", "framed-bleed", "tilt", "pair", "callout")
+DEVICE_LAYOUTS = ("framed", "framed-bleed", "tilt", "pair", "callout")  # a fold is its own composition
 
 MIN_CONTRAST = 4.5
 MAX_CAPTION_LINES = 2
@@ -89,7 +96,14 @@ DEFAULT_SEAM_UNITS = 6.0
 # Layouts that show no capture of the app (counted against Apple's "more than half in use") and layouts that add
 # a background around the capture (what Wear OS forbids).
 MARKETING_LAYOUTS = ("hero",)
-BACKGROUND_LAYOUTS = ("band", "framed", "framed-bleed", "tilt", "pair", "callout", "hero")
+BACKGROUND_LAYOUTS = ("band", "framed", "framed-bleed", "tilt", "pair", "callout", "hero", "fold")
+# A hero counts as the app in use when its real UI covers at least this share of the slot (a side-by-side hero on
+# a wide slot, a hero whose device rises well into the slot); below it, it's brand and claim art.
+HERO_IN_USE_SHARE = 0.3
+# A fold is for a foldable's inner display: about square to 3:2 (either way round).
+FOLD_RATIO_MAX = 1.6
+# A maker's art cut to fill when the capture's shape differs from its screen by more than this share.
+ART_CUT_TOLERANCE = 0.01
 
 RTL_LANGUAGES = ("ar", "he", "fa", "ur", "yi", "ps", "sd", "ug", "dv", "ckb")
 
@@ -301,14 +315,30 @@ class Inputs:
             self.config = styles.apply(self.raw_config, self.style)
         except styles.StyleError as e:
             raise UsageError(str(e))
-        self.out = os.path.join(self.base, self.config.get("out") or "screenshots")
-        self.report_path = report_path or os.path.join(self.out, "render-report.json")
+        self.set_out = os.path.join(self.base, self.config.get("out") or "screenshots")
+        self.report_path = report_path or os.path.join(self.set_out, "render-report.json")
+        if os.path.isdir(self.report_path):
+            self.report_path = os.path.join(self.report_path, "render-report.json")
         if not os.path.isfile(self.report_path):
             raise UsageError("no render report at %s: run render.py first%s" % (
-                self.report_path, "" if report_path else " (or pass --report)"))
+                self.report_path, "" if report_path else " (or pass --report or --out)"))
         self.report = jsonio.load(self.report_path)
         if not isinstance(self.report, dict) or not isinstance(self.report.get("files"), list):
             raise UsageError("%s has no \"files\" list" % self.report_path)
+        # The report's files are relative to its own folder: the set's out, or an exploration's
+        # (render.py --out design/explore/<name>), whose sheets go beside it too.
+        self.out = os.path.dirname(os.path.abspath(self.report_path))
+        self.exploration = os.path.normpath(self.out) != os.path.normpath(os.path.abspath(self.set_out))
+        if self.exploration and style_path is None:
+            rstyle = (self.report.get("style") or {}).get("path")
+            if isinstance(rstyle, str) and os.path.normpath(os.path.join(self.base, rstyle)) != (
+                    os.path.normpath(self.style_path) if self.style_path else None):
+                self.style_path = os.path.normpath(os.path.join(self.base, rstyle))
+                try:
+                    self.style = styles.load_style(self.style_path)
+                    self.config = styles.apply(self.raw_config, self.style)
+                except styles.StyleError as e:
+                    raise UsageError(str(e))
         self.files = [f for f in self.report["files"] if isinstance(f, dict)]
         if listing_path is None:
             guess = os.path.join(self.base, "store-listing.json")
@@ -335,6 +365,12 @@ class Inputs:
         """``{target id: target}`` in the config's order."""
         t = self.config.get("targets")
         return t if isinstance(t, dict) else {}
+
+    def ordered_targets(self):
+        """The target ids in the order sheets show them: the App Store's before Play's, phones before foldables,
+        tablets, computers, TVs and watches (the config's order within each)."""
+        ids = list(self.targets)
+        return sorted(ids, key=lambda t: (frames.target_rank(t, self.targets.get(t)), ids.index(t)))
 
     @property
     def shots(self):
@@ -457,11 +493,16 @@ class Inputs:
         target's own ``slot``, or a guess from its size and name)."""
         slots = _get(self.listing, "stores", "google", "slots") or {}
         for slot, screen in slots.items():
-            if screen == target_id and slot in GOOGLE_SCREEN_SLOTS:
+            if (screen == target_id or (isinstance(screen, list) and target_id in screen)) \
+                    and slot in GOOGLE_SCREEN_SLOTS:
                 return slot, "store-listing.json"
         t = self.targets.get(target_id) or {}
         if t.get("slot") in GOOGLE_SCREEN_SLOTS:
             return t["slot"], "the target's slot"
+        if any(k in GOOGLE_SCREEN_SLOTS for k in slots):
+            # store-listing.json says which target fills which slot: one it leaves out goes in none (it isn't
+            # sent to Play), so it's never guessed into a slot and counted there.
+            return None, "unsent"
         size = self.target_size(target_id)
         name = (target_id + " " + str(t.get("capture") or "")).lower()
         words = set(re.split(r"[^a-z0-9]+", name))
@@ -505,9 +546,9 @@ class Inputs:
         return out
 
     def frame_maker(self, frame):
-        """``(drawn, maker)`` for a report's frame: from the report (``drawn``, ``maker``), else from the frame's
-        JSON (a path relative to the config gives its JSON beside it; a name, the skill's ``frames/<name>.json``).
-        A frame with no JSON to read is taken as drawn."""
+        """``(drawn, maker)`` for a report's frame: from the report (``drawn``, ``maker``), else from the frame: a
+        drawn frame's name (``frames.NAMES``) is drawn; a path's JSON beside it says. A frame with nothing to read is
+        taken as drawn."""
         if not isinstance(frame, dict):
             return True, None
         drawn, maker = frame.get("drawn"), frame.get("maker")
@@ -522,11 +563,13 @@ class Inputs:
     def _frame_json(self, name):
         if not isinstance(name, str) or not name:
             return {}
+        if frames.is_builtin(name):
+            return {"drawn": True, "maker": None}
         if "/" in name or os.sep in name or os.path.splitext(name)[1].lower() in (".svg", ".png", ".json"):
             path = name if os.path.isabs(name) else os.path.join(self.base, name)
             path = os.path.splitext(path)[0] + ".json"
         else:
-            path = os.path.join(SKILL_DIR, "frames", name + ".json")
+            return {}
         try:
             data = jsonio.load(path)
         except (OSError, jsonio.JsonError):
@@ -730,6 +773,18 @@ def _texts(inputs, f):
     return out
 
 
+def _in_use(f):
+    """Whether a file shows the app in use: its own ``inUse`` if set; else anything but a hero, and a hero whose real
+    UI covers at least ``HERO_IN_USE_SHARE`` of the slot (``uiShare``: a side-by-side hero, or one whose device rises
+    well into the slot)."""
+    if isinstance(f.get("inUse"), bool):
+        return f["inUse"]
+    if f.get("layout") not in MARKETING_LAYOUTS:
+        return True
+    share = f.get("uiShare")
+    return isinstance(share, (int, float)) and share >= HERO_IN_USE_SHARE
+
+
 def _has_caption(f):
     cap = f.get("caption")
     return isinstance(cap, dict) and bool(cap.get("text"))
@@ -824,6 +879,10 @@ class Check:
                     by_slot[slot].append(tid)
             elif store == "google":
                 slot, how = self.inputs.google_slot(tid)
+                if how == "unsent":
+                    self.report.note("target %s is in no Play slot in store-listing.json's stores.google.slots: "
+                                     "store-listings won't send it, so it isn't counted in any slot (add it to a "
+                                     "slot to send it)" % tid)
                 if how == "guessed":
                     self.report.note("target %s is taken as Play's %s slot (a guess from its size and name: set "
                                      "stores.google.slots in store-listing.json to say)" % (tid, slot))
@@ -833,7 +892,13 @@ class Check:
                                  "display type, so they count together" % (", ".join(tids), slot))
 
     def check_rendered(self):
-        """Every locale x target x shot the config asks for is in the report."""
+        """Every locale x target x shot the config asks for is in the report (an exploration's report holds only
+        what was explored: there the rest is only noted)."""
+        if self.inputs.exploration:
+            self.report.note("checked the exploration in %s: only the files it rendered (its first shots on one "
+                             "target), against the style it was rendered with; counts and required sets are the "
+                             "full set's to meet" % os.path.relpath(self.inputs.out))
+            return
         have = set((f.get("locale"), f.get("target"), f.get("shot")) for f in self.inputs.files)
         missing = collections.defaultdict(list)
         for loc in self.inputs.locales:
@@ -882,6 +947,8 @@ class Check:
             self.check_contrast(store, f, path, meta, where)
         for err in f.get("errors") or []:
             self.report.add(store, own_finding("design.render.errors", "error", where, "the page said: %s" % err))
+        for n in f.get("notes") or []:
+            self.report.note("%s: %s" % (where, n))
         self.check_caption(store, slot, f, where)
         self.check_design(store, slot, f, where)
         self.check_seams(store, f, where)
@@ -953,7 +1020,12 @@ class Check:
         if not _has_caption(f):
             return
         text = cap["text"]
-        if cap.get("fits") is False:
+        if cap.get("outside"):
+            self.report.add(store, own_finding(
+                "design.caption.outside", "error", where,
+                "the %s runs off the slot (cut off in the picture): shorten the words, or make the hero's logo smaller "
+                "(theme.hero or the target's hero)" % " and ".join(str(x) for x in cap["outside"])))
+        elif cap.get("fits") is False:
             if cap.get("hyphenationAvailable") is False:
                 lang = (f.get("lang") or f.get("locale") or "").split("-")[0]
                 fix = ("; this Chrome can't hyphenate %s: add soft hyphens (\"\\u00ad\" in the JSON, or \"&shy;\") "
@@ -1071,6 +1143,8 @@ class Check:
                   and x.get("name") not in (None, "", "none")]
         for frame in frames:
             self.check_device_art(store, slot, f, frame, where)
+            self.check_frame_fit(store, f, frame, where)
+        self.check_fold(store, f, where)
         if _has_frame(f):
             frame = f["frame"]
             entry = inputs.design_entry(store, "frames", slot)
@@ -1116,12 +1190,13 @@ class Check:
                                                   "any (use a drawn frame or none)" % (label, frame.get("name"),
                                                                                       STORE_NAMES[store])))
             return
-        if value != "ownAsIs" or (maker or "").lower() != "apple":
+        if value != "ownAsIs" or (maker or "apple").lower() != "apple":
+            # A maker's art whose maker isn't said is held to Apple's terms on Apple targets: it can't be told apart.
             return
         problems = []
         if f.get("layout") == "tilt" or frame.get("tilted") or frame.get("tilt") not in (None, 0, False, "none"):
             problems.append("tilted")
-        if frame.get("threeD") or frame.get("3d") or frame.get("rotate3d"):
+        if (frame.get("threeD") or frame.get("3d") or frame.get("rotate3d")) and "tilted" not in problems:
             problems.append("turned in 3D")
         box = _box(frame.get("box"))
         w, h = f.get("width"), f.get("height")
@@ -1136,8 +1211,90 @@ class Check:
         if problems:
             self.report.add(store, design_finding(
                 store, "deviceArt", entry, where,
-                "uses Apple's own bezel (%s) %s; Apple's bezels may be used only as they are (a drawn frame may be "
-                "tilted and cropped)" % (frame.get("name"), ", ".join(problems))))
+                "uses %s (%s) %s; Apple's bezels may be used only as they are (a drawn frame may be tilted and "
+                "cropped)" % ("Apple's own bezel" if maker else "a maker's device art (whose isn't said: held to "
+                              "Apple's terms)", frame.get("name"), ", ".join(problems))))
+
+    def check_frame_fit(self, store, f, frame, where):
+        """A frame fits its capture: a drawn frame's corners cut none of it (they shrink by themselves; what's left
+        is reported), a maker's art isn't drawn larger than its pixels, its screen matches the capture's shape, and
+        its corners don't hide the capture's content. A drawn frame's buttons or camera cutout never on Apple."""
+        corners = frame.get("corners") if isinstance(frame.get("corners"), dict) else {}
+        if corners.get("clippedPx"):
+            self.report.add(store, own_finding(
+                "design.frame.clipped", "warning", where,
+                ("the screen's rounded corners cut %d px of the capture's content at the radius the frame sets: look "
+                 "at the corners (a smaller frame.radius, or another capture)" if corners.get("radiusSet") else
+                 "the screen's rounded corners cut %d px of the capture's content even at their smallest: look at "
+                 "the corners (a frame with smaller corners, frame.radius, or another capture)") % corners["clippedPx"]))
+        if corners.get("reduced"):
+            now, was = frame.get("screenRadius") or 0, corners.get("radiusFrom") or 0
+            if was and now <= was / 2.0:
+                self.report.add(store, own_finding(
+                    "design.frame.corners_squared", "warning", where,
+                    "the screen's corners were rounded %s (%s px, from %s) so they wouldn't cut the capture's "
+                    "content: inside a rounded body that looks wrong. Look at the capture's corners; set the frame's "
+                    "radius to keep it (what it cuts is then reported)" % (
+                        "square" if not now else "far less", _num(now), _num(was))))
+            else:
+                self.report.note("%s: the frame's corners were rounded less (%s px, from %s) so they don't cut the "
+                                 "capture's content" % (where, _num(now), _num(was)))
+        if isinstance(corners.get("hiddenPx"), int) and corners["hiddenPx"] > 40:
+            self.report.add(store, own_finding(
+                "design.frame.hidden", "warning", where,
+                "the device art's corners hide %d px of the capture's content (a status bar's clock or icon in a "
+                "corner?): look at the corners, or use art for the device the capture came from" % corners["hiddenPx"]))
+        art = frame.get("art") if isinstance(frame.get("art"), dict) else {}
+        if isinstance(art.get("scale"), (int, float)) and art["scale"] > UPSCALE_TOLERANCE:
+            self.report.add(store, own_finding(
+                "design.frame.art_upscaled", "warning", where,
+                "draws the device art at %.2fx its pixels: it'll look soft (use the maker's larger art)" % art["scale"]))
+        fit = art.get("fit") if isinstance(art.get("fit"), dict) else {}
+        if isinstance(fit.get("cut"), (int, float)) and fit["cut"] > ART_CUT_TOLERANCE:
+            self.report.add(store, own_finding(
+                "design.frame.art_fit", "warning", where,
+                "the capture's shape (%.3f) differs from the device art's screen (%.3f): %d%% of it is cut to fill "
+                "the screen (never stretched); use art for the device the capture came from" % (
+                    fit.get("captureAspect") or 0, fit.get("screenAspect") or 0, round(fit["cut"] * 100))))
+        hw = frame.get("hardware") if isinstance(frame.get("hardware"), dict) else {}
+        if store == "apple" and (hw.get("buttons") or hw.get("cutout")):
+            self.report.add(store, own_finding(
+                "design.frame.apple_details", "error", where,
+                "the drawn frame has %s on an Apple target; Apple's guidelines forbid simulating its devices' "
+                "details" % " and ".join(x for x, on in (("side buttons", hw.get("buttons")),
+                                                          ("a camera cutout", hw.get("cutout"))) if on)))
+
+    def check_fold(self, store, f, where):
+        """A fold is for a foldable's inner display: its capture about square to 3:2. With the outer display shown,
+        the angle must be under 90 for its back to face the viewer."""
+        if f.get("layout") != "fold":
+            return
+        fold = _get(f, "frame", "fold") or {}
+        size = None
+        box = _box(_get(f, "frame", "box"))
+        w, h = f.get("width") or 0, f.get("height") or 0
+        cap = f.get("capture") or ""
+        try:
+            path = os.path.join(self.inputs.base, cap)
+            meta = png.info(path) if cap and os.path.isfile(path) else None
+            size = (meta.width, meta.height) if meta else size
+        except (png.ImageError, OSError):
+            size = None
+        if size:
+            ratio = max(size) / float(max(1, min(size)))
+            if ratio > FOLD_RATIO_MAX:
+                self.report.add(store, own_finding(
+                    "design.fold.shape", "warning", where,
+                    "folds a %dx%d capture (%.2f:1); fold is for a foldable's inner display (about square to 3:2): a "
+                    "phone's capture folded reads as two thin strips" % (size[0], size[1], ratio)))
+        if fold.get("pose") == "cover" and isinstance(fold.get("angle"), (int, float)) and fold["angle"] >= 90:
+            self.report.add(store, own_finding(
+                "design.fold.outer", "warning", where,
+                "shows the outer display at an angle of %s; at 90 or more its back faces away (use under 90)"
+                % _num(fold["angle"])))
+        if box and w and h and (box[0] < -0.5 or box[1] < -0.5 or box[0] + box[2] > w + 0.5 or box[1] + box[3] > h + 0.5):
+            self.report.add(store, own_finding(
+                "design.fold.cut", "warning", where, "the folded device runs off the slot's edge"))
 
     def check_seams(self, store, f, where):
         """Nothing load-bearing within the panorama's seam margin: a caption is an error, a frame or callout a
@@ -1248,7 +1405,10 @@ class Check:
         return True
 
     def check_counts(self):
-        """The rules' ``count`` and ``required`` rules on the store's screenshot slots, per locale."""
+        """The rules' ``count`` and ``required`` rules on the store's screenshot slots, per locale (not on an
+        exploration, which holds a few shots by design)."""
+        if self.inputs.exploration:
+            return
         for store in self.report.stores:
             if store not in self.inputs.rulesets:
                 continue
@@ -1330,8 +1490,7 @@ class Check:
                 where = "%s/%s" % (loc, tid)
                 entry = self.inputs.design_entry(store, "inUseMajority", slot)
                 if entry and files:
-                    in_use = [f for f in files if (f.get("inUse") if isinstance(f.get("inUse"), bool)
-                                                   else f.get("layout") not in MARKETING_LAYOUTS)]
+                    in_use = [f for f in files if _in_use(f)]
                     if len(in_use) <= float(entry["value"]) * len(files):
                         art = [f.get("shot") for f in files if f not in in_use]
                         self.report.add(store, design_finding(
@@ -1341,8 +1500,7 @@ class Check:
                 entry = self.inputs.design_entry(store, "uiFirst", slot)
                 if entry:
                     first = files[:int(entry["value"])]
-                    art = [f.get("shot") for f in first if f.get("layout") in MARKETING_LAYOUTS
-                           or f.get("inUse") is False]
+                    art = [f.get("shot") for f in first if not _in_use(f)]
                     if art:
                         self.report.add(store, design_finding(
                             store, "uiFirst", entry, where,
@@ -1799,6 +1957,8 @@ def find_baseline(inputs, baseline=AUTO):
     folder's ``baseline/`` (``AUTO`` or ``""``), or a folder given."""
     if baseline is None:
         return None
+    if baseline == AUTO and getattr(inputs, "exploration", False):
+        return None
     if baseline in (AUTO, ""):
         folder = os.path.join(inputs.design_dir, "baseline")
         if baseline == AUTO and not os.path.isfile(os.path.join(folder, "baseline.json")):
@@ -1823,14 +1983,27 @@ def run_check(config_path, listing_path=None, rules_dir=RULES_DIR, report_path=N
     return report
 
 
+def report_path_for(args):
+    """``--report``, else ``--out``'s render report (relative to the config), else ``None`` (the config's out)."""
+    if getattr(args, "report", None):
+        return args.report
+    if getattr(args, "out", None):
+        base = os.path.dirname(os.path.abspath(args.config))
+        out = args.out if os.path.isabs(args.out) else os.path.join(base, args.out)
+        return os.path.join(out, "render-report.json")
+    return None
+
+
 def parser():
     """The argument parser."""
     p = argparse.ArgumentParser(prog="check.py", description="Check rendered store screenshots against each "
                                 "store's rules and the design's limits. Offline.")
     p.add_argument("--config", default="store-screenshots.json", help="the design config (default: %(default)s)")
     p.add_argument("--listing", help="store-listing.json (default: beside the config, if there)")
-    p.add_argument("--report", help="the render report (default: <out>/render-report.json); its files' paths "
-                   "stay relative to <out>")
+    p.add_argument("--report", help="the render report (default: <out>/render-report.json); its files' paths are "
+                   "relative to its own folder")
+    p.add_argument("--out", help="a rendered folder to check instead of the config's out (an exploration: "
+                   "design/explore/<name>), relative to the config")
     p.add_argument("--baseline", nargs="?", const="", default=AUTO, metavar="DIR",
                    help="compare with an approved baseline (default: <design>/baseline, used by itself when it's "
                    "there)")
@@ -1846,7 +2019,7 @@ def main(argv=None):
     except SystemExit as e:
         return EXIT_OK if e.code in (0, None) else EXIT_USAGE
     try:
-        report = run_check(args.config, args.listing, report_path=args.report,
+        report = run_check(args.config, args.listing, report_path=report_path_for(args),
                            baseline=None if args.no_baseline else args.baseline)
     except UsageError as e:
         sys.stderr.write("check.py: %s\n" % e)

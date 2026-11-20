@@ -1,0 +1,68 @@
+/*
+  fold: a foldable's inner display shown partly folded. The capture is split at the hinge (fold.hinge: vertical,
+  left and right halves; horizontal, top and bottom; by default vertical unless the capture is clearly portrait)
+  and each half drawn on a panel turned about the hinge in 3D (fold.angle: the angle between the halves, 120 by
+  default), so the halves meet at the seam as one screen. The panels have edges and a drawn generic hinge behind
+  the fold; shading darkens the crease and the far panel. With fold.outer, one panel is lifted past upright (an
+  angle under 90; 70 by default) and its back shows the outer display, whole. The words sit above, the device
+  under them, centred together like framed; the device is fitted by its projected size, never cut by the slot.
+*/
+.slot[data-layout="fold"] {
+  --device-w: 90;
+  --gap: 8;
+}
+body[data-aspect="mid"] .slot[data-layout="fold"] { --device-w: 84; --gap: 6; }
+body[data-aspect="square"] .slot[data-layout="fold"] { --device-w: 76; --gap: 4; }
+body[data-aspect="wide"] .slot[data-layout="fold"] { --device-w: 70; --gap: 3; }
+
+.fold-scene {
+  position: absolute;
+  inset: 0;
+  perspective-origin: 50% 50%;
+}
+.fold-body {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+.fold-panel {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+.fold-face, .fold-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+}
+.fold-glass, .fold-screen {
+  position: absolute;
+}
+.fold-screen {
+  overflow: hidden;
+  background: #000;
+}
+.fold-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.fold-edge {
+  position: absolute;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.fold-hinge {
+  position: absolute;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.fold-outer {
+  position: absolute;
+  overflow: hidden;
+}
+.fold-outer > img.capture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}

@@ -92,6 +92,34 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   style on one made-up app (`samples.py`, nothing committed) to pick by eye. A style role's `stores` gives it another
   layout or frame on one store; the app starting styles' hero is real UI on Google Play, so shot 1 no longer trips
   Play's UI-first warning.
+- `store-screenshots`: frames that fit (`scripts/frames.py`). Drawn frames are drawn for each capture: the screen
+  opening is its exact size (nothing letterboxed, stretched or cut), even bezels, and the screen's corners rounded by
+  a device class (`phone`, `phone-classic` for 16:9, `foldable-outer`, `foldable-inner`, `tablet`, `watch`, `tv`,
+  `laptop`, `desktop`; fractions of the short side, approximations), picked by the capture's shape, the target's
+  words or its new `device`. The page reads each capture's corners and shrinks a radius that would cut content (a
+  status bar's clock in the corner: the trial's ":41"); the report says what it did (`corners`). The frame object
+  (`class`, `radius`, `bezel`, `buttons`, `cutout`: a neutral punch-hole or pill, `finish`); buttons and cutouts
+  never on Apple targets. The old frame names keep working; `frames/*.svg` are gone.
+- `store-screenshots`: a maker's device art the user brings (`frame: {"art": "...png", "maker": "apple"}`) has its
+  see-through screen found from the PNG's alpha (`appstores_lib.png.decode_alpha`; `frames.py detect --write` saves
+  it), the capture placed under it at the opening's size, the art never stretched and no shadow added; `check.py`
+  warns when the capture is cut to fit, the art is upscaled or its corners hide content, and holds art of no said
+  maker to Apple's terms on Apple targets. `references/frames.md` says where makers' art comes from and what it
+  allows.
+- `store-screenshots`: the `fold` layout: a foldable's inner display split at the hinge (vertical, or across for a
+  portrait capture) and shown partly folded in CSS 3D (`fold.angle`, 120 by default), with panel edges, a drawn
+  hinge, crease and depth shading, the halves continuous at the seam; `fold.outer` lifts one panel past upright with
+  the outer display on its back. Fitted by its projected size in every aspect class, reported with its box and pose;
+  `check.py` warns on a fold of a phone-shaped capture. The app starting styles gain a `foldable` role.
+- `store-screenshots`: the hero beside its words on wide and square slots (real UI, not a sliver; `check.py` counts
+  a hero as in use when its UI covers 30% of the slot, the report's `uiShare`); `theme.hero.logo` (`fit: wide` for a
+  wordmark at its own shape, or `tile`); `theme.tilt` and a shot's tilt object (angles and perspective);
+  `caption.maxWidthPct`; accents across a line break (`*whole week\nof meals*`).
+- `store-screenshots`: `sheet.py --compare current` (or a folder of the live set's pictures, no render report):
+  each new shot beside the live one it replaces, paired by the screen it shows (from `current.json`), else by place;
+  `check.py --out` and `sheet.py --out` for an exploration (files resolve beside its report, its style used, its
+  sheets beside it, counts left to the full set); targets and current-set groups ordered App Store first, iPhone
+  before foldables, iPads and the rest; the report notes a role that takes another layout on Play.
 - `store-listings`: start from what's live. `push.py pull apple|google` reads the live listing (read-only, like
   `plan`; on Google an edit opened to read and deleted) into `existing/<store>/`: `listing.json` in the contract's
   vocabulary, every screenshot and preview downloaded per locale and slot, and a `README.md` summary. App Review's
@@ -124,6 +152,21 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - `appstores_lib.chrome.Chrome.render(..., full_page=N)`: capture the whole page, up to N CSS px tall.
 
 ### Fixed
+- `store-screenshots`: an iOS simulator capture's black corner tip (its framebuffer's own few pure-black pixels) no
+  longer squares every iPhone frame's screen corners: the corner check ignores the corner's tip, pure black near it
+  and a few stray pixels; a radius the frame sets is always kept (what it cuts is reported, and `check.py` warns); a
+  radius cut to under half is a warning (`design.frame.corners_squared`), not a note.
+- `store-screenshots`: words or a hero's mark leaving the slot no longer report as fitting (`caption.outside`,
+  render.py exits 1, `check.py` errors `design.caption.outside`); the hero's mark shrinks before its claim (never
+  below the claim's floor) so mark, words and app share the height; a target's `hero` overrides `theme.hero`.
+- `store-screenshots`: the render cache's hash covers every config value a file depends on (the target's frame,
+  device and layouts, its store's overrides, the shots, the theme), so a target's frame change renders again.
+- `store-screenshots`: `theme.hero.logo`'s `widthPct` (up to 60u) is honoured for a squarish mark, its height up to
+  `maxHeightPct`; `caption.widthPct` sets the caption's box wider or narrower than the layout's; a target's
+  `layouts` gives one shot another layout on that target alone (`{"plan": "fold"}` on a foldable).
+- `store-screenshots`: `check.py` no longer guesses a Play slot for a target `store-listing.json`'s
+  `stores.google.slots` leaves out (it isn't sent, so it's counted in no slot); a render report outside the config's
+  `out` resolves its files beside itself.
 
 - `store-capture`: `text` and `label` match the same way on every driver, as config.md promised: exactly, then
   ignoring case and surrounding space, then contained (Appium's iOS and Mac predicates `==[c]` and `CONTAINS[c]`,

@@ -428,6 +428,75 @@
         "The agent explains that the preview uses a made-up app and the styles' own colours, and that a direction takes the brand's colours, fonts and words",
         "The agent asks the user to pick one or two (or a mix) and doesn't choose for them"
       ]
+    },
+    {
+      "id": 25,
+      "prompt": "The frame doesn't fit our screenshots: on the Play phone shots the corner of the phone cuts the status bar's clock down to ':41'. Fix the frames. Config and captures are in evals/files/foldables.",
+      "expected_output": "The agent renders the set and opens the Play phone file at full size, sees the drawn frame is fitted to the capture (a phone-classic frame for the 16:9 capture, the clock whole), and reads the report's frame for each file: its class, screenRadius and corners (radiusFrom, reduced, clippedPx 0). It explains that frames are now drawn for each capture with the screen opening at its exact size and a corner radius by device class that shrinks where it would cut content, and that check.py warns if a corner still cuts anything. It does not shrink or letterbox the capture, edit the capture, or add Apple-only details; it mentions frame.radius (0 for square corners) and the optional generic punch-hole cutout for non-Apple targets as choices for the user, and that Play discourages frames at all.",
+      "files": [
+        "evals/files/foldables/store-screenshots.json",
+        "evals/files/foldables/README.txt",
+        "evals/files/foldables/captures/en-US/android-phone/plan.png"
+      ],
+      "expectations": [
+        "The agent renders (render.py) and opens the Play phone screenshot at full size before saying it's fixed",
+        "The agent reports from render-report.json that the frame's corners cut nothing (corners.clippedPx 0) and names the frame's class (phone-classic for a 16:9 capture)",
+        "The agent explains the screen opening is the capture's exact size: nothing letterboxed, stretched or cut",
+        "The agent does not resize, crop or edit the capture, and adds no notch, island, home button or Apple-style details",
+        "The agent offers the options as the user's choice: frame.radius, a generic punch-hole or pill cutout on non-Apple targets only, or no frame on Play as Google recommends",
+        "The agent runs check.py and reports any design.frame.clipped warning (or that there is none)"
+      ]
+    },
+    {
+      "id": 26,
+      "prompt": "I downloaded the official iPhone bezel from Apple Design Resources: evals/files/bezel-art/art/phone-portrait.png. Put our iPhone screenshots in it instead of your drawn phone. Sample Recipes is iPhone-only. Captures are in evals/files/recipes/captures.",
+      "expected_output": "The agent points the iPhone target's (or the Apple store's) frame at the art as an object with maker apple, lets render.py find the see-through screen from the PNG's alpha (no hand-made JSON needed), uses the framed layout with the bezel whole (no tilt, framed-bleed, callout or fold), renders and opens the file, and reads the report's frame.art (screenSource detected, fit.cut, scale). It explains the art is used as it is (never stretched, no shadow), that a capture of another shape is cut to fill and check.py warns, that the user keeps the file (not committed by the agent) and Apple's licence terms (Apple-only software, as it is, latest device). It keeps the art off any Play set.",
+      "files": [
+        "evals/files/bezel-art/README.txt",
+        "evals/files/bezel-art/art/phone-portrait.png",
+        "evals/files/recipes/store-screenshots.json"
+      ],
+      "expectations": [
+        "The config's frame for the Apple iPhone target is the art path, as an object with \"art\" and \"maker\": \"apple\" (or a path with a JSON saying maker apple)",
+        "The agent doesn't hand-measure the screen: it relies on render.py finding the see-through opening, or uses frames.py detect --write",
+        "The shots using the bezel use the framed layout (or pair); none is tilt, framed-bleed, callout or fold",
+        "The agent renders, opens a rendered file at full size, and reports frame.art from render-report.json (screenSource detected, fit.cut 0 or a warning if not, scale not above 1)",
+        "The agent says the art goes on as it is (never stretched, no shadow or reflection added) and only on Apple sets, never Play",
+        "The agent mentions Apple's licence limits (Apple-only software, as it is) and leaves the file uncommitted, where the user put it"
+      ]
+    },
+    {
+      "id": 27,
+      "prompt": "We also ship on the iPhone Duo and an Android foldable (evals/files/foldables has their inner and outer captures). For the Duo can we do some shots in a partially folded state so it's obvious it's a Duo?",
+      "expected_output": "The agent proposes a shot (or two) with the fold layout for the foldables' inner displays only (shot targets limited to iphone-duo-inner and the Android foldable's inner target), the hinge vertical for the landscape inner capture, an angle around 120, and optionally fold.outer showing the Duo's outer capture on a lifted panel (angle under 90). It notes the frames are generic drawn ones (no Apple details), that a maker's art can't be folded, and that Play discourages device imagery (the starting styles' foldable role shows the capture flat on Play). After the user agrees it renders, opens each fold at full size, checks that the halves meet at the seam and that the report's frame.fold says the pose, and runs check.py.",
+      "files": [
+        "evals/files/foldables/store-screenshots.json",
+        "evals/files/foldables/README.txt"
+      ],
+      "expectations": [
+        "The agent uses the fold layout (layout \"fold\" or the starting styles' foldable role) for the foldable inner targets",
+        "The fold shot's targets are limited to the foldables' inner displays (iphone-duo-inner and/or android-fold-inner), not the phones",
+        "The agent sets or explains fold options: the hinge (vertical for the landscape Duo inner capture), the angle (about 120), and fold.outer with the outer display's capture (device iphone-duo-outer) at an angle under 90 if the user wants the outer display shown",
+        "The agent says the folded device is a generic drawn frame with no Apple-specific details, and that Apple's own bezel couldn't be folded",
+        "The agent mentions Google Play discourages device imagery and offers the capture flat (or no frame) on Play",
+        "After rendering, the agent opens the fold renders at full size and reports frame.fold (pose, angle) from render-report.json"
+      ]
+    },
+    {
+      "id": 28,
+      "prompt": "We rendered the new set into screenshots/ for Sample Recipes (config evals/files/recipes/store-screenshots.json). Show it to me beside what's live now; we pulled the live listing into evals/files/current-set/existing.",
+      "expected_output": "The agent runs sheet.py --compare on the live folder (evals/files/current-set/existing, or --compare current once current.json exists) with --png, without needing a render report for the live set, opens each compare-<target>.png, and walks the user through the pairs: each new shot beside the live one it replaces (paired by the screen it shows from current.json, else by place), the live words and the new words, iPhone first. It renders first if screenshots/ has no render yet, and doesn't treat the comparison as approval.",
+      "files": [
+        "evals/files/current-set/README.txt",
+        "evals/files/recipes/store-screenshots.json"
+      ],
+      "expectations": [
+        "The agent runs sheet.py --compare with the live folder (or 'current') and --png, not a hand-made side-by-side",
+        "The agent does not copy the live pictures into a render layout or fake a render report for them",
+        "The agent opens the compare sheets and describes each pair (live left, new right), including how each was paired and the live and new words",
+        "The iPhone pairs are presented before the Play ones",
+        "The agent asks the user what they think rather than approving or locking anything"
+      ]
     }
   ]
 }

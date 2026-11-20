@@ -560,19 +560,21 @@ impression; one message a shot; captions sized for the thumbnail; one set per st
 skills/store-screenshots/
   SKILL.md  VERSION
   references/      principles.md (each with its evidence grade), store-rules.md (what each store allows in a
-                   screenshot), layouts.md, frames.md (why drawn frames; using your own Apple bezels as they are),
+                   screenshot), layouts.md, frames.md (fitted drawn frames, the device classes; a maker's art as it is),
                    panoramas.md, localisation.md, legibility.md, checklist.md (the pre-ship list), evidence.md,
                    style.md, baseline.md, current-set.md (reading the listing's current set first)
   schema/store-screenshots.schema.json
   templates/       set.html (the engine page), layouts/*.css, base.css
-  frames/          <name>.svg + <name>.json (the screen rectangle and corner radius): phone, phone-landscape,
-                   tablet, tablet-landscape, laptop, desktop, tv, watch. Generic and drawn: no notch, island,
-                   home button, camera bump or brand shape (Apple's guidelines forbid simulating its devices).
+  (frames)         drawn by scripts/frames.py for each capture (no frame files): phone, tablet, watch, tv, laptop,
+                   desktop and the classes phone-classic, foldable-outer, foldable-inner. Generic: no notch, island,
+                   home button, camera bump or brand shape; no buttons or cutout on Apple targets (Apple's
+                   guidelines forbid simulating its devices).
   mocks/           search-row.html, product-page.html, play-listing.html, contact-sheet.html
   rules/           (copied from shared/rules: the stores' `design` tables)
   scripts/
     appstores_lib/ (copied)
-    render.py  check.py  sheet.py  styles.py  baseline.py  samples.py (made-up screens for --styles)  test_*.py
+    render.py  check.py  sheet.py  styles.py  baseline.py  frames.py (fitted frames, device classes, finding a
+    device art's screen)  samples.py (made-up screens for --styles)  test_*.py
   evals/  evals.json  trigger-evals.json  files/
 ```
 
@@ -650,8 +652,9 @@ Beside `store-listing.json` usually; paths relative to it. Plain JSON, schema in
 | `tilt` | framed, rotated in 3D (CSS `perspective` + `rotate3d` presets), soft shadow |
 | `pair` | two framed captures at true relative scale |
 | `callout` | `framed-bleed` plus a clipped, enlarged copy of `callout.rect` lifted out with a shadow |
-| `hero` | brand and claim large, `proof` line, and a sliver of real UI (2.3.3: the app in use) |
+| `hero` | brand and claim large, `proof` line, and real UI (2.3.3: the app in use); beside the words on wide and square slots |
 | `gameplay` | the capture full-bleed, no words, no frame |
+| `fold` | a foldable's inner display split at the hinge and shown partly folded in 3D (`fold`: hinge, angle, outer) |
 
 ### 8.4 The render report: `<out>/render-report.json`
 
@@ -664,8 +667,9 @@ Beside `store-listing.json` usually; paths relative to it. Plain JSON, schema in
       "caption": { "text": "Plan a week of meals in minutes", "lines": 2, "fontPx": 105.6, "floorPx": 79.2,
                    "atFloor": false, "fits": true, "box": [x, y, w, h], "textShare": 0.11,
                    "missingGlyphs": [] },
-      "frame": { "name": "phone", "box": [x, y, w, h] }, "callout": null, "captureScale": 0.92,
-      "seams": [], "sha256": "…" }
+      "frame": { "name": "phone", "class": "phone", "box": [x, y, w, h], "screenRadius": 158.4,
+                 "corners": { "radiusFrom": 158.4, "reduced": false, "clippedPx": 0 } },
+      "callout": null, "captureScale": 0.92, "uiShare": 0.42, "seams": [], "notes": [], "sha256": "…" }
   ]
 }
 ```
@@ -694,11 +698,24 @@ hash (config section, strings, capture bytes, fonts, templates, frames) is uncha
 
 ### 8.5a Settled details
 
-- **A user's own device art:** `frame` may be a path (relative to the config) to an SVG or PNG with a JSON beside it in
-  the drawn frames' shape plus `"drawn": false, "maker": "apple"` (or another maker). `render.py` uses it as it is;
-  `check.py` refuses (error) tilt, crop (`framed-bleed`), callout overlap or 3D on a `maker: "apple"` frame for Apple
-  targets, and any maker's device art on Google targets is a warning.
-- **Precedence:** target overrides beat store overrides beat shot settings beat the theme.
+- **Drawn frames are fitted:** each is drawn for its capture (`frames.py`): the screen opening is the capture's
+  exact size, the bezel even, the screen's corner radius the device class's (fractions of the short side), shrunk by
+  the page where it would cut the capture's content, the corner's tip and pure-black pixels near it (a simulator's
+  mask) aside (reported as the frame's `corners`; `check.py` warns if any is still cut, or the radius was cut to under
+  half). A radius the frame object sets is kept (`corners.radiusSet`; what it cuts is reported). `frame` may be an object: `{name, class, radius, bezel, buttons, cutout, finish}`; buttons and cutouts
+  are never drawn on Apple targets (`check.py` errors if a report shows them). A target's `device` names its class.
+- **A user's own device art:** `frame` may be a path (relative to the config) to a PNG or SVG, or `{art, maker,
+  screen?, screenRadius?, drawn?}`. A PNG's screen is its largest enclosed see-through region (from its alpha), unless
+  the object or a JSON beside it (the drawn frames' shape, `"drawn": false`) gives it; an SVG needs one. `render.py`
+  uses it as it is: the capture under the opening at its size (cut to fill if the shapes differ, never stretched), no
+  shadow added, the report's `frame.art` = `{scale, fit: {captureAspect, screenAspect, cut}, screenSource}`. `check.py`
+  refuses (error) tilt, crop (`framed-bleed`), callout overlap, a fold or 3D on a `maker: "apple"` frame (or one of no
+  said maker) for Apple targets, and any maker's device art on Google targets is a warning; it warns on art upscaled,
+  cut to fit or hiding content in its corners.
+- **The fold layout:** the report's frame has `threeD: true` and `fold: {hinge, angle, pose: open|cover, outer:
+  {box, captureScale}|null}`, its `box` the projected device. A fold always draws a generic frame.
+- **Precedence:** a target's `layouts` entry for the shot beats the target's overrides, which beat store overrides,
+  which beat shot settings, which beat the theme.
 - **Exit codes:** `render.py` and `sheet.py` exit 3 when Chrome is missing. `render.py` writes the report even when it
   exits 1 for a caption that won't fit at the floor.
 - **Sheets** are `<out>/sheets/search-row-<locale>.png`, `product-page-<locale>-<target>.png`,
@@ -710,13 +727,28 @@ hash (config section, strings, capture bytes, fonts, templates, frames) is uncha
   `stores.google.slots` (which Play slot a target fills), the category (Play's featuring counts) and `rules.relax`;
   `sheet.py` also takes the app's name, subtitle and icon from it.
 - The report's `caption` also carries `ink` and `accent` (#RRGGBB), and `kicker`/`proof` their `ink`, for contrast.
+- `uiShare`: the share of the slot showing the app's screen; a `hero` counts as in use when it's 0.3 or more.
+- `check.py` and `sheet.py` take `--out DIR` (a rendered folder relative to the config: an exploration); a report's
+  file paths are relative to its own folder, and a report outside the config's `out` is an exploration (its style
+  from the report, its sheets beside it, no counts, no baseline). Once `stores.google.slots` gives Play slots, a
+  Google target it leaves out is in no slot (never guessed).
+- `sheet.py --compare` takes a render folder (drift) or the live set: a folder of pictures with no report, or
+  `current`/a `current.json` (its `source`): each new shot beside the live one it replaces, by the screen it shows,
+  else by place. Sheets and the report order targets App Store first, phones before foldables, tablets, computers,
+  TVs and watches.
 - Frame JSON: `{name, kind, orientation, drawn, maker, viewBox, screen: {x, y, width, height}, screenRadius, stretch,
   realWidthMm}`. A user's own art: the same with `"drawn": false` and its `maker`; never stretched.
 - Schema additions to §8.2: `theme.icon`; `theme.palette.{background2, plate, plateInk, band, bandInk}`;
   `theme.background.kind` ∈ `color` | `gradient` | `glow` (default) | `image` with `src`, `angle`, `dim`;
   `caption.plate` ∈ `solid` | `scrim` | `none` (fullbleed); `caption.align: "end"`; `shot.frame`, `shot.captionStyle`;
   `shot.pair` (a capture screen id or `{capture, device, frame}`); `panorama.seam` may be null. In captions, `*word*`
-  takes the accent colour and `\n` breaks the line.
+  takes the accent colour (across a `\n` too) and `\n` breaks the line. Later: `theme.hero` (`logo`, `fit: wide|tile`,
+  `widthPct`), `theme.tilt` and a shot's tilt object (`side`, `y`, `x`, `z`, `perspective`), `theme.fold` and
+  `shot.fold`, `caption.maxWidthPct` and `caption.widthPct`, `theme.hero.maxHeightPct`, `target.device`, `target.slot`,
+  `target.layouts` (a shot's layout on that target), `target.hero` (over `theme.hero`), the frame object. A caption
+  whose words or hero mark leave the slot doesn't fit (`caption.fits: false`, `caption.outside: [roles]`); the hero's
+  mark shrinks before its claim to keep the block in its room. The render cache's hash covers the job and
+  every config value a file depends on (its target, store overrides, shots, theme, panorama).
 
 ### 8.6 Rules data: the `design` table
 

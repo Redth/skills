@@ -32,7 +32,7 @@ STYLES_DIR = os.path.join(SKILL_DIR, "styles")
 
 DEFAULT_DESIGN = "design"
 STYLE_NAME = "screenshot-style.json"
-ROLE_KEYS = ("layout", "frame", "tilt", "at")
+ROLE_KEYS = ("layout", "frame", "tilt", "at", "fold")
 ROLE_STORE_KEYS = ("layout", "frame")
 ROLE_STORES = "_roleStores"  # on an applied shot: {store: {layout, frame}} from its role, where the shot set none
 
