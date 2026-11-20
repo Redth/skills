@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "build/SampleRecipes.app" } },
+  "locales": ["en-US", "de-DE"],
+  "staging": {
+    "account": { "kind": "bypass", "how": "the Debug build's SampleRecipesFakeSession" },
+    "seed": { "kind": "file", "file": "store/demo/recipes.db", "into": { "ios": "Library/Caches/recipes/recipes.db" } },
+    "launch": { "args": { "SampleRecipesFakeSession": "demo" } },
+    "network": { "kind": "offline" }
+  },
+  "devices": [
+    { "id": "iphone-6.9", "platform": "ios", "kind": "phone", "driver": "simctl", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max" } }
+  ],
+  "screens": [
+    { "id": "overview", "state": "this week's plan, five invented dinners", "steps": [ { "launch": { "args": { "ScreenshotScreen": "plan" } } } ] },
+    { "id": "recipe", "state": "Lemon Pasta open at its steps", "steps": [ { "deepLink": "samplerecipes://recipe/lemon-pasta" } ] },
+    { "id": "shopping", "state": "the week's shopping list", "steps": [ { "deepLink": "samplerecipes://shopping" } ] }
+  ]
+}

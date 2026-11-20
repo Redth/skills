@@ -893,13 +893,23 @@ skills/store-capture/
   the user provides, run as is, with `APPSTORES_DEVICE`, `APPSTORES_LOCALE`, `APPSTORES_SCREEN`,
   `APPSTORES_PLATFORM`, `APPSTORES_APP_ID` and the host's `APPSTORES_UDID` or `ANDROID_SERIAL`/`APPSTORES_SERIAL`),
   `appFile` (a file copied into the app's own data: the simulator's data container, Android's data folder through
-  `run-as`), `settle` (wait for no animation: two identical frames, optionally ignoring rectangles). Elements are found by
-  `id` (accessibility identifier / automation id / resource id / test id), `text`, `label` or `xpath`; each driver
-  says which it supports and reports `skipped` for steps it can't do.
-- `locales`, `appearance` (`light` | `dark`), `clock`, `statusBar` (`clean` | `as-is`) and `seed` (passed to the
-  app as `ScreenshotSeed` in launch args / extras) are set per device by the driver before the screens and reset
-  after.
-- Any field may be overridden per device or per screen (`devices[].locales`, `screens[].devices`, …).
+  `run-as`), `settle` (wait for no animation: two identical frames, optionally ignoring rectangles), `posture`
+  (`folded`, `open`, `half-open`: a foldable's posture mid-screen), `hideKeyboard` (close the on-screen keyboard if
+  it's up: Android's back only while it's up, Appium's `mobile: hideKeyboard`; `{"tap": <element>}` taps outside the
+  field instead). Any step may carry a `name`. Elements are found by `id` (accessibility identifier / automation id /
+  resource id / test id), `text`, `label` or `xpath`; `text` and `label` match exactly, then ignoring case and
+  surrounding space, then contained, on every driver that can (Maestro: its own regex); the drivers that read a
+  tree themselves (adb, uiautomator, the agents' trees) evaluate XPath 1.0's everyday part (`contains()`, `not()`,
+  `and`/`or`, positions). Each driver says which it supports and reports `skipped` for steps it can't do.
+- `locales`, `appearance` (`light` | `dark`), `clock`, `statusBar` (`clean` | `as-is`), `seed` (passed to the
+  app as `ScreenshotSeed` in launch args / extras) and `posture` (a foldable's: `folded`, `open`, `half-open`; each
+  posture captured is its own device, with its own id and size) are set per device by the driver before the screens
+  and reset after.
+- Any field may be overridden per device or per screen (`devices[].locales`, `screens[].devices`, …). A screen's
+  `overrides` are keyed by a platform, a device's `layout` (a name devices that lay out alike share) or a device id,
+  applied in that order: settings, `state`, `verify`, `steps` (a replacement), `stepsPatch` (changes to the steps
+  before it: `prepend`, `append`, `remove`, `replace`+`with`, `before`/`after`+`insert`, by a step's `name` or
+  position; a ref that isn't there is a plan error) and `omit` (the screen isn't captured there).
 - **Staging** (`staging`, agreed with the user before the plan runs): `account` (`kind`: `none`, `guest`, `bypass`,
   `demo`; a demo account only by the names of its environment variables, `env`, never values and never a real
   person's account), `seed` (`kind`: `command` run before each screen, `file` copied into the app's data as an
@@ -910,7 +920,11 @@ skills/store-capture/
   `doc` (the readable copy, default `staging.md`, written by `capture.py --write-staging`; a run warns when it no
   longer matches). A screen's `"staging": false` leaves it out.
 - **Per screen**: `state` (what it must show, in plain words) and `verify` (an element, or a list, that must be on
-  screen before the shot; otherwise the shot is `missed`, "wrong state"). Overrides may change both.
+  screen before the shot, and `{"keyboard": "hidden"|"shown"|"any"}`; otherwise the shot is `missed`, "wrong
+  state"). A screen that types nothing is checked for a hidden keyboard without asking, where the driver can tell
+  (adb's `dumpsys input_method`, Appium's `mobile: isKeyboardShown`). Overrides may change both.
+- `staging.confirmed` is set only on the user's own answer; an agent that can reach the user only through another
+  agent stops after the one screen and asks, with the picture attached.
 
 ### 10.3 Drivers
 
@@ -944,6 +958,15 @@ retried when another client's command turned it away; a reply of `success: false
 `verified` only when confirmed (iOS: `status_bar list`; Android: the bar's pixels moved with demo mode's clock),
 else `unverified`.
 
+**Foldables**: `adb` folds an emulator through its console (`emu fold`, `emu unfold`, `emu posture 2`, the hinge
+sensor) and a real foldable through `cmd device_state state` (reset after), then wakes and unlocks it, finds the
+physical display in use (`dumpsys display`), sets `wm size`/`wm density` again on it (each display keeps its own;
+each is put back in its posture) and re-applies demo mode; `screencap -d` takes the display in use. `simctl` folds
+the iPhone Duo simulator through DevFlow's fold control (`maui devflow device fold set …`, experimental, no agent
+needed) and captures the display it made active (else the built-in screen of the device's size). Hosted drivers
+fold through their host. A CoreSimulator hiccup ("server died") in `simctl` boot, install, launch or capture is
+tried once more.
+
 **Network**: drivers talk only to the local machine (simulators, emulators, devices over adb, a local Appium
 server, the in-app agents on loopback ports). Nothing reaches the internet.
 
@@ -962,7 +985,9 @@ device's size — and `<out>/capture-report.json`:
              { "…": "status missed: not reached (kept: previous|none, reason); failed: wrong size etc.; skipped: a step or device the driver can't do" } ] }
 ```
 
-Adapters write into a temp folder and move files into place at the end. `fixes` lists what was changed
+Adapters write into a temp folder and move files into place at the end. A run keeps the report's earlier entries
+for plan items it didn't run (filters) and drops those the plan no longer has (removed or omitted), naming them in
+`notes`. `fixes` lists what was changed
 (`alpha-flattened`, `converted-to-srgb`, `16-bit-to-8-bit`), never a resize; an alpha channel that's all opaque is
 flattened without a per-shot mention and counted once in the report's `notes`. `check_captures.py` reads PNG headers
 against the plan (and, with `--rules`, the stores' accepted sizes; a required App Store display type no device fills
@@ -983,7 +1008,8 @@ the plan names them (create and own dedicated ones by default: `appstores-<devic
   running nothing; `--inspect` saves each screen's UI tree to `<out>/.inspect/`. Exit 3 when a staged plan isn't
   confirmed and the run has more than one screen, or a staging account's variable isn't set.
 - `capture.py --write-staging` (writes `staging.md`); `capture.py --current [folder]` (lists the current store
-  screenshots: `existing/<store>/screenshots/`, `store-screenshots.json`'s shots, `design/current.json`, a folder).
+  screenshots: `existing/<store>/screenshots/`, `store-screenshots.json`'s shots, `design/current.json` by group
+  and order with what each shows, its capture and caption, a folder).
 - `import_captures.py --from fastlane-snapshot|fastlane-screengrab|xcresult|maestro|flutter|detox|playwright|folder
   <path> [--map mapping.json] [--out captures]`.
 - `check_captures.py [--plan …] [--rules <store>,…] [--json]`.

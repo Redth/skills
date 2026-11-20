@@ -44,27 +44,32 @@ def applescript_string(text):
 
 def find_script(process, finder, wanted, action):
     """AppleScript that finds the first element of ``process``'s front window by ``finder`` and either clicks it
-    (``action="click"``) or returns its ``x,y,w,h`` in points (``"bounds"``); ``missing`` when there's none."""
+    (``action="click"``) or returns its ``x,y,w,h`` in points (``"bounds"``); ``missing`` when there's none.
+    ``text`` and ``label`` match as every driver's do: the whole of a name, description, title or value
+    (AppleScript's ``is`` ignores case), then, when nothing is, a part of one (``contains``)."""
     if finder == "id":
-        test = 'value of attribute "AXIdentifier" of e is %s' % applescript_string(wanted)
+        tests = ['value of attribute "AXIdentifier" of e is %s' % applescript_string(wanted)]
     else:
         w = applescript_string(wanted)
-        test = "(name of e is %s) or (description of e is %s) or (title of e is %s) or (value of e is %s)" % (
-            w, w, w, w)
+        part = applescript_string(str(wanted).strip())
+        tests = ["(name of e is %s) or (description of e is %s) or (title of e is %s) or (value of e is %s)" % (
+            w, w, w, w),
+            "(name of e contains %s) or (description of e contains %s) or (title of e contains %s) or "
+            "(value of e contains %s)" % (part, part, part, part)]
     act = "click e\n          return \"clicked\"" if action == "click" else (
         "set p to position of e\n          set s to size of e\n"
         "          return (item 1 of p as text) & \",\" & (item 2 of p as text) & \",\" & "
         "(item 1 of s as text) & \",\" & (item 2 of s as text)")
-    return ('tell application "System Events" to tell process %s\n'
-            '  repeat with e in (entire contents of window 1)\n'
-            '    try\n'
-            '      if %s then\n'
-            '          %s\n'
-            '      end if\n'
-            '    end try\n'
-            '  end repeat\n'
+    loops = "".join('  repeat with e in (entire contents of window 1)\n'
+                    '    try\n'
+                    '      if %s then\n'
+                    '          %s\n'
+                    '      end if\n'
+                    '    end try\n'
+                    '  end repeat\n' % (test, act) for test in tests)
+    return ('tell application "System Events" to tell process %s\n%s'
             'end tell\n'
-            'return "missing"' % (applescript_string(process), test, act))
+            'return "missing"' % (applescript_string(process), loops))
 
 
 class MacOSDriver(base.Driver):

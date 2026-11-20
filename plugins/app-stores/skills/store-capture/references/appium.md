@@ -78,14 +78,19 @@ All JSON over HTTP to the local server; `<s>` is the session id.
 | `wait` | find until it appears |
 | `scroll` | iOS `mobile: scroll` (`direction` or `toVisible`, `elementId`), Android `mobile: scrollGesture` (`left`, `top`, `width`, `height` or `elementId`, `direction`, `percent`); `to` an element: scroll until it's found |
 | `swipe` | `mobile: swipe` (iOS), `mobile: swipeGesture` (Android), or `POST /session/<s>/actions` (a touch pointer; `DELETE …/actions` after) sized from `GET /session/<s>/window/rect` |
-| `back` | `POST /session/<s>/back` |
+| `back` | `POST /session/<s>/back` (on iOS that's navigation: never a way to close the keyboard) |
+| `hideKeyboard` | `mobile: isKeyboardShown`, then `mobile: hideKeyboard` (iOS: `keys` Done, Return, Go, Search, Next: the keyboard's own key), then on iOS a Done or Return button above the keyboard |
+| `posture` | the host's ([simctl.md](simctl.md#the-iphone-duo), [adb.md](adb.md#foldables)) |
 | screenshot | the host's (below), else `GET /session/<s>/screenshot` (a base64 PNG) |
 
 **Finding elements:** `id` is `accessibility id` (on iOS the accessibility identifier; on Windows the
 `AutomationId`); on Android it's tried as `id` (the resource id) first, then `accessibility id` (the content
-description). On Android a resource id without its package gets the app's. `text` and `label` become an iOS
-predicate (`label == "…" OR value == "…"`), or an XPath on Android and on Windows (`@Name`); `xpath` is passed as
-it is. `.NET MAUI`'s `AutomationId`, React Native's `testID`, SwiftUI's `.accessibilityIdentifier`, Compose's
+description). On Android a resource id without its package gets the app's. `text` and `label` are tried as every
+driver matches them: exactly, then ignoring case and surrounding space, then contained. On iOS three predicates
+(`label == "…" OR value == "…" OR name == "…"`, then `==[c]`, then `CONTAINS[c]`; a Mac's use `title`), on Android
+and Windows three XPaths (`@text=…`, then `translate(normalize-space(@text), …)=…`, then `contains(translate(@text,
+…), …)`; `@Name` on Windows). `xpath` is passed as it is (the platform driver's full XPath 1.0). The keyboard's
+state for `verify` is `mobile: isKeyboardShown`. `.NET MAUI`'s `AutomationId`, React Native's `testID`, SwiftUI's `.accessibilityIdentifier`, Compose's
 `testTag` (with `testTagsAsResourceId`) all end up as one of these.
 
 ## Capturing
@@ -94,8 +99,8 @@ With a host, the picture is the host's: `simctl io … screenshot --mask=ignored
 device's whole framebuffer at its native size, once Appium has reached the screen. For a Mac or Windows app (no
 host), it's Appium's `GET /session/<s>/screenshot`. The size is checked either way.
 
-Wait for scroll bars to fade after a scroll (`settle`) and put the keyboard away (`back`) before the shot. Appium
-never sets the status bar: the host does.
+Wait for scroll bars to fade after a scroll (`settle`) and put the keyboard away (`hideKeyboard`, never `back` on
+iOS) before the shot. Appium never sets the status bar: the host does.
 
 ## Stacks
 

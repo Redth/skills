@@ -356,6 +356,8 @@ class SimctlTests(DriverCase):
             "xcrun simctl launch --terminate-running-process %s com.example.samplerecipes -ScreenshotSeed demo "
             "-ScreenshotScreen plan -Fast YES -AppleLanguages '(de-DE)' -AppleLocale de_DE" % UDID,
             "xcrun simctl openurl %s samplerecipes://recipe/demo" % UDID,
+            # Which screens it has, read once: one (the fake answers none), so no --display.
+            "xcrun simctl io %s enumerate" % UDID,
         ]
         self.assertEqual(lines[:len(expected)], expected)
         self.assertRegex(lines[len(expected)], r"^xcrun simctl io %s screenshot --type=png --mask=ignored .*/de-DE/"
@@ -627,6 +629,8 @@ class AdbTests(AdbCase):
             p + "'input keyevent KEYCODE_BACK'",
             p + "'input swipe 540 1500 540 500 250'",
             p + "'am start -W -a android.intent.action.VIEW -d samplerecipes://recipe/demo com.example.samplerecipes'",
+            # The keyboard looked at (the screen types, so a keyboard left up would only be a warning).
+            p + "'dumpsys input_method'",
             "adb -s emulator-5580 exec-out screencap -p",
         ])
         self.assertTrue(self.run_.matching(r"shell 'uiautomator dump /sdcard/appstores-ui.xml'"))

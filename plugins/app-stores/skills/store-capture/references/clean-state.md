@@ -83,7 +83,7 @@ default (`content_size large`, `font_scale 1.0`) unless a shot is about accessib
 | Spinners, skeletons | offline fixtures; `wait` for the content's element, then `settle` |
 | Animations mid-way | animations off (`UIView.setAnimationsEnabled(false)`, the animation scales at 0, reduced motion); `settle` |
 | Scroll bars | `settle` after a scroll (they fade) |
-| The keyboard, a text caret | decide per shot; usually a filled, unfocused field looks better: `back` or tap elsewhere |
+| The keyboard, a text caret | decide per shot; usually a filled, unfocused field looks better: end the steps with `hideKeyboard` (Android: back, only while the keyboard is up; iOS through Appium: the keyboard's Done or Return; an iOS app driven by an agent: `{ "hideKeyboard": { "tap": <a label outside the field> } }`; never iOS's `back`, which navigates) and add `{ "keyboard": "hidden" }` to `verify`. A screen that types nothing is checked for it anyway |
 | Touch indicators | `show_touches 0`, `pointer_location 0` |
 | Focus rings | only where wanted (TV shots want one on a meaningful item) |
 | Notifications arriving | demo mode's `notifications visible false`; the dedicated simulator has none |

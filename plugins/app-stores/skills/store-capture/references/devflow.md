@@ -141,6 +141,22 @@ Seen with preview.14 on iOS simulators; check `maui devflow --help` and the rele
 When a screen needs any of these and the app can't change, switch that **device** to the `appium` driver (XCUITest
 taps for real and reads native menus), keeping its `id`; other devices can stay on `devflow`.
 
+- **The keyboard isn't in the tree** on iOS: the driver can't see or close it there. End a typing screen's steps
+  with `{ "hideKeyboard": { "tap": <a label or title outside the field> } }`, and look at the picture (an asked-for
+  keyboard check is `unchecked` on iOS). On Android the host (`adb`) sees and closes it.
+- **Text** is the agent's own query (exact); when it finds nothing the driver looks in the tree, ignoring case and
+  surrounding space, then for the words inside a longer text, as every driver does. An `xpath` the agent's HTTP
+  query refuses is evaluated over the tree, with `contains()`, `not()`, `and`/`or`
+  ([config.md](config.md#steps)).
+
+## Foldables: DevFlow's fold control
+
+The same CLI folds a foldable emulator or simulator **without an agent** (`maui devflow device fold get|set
+folded|unfolded|partially-folded`, `--udid` for an iOS simulator with `--experimental`, `--device` for an Android
+serial). The `simctl` host uses it for the iPhone Duo's `posture`, whichever driver captures the device (this one,
+Ailoha, Appium); the `adb` host folds an Android emulator through its own console. Details and what was seen:
+[simctl.md](simctl.md#the-iphone-duo).
+
 ## The plan
 
 ```json
