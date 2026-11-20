@@ -62,6 +62,7 @@ class FakeDriver(base.Driver):
     def step_launch(self, ctx, value):
         FakeDriver.events.append(("launch", ctx.device["id"], ctx.locale, ctx.screen["id"], json.dumps(value)))
         how = FakeDriver.behaviour.get((ctx.locale, ctx.screen["id"])) or {}
+        ctx.shot.panes.extend(how.get("panes") or [])
         if how.get("raise"):
             raise how["raise"]
 
@@ -243,6 +244,19 @@ class RunTests(CaptureCase):
         launches = [e for e in FakeDriver.events if e[0] == "launch"]
         self.assertEqual([(l[2], l[3]) for l in launches],
                          [("en-US", "plan"), ("en-US", "recipe"), ("de-DE", "plan"), ("de-DE", "recipe")])
+
+    def test_what_a_scroll_in_a_pane_scrolled_is_in_the_report(self):
+        said = ("in id 'servings': scrolled its nearest scrolling ancestor, android.widget.ScrollView "
+                "[600,200][1080,1920]")
+        FakeDriver.behaviour[("en-US", "plan")] = {"panes": [said]}
+        FakeDriver.behaviour[("en-US", "recipe")] = {"panes": [said], "raise": base.StepFailed("tap: gone")}
+        self.assertEqual(self.main("--plan", self.plan(), "--keep-going"), 1)
+        self.assertEqual(self.shot("en-US", "phone", "plan")["panes"], [said])
+        self.assertEqual(self.shot("en-US", "phone", "recipe")["status"], "missed")
+        self.assertEqual(self.shot("en-US", "phone", "recipe")["panes"], [said], "a missed shot says it too")
+        FakeDriver.behaviour = {}
+        self.main("--plan", self.plan())
+        self.assertNotIn("panes", self.shot("en-US", "phone", "plan"), "nothing to say, no field")
 
     def test_wrong_size_is_failed_never_resized_and_the_previous_picture_stays(self):
         path = self.plan()

@@ -1194,7 +1194,7 @@ class Run(object):
         return "previous" if os.path.isfile(os.path.join(self.out, locale, device_id, screen_id + ".png")) else "none"
 
     def not_taken(self, locale, device, screen_id, driver_name, status, reason, source=None, warnings=None,
-                  status_bar="none", state=None, state_check=None):
+                  status_bar="none", state=None, state_check=None, panes=None):
         """Record a shot that wasn't taken, keeping any previous picture."""
         e = _entry(locale, device, screen_id, driver_name)
         reason = base.mask(reason)
@@ -1205,6 +1205,8 @@ class Run(object):
             e["state"] = state
         if state_check and state_check != "none":
             e["stateCheck"] = state_check
+        if panes:
+            e["panes"] = [base.mask(p) for p in panes]
         self.entries.append(e)
         log("%-7s %s/%s/%s: %s%s" % (status, locale, device["id"], screen_id, reason,
                                      " (kept: previous)" if e["kept"] == "previous" else ""))
@@ -1454,9 +1456,10 @@ class Run(object):
             state_check = "unchecked"
             shot.warnings.append("verify not checked: the %s driver runs the screen its own way; look at the "
                                  "picture for it" % name)
+        panes = getattr(shot, "panes", None) or []
         if shot.status != "taken":
             self.not_taken(locale, device, screen["id"], name, shot.status, shot.reason or "not reached",
-                           shot.source, shot.warnings, shot.status_bar, screen.get("state"), state_check)
+                           shot.source, shot.warnings, shot.status_bar, screen.get("state"), state_check, panes)
             if shot.status in ("missed", "failed"):
                 self.stop_after(rel)
             return
@@ -1465,7 +1468,7 @@ class Run(object):
                                                screen.get("flatten") or device.get("flatten") or "#000000")
         if status != "taken":
             self.not_taken(locale, device, screen["id"], name, "failed", reason, shot.source, shot.warnings,
-                           shot.status_bar, screen.get("state"), state_check)
+                           shot.status_bar, screen.get("state"), state_check, panes)
             self.stop_after(rel)
             return
         warnings = [base.mask(w) for w in shot.warnings]
@@ -1487,6 +1490,8 @@ class Run(object):
             e["state"] = screen["state"]
         if state_check != "none":
             e["stateCheck"] = state_check
+        if panes:
+            e["panes"] = [base.mask(p) for p in panes]
         self.entries.append(e)
         self.moves.append((dest, os.path.join(self.out, locale, device["id"], screen["id"] + ".png")))
         log("taken   %s%s" % (rel, (" (%s)" % ", ".join(shown)) if shown else ""))

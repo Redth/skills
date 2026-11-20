@@ -99,6 +99,16 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   keyboard but leaves a caret blinking; `fill` ends with it, and `settle` after typing warns when a field kept the
   focus or the settled screen blinks. Three evals (a blank form caught at review, the in-use rule reused for a new
   screen, a number pad that won't close).
+- `store-capture`: a `scroll`'s or `fill`'s `in` may name anything inside the pane (an id on its content, one of
+  its own fields), not only the scroll view, which often has no id: what's scrolled is the nearest scrolling view
+  that is it or holds it (`scrollable="true"` in Android's dump and Appium's Android source; a scroll view's,
+  table's or collection view's type in Appium's iOS and Mac source, found again by its path, and in the in-app
+  agents' trees; the page's overflow container on the web), else the element itself. The report's new `panes` says
+  what was scrolled when it wasn't the element named, and a pane found once serves the screen's later scrolls after
+  the element named has scrolled out of sight, so one `in` serves every device.
+- `store-capture`: `fill` warns when a field it typed that the screen's `verify` names is out of sight once
+  `scrollTo` has scrolled the form back (a `verify` sees only what's on screen); config.md and staging.md say to
+  verify only what the shot shows.
 
 - `store-screenshots` 0.1.0 (#12): designed store screenshots from an app's real captures, one design for every
   store, size and locale. A brief and a storyboard agreed with the user before rendering; `store-screenshots.json`
