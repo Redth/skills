@@ -210,7 +210,9 @@ Meanings:
 }
 ```
 
-- `id`: `<store>.<area>.<what>`, stable forever (configs relax rules by id). Reuse fastlane precheck's names in the
+- `id`: `<store>.<area>.<what>`, stable forever (configs relax rules by id). A `design` entry (8.6) has the id
+  `<store>.design.<entry in snake case>` (`google.design.frames`, `google.design.ui_first`); `rules.relax` relaxes
+  those too, and `listing.py check` warns only for a relaxed id the store's rules data has nowhere. Reuse fastlane precheck's names in the
   last part where they mean the same (`other_platforms`, `placeholder_text`, `test_words`, `free_stuff_in_iap`,
   `copyright_date`, `unreachable_urls`).
 - `kind` and its fields:
@@ -297,7 +299,9 @@ Every function documented with a docstring; every module has `test_<module>.py`.
   every locale each store supports); `apple(code)`, `google(code)`, raising a clear error for a locale a store
   doesn't have.
 - **`rules.py`**: `load(store, rules_dir) -> RuleSet`; `RuleSet.for_field(field)`, `.for_slot(slot)`, `.get(id)`,
-  `.slots`; `relaxed(ruleset, relax_list)`. `Finding` namedtuple (`rule_id`, `severity`, `where`, `message`,
+  `.slots`, `.design_ids` (the `design` entries' ids), `.known(id)` (a rule or a design entry);
+  `design_rule_id(store, entry)`; `relaxed(ruleset, relax_list)` (its result's `relaxed_rules`, `relaxed_design` and
+  `unknown_relaxed`: ids in nothing the rules data defines). `Finding` namedtuple (`rule_id`, `severity`, `where`, `message`,
   `source`, `status`). Helpers that evaluate `limit`, `words`, `pattern`, `count` rules on values.
 - **`web.py`**: `request(method, url, headers=None, body=None, timeout=60, retry=False) -> Response`
   (`status`, `headers`, `body` bytes, `.json()`), `urllib.request` only; with `retry`, 5xx, 408, 429, timeouts and
@@ -334,7 +338,10 @@ Every function documented with a docstring; every module has `test_<module>.py`.
   live (a leading © kept, unlike the fastlane import); `stores.apple.platforms.<P>.locales` where a platform has
   fewer of the App Store's locales; `stores.<store>.keep` for every slot holding the store's re-encoded copies, or
   pictures per locale the config's fallback can't reproduce (a locale with fewer, or a Play graphic one language
-  lacks). Pull → import → build → plan against the same store plans no action; only fields no API reads (Play's
+  lacks); a public pull's pictures at an App Store size are copied in with their slots in `keep` (they're
+  `reencoded`). A store not pulled is named at the end of the summary, with how to read it and what its listing
+  still needs (its rules' unconditional `required` fields and graphics, the least screenshots, the screens for its
+  slots). Pull → import → build → plan against the same store plans no action; only fields no API reads (Play's
   feature graphic alt text and privacy URL) may need writing for the check to pass.
 - `diff [--config …] [--existing existing] [--stores apple,google] [--json]`: the config's resolved words (per
   locale and Apple platform), categories, copyright and picture counts per slot against `existing/<store>/listing.json`;
@@ -430,7 +437,8 @@ The plan file:
 
 `apply` also refuses when `out/listing.json` no longer matches `listingSha256`.
 
-- `pull <apple|google> [--out existing] [--config store-listing.json] [--id ID] [--public] [--country us,gb]`: reads
+- `pull <apple|google> [--out existing] [--config store-listing.json] [--id ID] [--public] [--country us,gb]
+  [--thumbnails]`: reads
   what's live (GET only; on Google an edit opened to read and deleted, as `plan` does) and writes `existing/<store>/`
   (below). The app is `--id` (Apple's bundle id or numeric app id, Play's package), else the config's `app.ids`; the
   key is the environment's, as for `plan` (the config's `stores.<store>.auth` may name the variables). Apple: the
@@ -441,8 +449,12 @@ The plan file:
   details, each language's listing and every image type's images. `--public` (Apple, no key): Apple's iTunes Lookup
   API (`https://itunes.apple.com/lookup?bundleId=…&country=…`, then `&entity=macSoftware`), per storefront country
   (`--country`, default `us`; `CC:locale` names its language): name, description, release notes, seller, website,
-  version, genres as categories, and the iPhone, iPad and Apple TV screenshot URLs, downloaded; a storefront whose
-  words repeat an earlier one's is left out. `pull google --public` is exit 3 (no public API). Downloads go only to
+  version, genres as categories, and the iPhone, iPad and Apple TV screenshots, downloaded at the uploads' own size:
+  the lookup's mzstatic address with its size box (`392x696bb.jpg`) swapped for `9999x9999bb.<png|jpg>` (the
+  upload's format), which Apple's image service answers at the upload's size, never enlarged; the page's copy when
+  that can't be had (noted), or with `--thumbnails` (Apple only, `--public` only; usage otherwise). Each picture's
+  size is checked against the rules' slots for its device folder (`storeSize`). A storefront whose words repeat an
+  earlier one's is left out. `pull google --public` is exit 3 (no public API). Downloads go only to
   the hosts in constraint 2, following redirects only there; one that can't be had is listed in `failed` and the
   pull exits 1 with the words written. A folder at `existing/<store>/` that `pull` didn't write is never replaced
   (exit 3).
@@ -486,7 +498,10 @@ language and image type (`file`, `sha256` Play's, `downloadedSha256`, `width`, `
 `notPublic` (the fields it can't have: subtitle, keywords, promotional text, support and privacy URLs, copyright,
 the age rating answers, review notes, previews) and `public` (per country: locale, store URL, seller, website,
 version, release date, genres, age rating text, advisories, languages, price, icon URL); its source is
-`iTunes Lookup (public)`.
+`iTunes Lookup (public)`. Its pictures carry `url` (the lookup's), `fetchedUrl` (what was downloaded, when the
+upload's size was asked for), `fileName`, `width`, `height`, `storeSize` (the display type the size fills, or `null`)
+and `reencoded: true`; the README says they're the App Store's re-encoded copies and that the import keeps their
+slots.
 
 As built (wave 2): `listing.json` also has the Apple TV privacy text in `apple.app.localizations[<primary>].privacyPolicyText`, `apple.auth` and
 `google.auth` (variable names), and `apple.review.contact`/`demoAccount` as variable names (`demoAccount: null` = no
@@ -509,7 +524,8 @@ Behaviour the docs and evals rely on:
 - Review contact values come from the environment named in the config; a phone number is printed with only its
   last 4 digits. A missing variable is a note, not an error (the field is left as the store has it).
 - `listing.py check --json` prints `{"findings": [Finding as an object…], "fallbacks": [...], "relaxed": [...]}`;
-  without `--json`, the same as text. Relaxed rules are listed (with the reason), not hidden. A locale field or
+  without `--json`, the same as text. Relaxed rules are listed (with the reason), not hidden; a relaxed design entry
+  carries `"for": "store-screenshots"`. A locale field or
   screenshot that fell back to the primary locale is reported as a fallback, not a finding. A screenshot or graphic
   a required slot needs and doesn't have is a finding.
 - `listing.py import` can be run more than once into the same `--out` config (e.g. `--from fastlane` then
@@ -709,6 +725,8 @@ Each store's rules file gets a top-level `design` object (beside `slots`), each 
 differs, e.g. Google's Wear `forbidden`: Wear OS screenshots must have no frame), `maxTextShare` (Google 0.2 for promotion), `captions` (allowed or not),
 `awards` (allowed or not), `deviceArt` (whose device art may be used and how), `inUseMajority` (Apple: more than
 half of a set shows the app in use), `backgrounds`, and `uiFirst` (Google: real UI in the first three).
+A finding from an entry has the id `<store>.design.<entry in snake case>` (`rules.design_rule_id`: `uiFirst` ->
+`google.design.ui_first`); `store-listing.json`'s `rules.relax` relaxes it, and `listing.py check` knows the id.
 
 ### 8.7 Taste, directions and the baseline
 

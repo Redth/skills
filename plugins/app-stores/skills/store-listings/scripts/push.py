@@ -5,6 +5,7 @@
     python3 push.py plan google [--out out] [--plan plan-google.json]
     python3 push.py apply <plan file> [--cancel-review]
     python3 push.py pull apple  [--out existing] [--config store-listing.json] [--id ID] [--public] [--country us,gb]
+                                [--thumbnails]
     python3 push.py pull google [--out existing] [--config store-listing.json] [--id PACKAGE]
 
 ``plan`` reads ``out/listing.json`` (written by ``listing.py build``) and the store, writes the plan file and
@@ -1668,6 +1669,9 @@ def build_parser():
                         "text: they aren't public)")
     u.add_argument("--country", help="apple --public: storefront countries, comma-separated (default us); "
                                      "CC:locale names a storefront's language (ca:fr-CA)")
+    u.add_argument("--thumbnails", action="store_true",
+                   help="apple --public: download the web page's small copies of the screenshots, not the uploads' "
+                        "own size")
     return parser
 
 

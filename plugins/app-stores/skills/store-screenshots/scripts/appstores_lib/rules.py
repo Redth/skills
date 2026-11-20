@@ -115,19 +115,28 @@ class Rule:
 
 class RuleSet:
     """A store's rules: iterate it for every rule, or ask by field, slot or id. ``slots`` is the store's
-    slot table (without ``$comment``-style keys). After ``relaxed()``, ``relaxed_rules`` holds ``(rule, reason)`` pairs left out and
-    ``unknown_relaxed`` the ids a relax list named that this store doesn't have."""
+    slot table (without ``$comment``-style keys). ``design_ids`` are the ids of the file's ``design`` entries
+    (``<store>.design.<entry>``: the screenshot design rules ``store-screenshots`` checks), which a config may relax
+    too. After ``relaxed()``, ``relaxed_rules`` holds ``(rule, reason)`` pairs left out, ``relaxed_design`` the
+    ``(design id, reason)`` pairs named (for the design check, not this set), and ``unknown_relaxed`` the ids a relax
+    list named that this store's rules data doesn't have anywhere."""
 
-    def __init__(self, store, rules, slots=None, checked=None, path=None):
+    def __init__(self, store, rules, slots=None, checked=None, path=None, design_ids=None):
         """Build a rule set from ``Rule`` objects (``load`` is the usual way)."""
         self.store = store
         self.rules = list(rules)
         self.slots = slots or {}
         self.checked = checked
         self.path = path
+        self.design_ids = frozenset(design_ids or ())
         self.relaxed_rules = []
+        self.relaxed_design = []
         self.unknown_relaxed = []
         self._by_id = dict((r.id, r) for r in self.rules)
+
+    def known(self, rule_id):
+        """True when the rules data defines ``rule_id`` anywhere: a rule, or a ``design`` entry's id."""
+        return rule_id in self._by_id or rule_id in self.design_ids
 
     def __iter__(self):
         return iter(self.rules)
@@ -154,6 +163,13 @@ class RuleSet:
 
 def _bad(path, message):
     return RulesError("%s: %s" % (path, message))
+
+
+def design_rule_id(store, entry):
+    """The id of a rules file's ``design`` entry, as findings and ``rules.relax`` name it: ``frames`` ->
+    ``google.design.frames``, ``uiFirst`` -> ``google.design.ui_first``."""
+    snake = re.sub(r"([A-Z])", lambda m: "_" + m.group(1).lower(), entry)
+    return "%s.design.%s" % (store, snake)
 
 
 def load(store, rules_dir):
@@ -199,7 +215,11 @@ def load(store, rules_dir):
     if not isinstance(slots, dict):
         raise _bad(path, "\"slots\" isn't an object")
     slots = dict((k, v) for k, v in slots.items() if not k.startswith("$"))
-    return RuleSet(store, rules, slots, data.get("checked"), path)
+    design = data.get("design") or {}
+    if not isinstance(design, dict):
+        raise _bad(path, "\"design\" isn't an object")
+    design_ids = [design_rule_id(store, k) for k, v in design.items() if not k.startswith("$") and isinstance(v, dict)]
+    return RuleSet(store, rules, slots, data.get("checked"), path, design_ids)
 
 
 def relaxed(ruleset, relax_list):
@@ -207,8 +227,10 @@ def relaxed(ruleset, relax_list):
 
     ``relax_list`` is the config's ``rules.relax``: objects with an ``id`` and a ``reason`` (plain id
     strings are accepted too). Ids for other stores are ignored, so one list serves every store. The
-    returned set's ``relaxed_rules`` lists ``(rule, reason)`` for the report, and ``unknown_relaxed`` the
-    ids of this store that match no rule (a typo, or a rule since renamed).
+    returned set's ``relaxed_rules`` lists ``(rule, reason)`` for the report, ``relaxed_design`` the
+    ``(id, reason)`` of the store's ``design`` entries named (screenshot design rules: ``store-screenshots``
+    honours them), and ``unknown_relaxed`` the ids of this store that match nothing in its rules data (a typo,
+    or a rule since renamed).
     """
     reasons = collections.OrderedDict()
     for entry in relax_list or []:
@@ -221,10 +243,12 @@ def relaxed(ruleset, relax_list):
         if rid.startswith(ruleset.store + "."):
             reasons[rid] = reason
     kept = [r for r in ruleset.rules if r.id not in reasons]
-    out = RuleSet(ruleset.store, kept, ruleset.slots, ruleset.checked, ruleset.path)
+    out = RuleSet(ruleset.store, kept, ruleset.slots, ruleset.checked, ruleset.path, ruleset.design_ids)
     out.relaxed_rules = list(ruleset.relaxed_rules) + [
         (ruleset.get(rid), reason) for rid, reason in reasons.items() if ruleset.get(rid) is not None]
-    out.unknown_relaxed = list(ruleset.unknown_relaxed) + [rid for rid in reasons if ruleset.get(rid) is None]
+    out.relaxed_design = list(ruleset.relaxed_design) + [
+        (rid, reason) for rid, reason in reasons.items() if ruleset.get(rid) is None and rid in ruleset.design_ids]
+    out.unknown_relaxed = list(ruleset.unknown_relaxed) + [rid for rid in reasons if not ruleset.known(rid)]
     return out
 
 

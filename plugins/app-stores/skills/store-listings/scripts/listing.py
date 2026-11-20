@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import difflib
 import datetime
 import json
 import os
@@ -606,7 +607,9 @@ class Report:
         if self.relaxed:
             lines.append("Relaxed by the config (not checked):")
             for r in self.relaxed:
-                lines.append("  %s: %s" % (r["id"], r["reason"] or "(no reason given)"))
+                lines.append("  %s: %s%s" % (r["id"], r["reason"] or "(no reason given)",
+                                             " (a screenshot design rule: store-screenshots' check.py honours it)"
+                                             if r.get("for") == "store-screenshots" else ""))
             lines.append("")
         if self.not_checked:
             lines.append("Not checked offline:")
@@ -788,10 +791,16 @@ class StoreCheck:
         self.rules = rules.relaxed(full, relax)
         for rule, reason in self.rules.relaxed_rules:
             report.relaxed.append(collections.OrderedDict([("store", store), ("id", rule.id), ("reason", reason)]))
+        for rid, reason in self.rules.relaxed_design:
+            report.relaxed.append(collections.OrderedDict([("store", store), ("id", rid), ("reason", reason),
+                                                           ("for", "store-screenshots")]))
+        known = [r.id for r in full] + sorted(full.design_ids)
         for rid in self.rules.unknown_relaxed:
+            near = difflib.get_close_matches(rid, known, 1, 0.8)
             report.add(store, config_finding(
-                "config.relax", "rules.relax", "relaxes %s, which isn't one of %s's rules (a typo, or since renamed?)"
-                % (rid, store), "warning"))
+                "config.relax", "rules.relax", "relaxes %s, which isn't in %s's rules data (not a rule or a screenshot "
+                "design rule: %s)" % (rid, store, "did you mean %s?" % near[0] if near else
+                                      "a typo, or since renamed?"), "warning"))
         self.slots = self.rules.slots
         self.primary = listing.store_primary(store)
         self.locales = store_locales(listing, store, report)
