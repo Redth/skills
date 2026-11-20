@@ -52,12 +52,14 @@ everywhere.
 | `statusBar` | `clean` \| `as-is` | `clean` | `clean`: the clock, full battery and signal, no notifications or carrier; `as-is`: left alone |
 | `seed` | string or integer | | passed to the app as `ScreenshotSeed` (a launch argument, an intent extra, a query parameter) |
 | `flatten` | `#RRGGBB` | `#000000` | the colour a picture with alpha is flattened onto (black, as a device's masked corners are) |
+| `posture` | `folded`, `open` (or `unfolded`), `half-open` | as it is | a foldable's posture before the steps (below, [Foldables](#foldables)) |
 | `staging` | object | | how the app is signed in, seeded and set up for the screens, agreed with the user ([staging.md](staging.md)); below |
 | `devices` | array, at least 1 | required | below |
 | `screens` | array, at least 1 | required | below |
 
-Settings (`locales`, `appearance`, `clock`, `statusBar`, `seed`, `flatten`) resolve **plan, then device, then
-screen, then the screen's `overrides` for the device's id or platform**; each later one wins.
+Settings (`locales`, `appearance`, `clock`, `statusBar`, `seed`, `flatten`, `posture`) resolve **plan, then
+device, then screen, then the screen's `overrides` for the device's platform, then its `layout`, then its id**;
+each later one wins.
 
 ## `app`
 
@@ -84,14 +86,16 @@ Extra fields are passed to the driver (an agent's app name, for example).
 | `width`, `height` | integers | **the exact pixel size this device promises**, from the store's rules ([sizes.md](sizes.md)). Any other size is `failed`, never resized. Landscape is `width > height` |
 | `target` | object | the driver's own settings (below) |
 | `app` | object | merged over the plan's `app` entry for this platform |
+| `layout` | an id (`wide`, `split`, `cover`) | how the app lays out here, when it differs: screens' `overrides` keyed by it apply to every device with it (after the platform's, before the device id's) |
+| `posture` | `folded`, `open`, `half-open` | a foldable's posture: each posture captured is its own device here, with its own id and size ([Foldables](#foldables)) |
 | `locales`, `appearance`, `clock`, `statusBar`, `seed`, `flatten` | | this device's settings |
 
 ### `target`, per driver
 
 | Driver | Fields |
 |---|---|
-| `simctl` | `deviceType` (name or identifier), `runtime` (`latest`, a name, a version or an id), `udid` (an existing device: only one the user names), `display` (a display id, two-screen devices), `localeScope` (`app`: no device language change) |
-| `adb` | `systemImage` and `profile` (an AVD of the skill's own, `appstores-<id>`), `avd` (an AVD by name; `readOnly`, `window`, `port`, `emulatorArgs`), `serial` (a connected device: only one the user names), `wmSize` (default the device's `width`x`height`; `null` leaves it), `density`, `deviceLocale`, `display`, `animations` (`off` by default), `navigation` (`gesture`, `threebutton`), `statusBarMobile`, `statusBarCheck`; the tools' paths `adb`, `emulator`, `avdmanager` ([adb.md](adb.md)) |
+| `simctl` | `deviceType` (name or identifier), `runtime` (`latest`, a name, a version or an id), `udid` (an existing device: only one the user names), `display` (a screen id from `simctl io <udid> enumerate`; by default the active one after a posture change, or the one the device's size), `localeScope` (`app`: no device language change), `hingeAngle` (`half-open`, default 90), `foldCli` (the fold control's command, default `["maui", "devflow"]`), `postureSettle` (seconds after a posture change, default 3) |
+| `adb` | `systemImage` and `profile` (an AVD of the skill's own, `appstores-<id>`; with `avd` named `appstores-…` too, that AVD, so two postures can share one), `avd` (an AVD by name; `readOnly`, `window`, `port`, `emulatorArgs`), `serial` (a connected device: only one the user names), `wmSize` (default the device's `width`x`height`; `null` leaves it), `density`, `deviceLocale`, `display` (SurfaceFlinger's long id; by default the display in use on a device with more than one), `hingeAngle` (`half-open`, default 90), `animations` (`off` by default), `navigation` (`gesture`, `threebutton`), `statusBarMobile`, `statusBarCheck`; the tools' paths `adb`, `emulator`, `avdmanager` ([adb.md](adb.md)) |
 | `uiautomator` | `serial`, or `avd` already running: it changes nothing on the device (no size, locale, demo mode, install or launch) |
 | `chrome` | `scale` (device scale factor, default 1; the page is `width/scale` × `height/scale` CSS px), or `viewport` (`[w, h]` CSS px, which sets the scale); `mobile`; `reducedMotion` |
 | `macos` | `scale` (the display's backing scale, default 2: the window is sized to `width/scale` × `height/scale` points), `position` (default `[0, 40]`) |
@@ -109,13 +113,79 @@ Each driver's reference is the authority for its `target`; unknown fields are re
 | `id` | `[a-z0-9][a-z0-9_.-]*` | the file name; what `store-screenshots` calls the capture screen |
 | `state` | string | what the screen must show, in plain words; in `staging.md`, the report and a wrong state's reason |
 | `steps` | array | how to reach it, run in order; then the screenshot |
-| `verify` | an element, or a list | must be on screen before the shot (`timeout`, default 5 s), else the shot is `missed` ("wrong state"); the report's `stateCheck` |
+| `verify` | an element, `{ "keyboard": … }`, or a list | must be so before the shot (`timeout`, default 5 s), else the shot is `missed` ("wrong state"); the report's `stateCheck`. The keyboard: below |
 | `staging` | `false` | leave the staging's seed and launch values out of this screen |
 | `devices` | array of device ids | only these devices (default: all) |
 | `platforms` | array of platforms | only devices of these platforms |
 | `locales` | array | only these of the device's locales |
-| `appearance`, `clock`, `statusBar`, `seed`, `flatten` | | this screen's settings |
-| `overrides` | object | keyed by a device id or a platform: `steps`, `state`, `verify` or settings that differ there. A device id's entry wins over its platform's |
+| `appearance`, `clock`, `statusBar`, `seed`, `flatten`, `posture` | | this screen's settings |
+| `overrides` | object | keyed by a platform, a device `layout` or a device id (applied in that order): `stepsPatch`, `steps`, `omit`, `state`, `verify` or settings that differ there (below) |
+
+### Overrides: when a device's layout differs
+
+A screen's steps are written once. Where a device lays the app out differently (no tab bar on an open foldable or
+a tablet, the menu button outside the navigation bar on a cover display), an override changes only what differs:
+
+```json
+{ "id": "servings",
+  "steps": [ { "launch": {} },
+             { "tap": { "xpath": "//XCUIElementTypeNavigationBar/XCUIElementTypeButton[not(@name)]" }, "name": "menu" },
+             { "tap": { "text": "Scale servings" } },
+             { "type": { "id": "servings-field", "text": "12" } },
+             { "hideKeyboard": true } ],
+  "verify": [ { "id": "ingredients" }, { "keyboard": "hidden" } ],
+  "overrides": {
+    "android":   { "stepsPatch": [ { "replace": "menu", "with": [ { "tap": { "label": "Open navigation drawer" } } ] } ] },
+    "duo-outer": { "stepsPatch": [ { "replace": "menu", "with": [ { "tap": { "xpath": "//XCUIElementTypeButton[not(@name)]" } } ] } ] } } },
+{ "id": "history",
+  "steps": [ { "launch": {} }, { "tap": { "id": "tab-history" }, "name": "open-tab" }, { "wait": { "id": "history-list" } } ],
+  "overrides": { "wide": { "stepsPatch": [ { "remove": "open-tab" } ] },
+                 "duo-inner": { "omit": "the open Duo shows the history beside the plan" } } }
+```
+
+- **`stepsPatch`** (prefer it): changes to the steps before it, in order: `{ "prepend": [steps] }`,
+  `{ "append": [steps] }`, `{ "remove": <ref> }`, `{ "replace": <ref>, "with": [steps] }`,
+  `{ "before": <ref>, "insert": [steps] }`, `{ "after": <ref>, "insert": [steps] }`. A ref is a step's **`name`**
+  (any step may carry one) or a 1-based position in the steps as they are when that entry runs (names survive
+  edits; positions don't). A fix to the base steps (a `hideKeyboard` added later) reaches every patched device. A
+  ref to a step that's gone (renamed, removed) is an error when the plan loads, never a silent no-op.
+- **`steps`**: a whole replacement. It doesn't follow later fixes to the base steps (a copy goes stale): keep it for
+  a device whose way in has nothing in common with the others'.
+- **`omit`**: `true`, or why: the screen isn't captured on that device (logged, not reported as missed). When a
+  device shows two screens as one picture (an open foldable's split view), omit one there and leave that shot out
+  of the device's set in `store-screenshots` (the shot's `targets`).
+- **Device `layout`**: devices that lay out alike (`"layout": "wide"` on an open iPhone Duo and an unfolded Pixel
+  Fold) share one override keyed by the layout.
+
+### Foldables
+
+Each posture captured is its own device in the plan (its own id, its own `width`×`height`, its own folder):
+
+```json
+{ "id": "fold-outer", "platform": "android", "kind": "phone", "driver": "adb", "width": 1080, "height": 1920,
+  "posture": "folded", "target": { "avd": "appstores-fold", "systemImage": "system-images;android-36;google_apis;arm64-v8a",
+                                   "profile": "pixel_9_pro_fold", "wmSize": "1080x1920", "density": 420 } },
+{ "id": "fold-inner", "platform": "android", "kind": "tablet", "driver": "adb", "width": 1920, "height": 1080,
+  "posture": "open", "layout": "wide",
+  "target": { "avd": "appstores-fold", "systemImage": "system-images;android-36;google_apis;arm64-v8a",
+              "profile": "pixel_9_pro_fold", "wmSize": "1920x1080", "density": 320 } },
+{ "id": "duo-outer", "platform": "ios", "kind": "phone", "driver": "appium", "width": 1398, "height": 2034,
+  "posture": "folded", "target": { "deviceType": "iPhone Duo" } },
+{ "id": "duo-inner", "platform": "ios", "kind": "phone", "driver": "appium", "width": 2853, "height": 2007,
+  "posture": "open", "layout": "wide", "target": { "deviceType": "iPhone Duo" } }
+```
+
+- `folded` is the cover display, `open` (or `unfolded`) the inner one, `half-open` the hinge part-way
+  (`target.hingeAngle`, default 90: tabletop held landscape, book held portrait).
+- **Android** ([adb.md](adb.md#foldables)): the emulator's console (`adb emu fold`, `emu unfold`, `emu posture 2`),
+  or a real foldable's `cmd device_state state`; then the screen is woken and unlocked (a fold locks it), the
+  display in use found again, `wm size` and `wm density` set again on it (each physical display keeps its own) and
+  demo mode applied again. Captured from the display in use (`screencap -d`).
+- **iPhone Duo** ([simctl.md](simctl.md#the-iphone-duo)): `simctl` can't fold a simulator; the driver uses
+  DevFlow's fold control (`maui devflow device fold set …`, experimental: no agent needed, any app) and captures the
+  display it made active. The inner display is landscape: **2853×2007**, `width` 2853 and `height` 2007.
+- A `posture` step folds in the middle of a screen's steps. Drivers with a host (the agents, Appium, Maestro,
+  XCUITest) fold through it.
 
 ## `staging`
 
@@ -155,6 +225,11 @@ One kind a step: `{ "<kind>": <value> }`.
 | `script` | a string (split like a shell would, not run by one), an argument list, or `{ "run": …, "timeout": s }` | a command the user provides, run as is from the plan's folder, with the variables below |
 | `appFile` | `{ "file": "seed/app.db", "into": "Library/Caches/app.db" }` (`into` may be `{ "ios": …, "android": … }`) | copies a file into the app's own data, the app stopped first and the old file (and a database's `-wal`/`-shm`) removed: the simulator's data container, Android's `/data/data/<package>` through `run-as` (debug builds). Done by the `simctl` and `adb` drivers, and through them by the agents and Appium |
 | `settle` | `true` or `{ "timeout": s, "ignore": [[x, y, w, h], …] }` | waits until two screenshots in a row are identical (outside the `ignore` rectangles, in the picture's pixels: an illustration that never stops moving); a screen that never settles is a warning |
+| `posture` | `"folded"`, `"open"`, `"half-open"` | folds the device in the middle of the steps ([Foldables](#foldables)); `simctl`, `adb`, and the drivers they host |
+| `hideKeyboard` | `true`, or `{ "tap": <element> }` | closes the on-screen keyboard if it's up: Android (`adb`, and the agents on it) presses back only while `dumpsys input_method` says it's up; Appium uses `mobile: hideKeyboard` (on iOS the keyboard's Done or Return key, then a Done button above it). Never a navigation back. `{ "tap": … }` taps that element instead (a title or label outside the field), on any driver that taps: the way on an iOS device driven by an in-app agent, which can't see the keyboard |
+
+Any step may carry a **`name`** (`{ "tap": { "id": "tab-history" }, "name": "open-tab" }`) for an override's
+`stepsPatch` to refer to it; names are unique within a screen's steps.
 
 A `script` step's environment:
 
@@ -168,10 +243,35 @@ A `script` step's environment:
 | `ANDROID_SERIAL`, `APPSTORES_SERIAL` | the adb serial (`adb`, and drivers it hosts; adb honours `ANDROID_SERIAL`) |
 
 **Elements** are found by one of: `id` (accessibility identifier, `AutomationId`, resource id, test id: matches
-the whole id or its last part, so `search` finds `com.example.samplerecipes:id/search`), `text` (exact, then
-ignoring case, then contained), `label` (accessibility label or content description), `xpath`, `css` (web); with an
-optional `timeout` in seconds. Prefer `id`: text changes with the locale. Each driver lists the step kinds and
-finders it supports (`capabilities()`); a screen with a step it can't do is `skipped` without running anything.
+the whole id or its last part, so `search` finds `com.example.samplerecipes:id/search`), `text` and `label` (exact,
+then ignoring case and surrounding space, then contained: the first that finds one wins), `xpath`, `css` (web);
+with an optional `timeout` in seconds. Prefer `id`: text changes with the locale. Each driver lists the step kinds
+and finders it supports (`capabilities()`); a screen with a step it can't do is `skipped` without running anything.
+
+| Driver | `text` / `label` | `xpath` |
+|---|---|---|
+| `adb`, `uiautomator` | exact, ignoring case and space, contained (in the `uiautomator dump`) | XPath 1.0's everyday part over the dump (below) |
+| `devflow`, `ailoha` | the agent's own query (exact), then the tree: ignoring case and space, contained | the agent's HTTP query, else the same XPath over the tree (elements named by type, fields as attributes) |
+| `appium` | iOS and Mac predicates `==`, `==[c]`, `CONTAINS[c]` over label, value and name (title on a Mac); Android and Windows XPaths `@text=`, `translate()`, `contains()` | the platform driver's own XPath (full XPath 1.0) |
+| `chrome` | exact, ignoring case, contained (visible text) | the browser's |
+| `macos` | the whole of a name, description, title or value (AppleScript's `is` ignores case), then a part of one | no |
+| `maestro` | Maestro's own text match (a regular expression of the whole text; this driver escapes it) | no |
+
+**XPath on the tree-reading drivers** (`adb`, `uiautomator`, the agents' tree): paths with `/` and `//`, `*`, `.`,
+`..`, `@attr`, positions (`[2]`, `[last()]`, `(//node)[2]`), `=`, `!=`, `<`, `>`, `and`, `or`, and the functions
+`contains`, `starts-with`, `ends-with`, `not`, `normalize-space`, `translate`, `lower-case`, `upper-case`, `string`,
+`concat`, `string-length`, `text`, `name`, `position`, `last`. Attribute names differ by platform (Android's
+`@text`, `@content-desc`, `@resource-id`; iOS's `@label`, `@name`, `@value`), so a cross-platform xpath names
+both: `//*[contains(@text,'Lemon') or contains(@label,'Lemon')]`.
+
+### `verify` and the keyboard
+
+`verify` holds elements and, optionally, `{ "keyboard": "hidden" | "shown" | "any" }`. **A screen whose steps type
+nothing is checked for `hidden` without asking**, where the driver can tell (`adb` and the agents on Android:
+`dumpsys input_method`; Appium: `mobile: isKeyboardShown`); a keyboard left up makes the shot `missed`, "wrong
+state", and says to end the steps with `hideKeyboard`. A screen that types isn't checked unless it asks, but a
+keyboard left up is a warning in the report. `{ "keyboard": "any" }` turns the check off. A driver that can't see
+the keyboard (`simctl`, an agent on iOS) reports an asked-for check as `unchecked`: look at the picture.
 
 ## `capture-report.json`
 
@@ -214,3 +314,5 @@ quietly flattened pictures).
 - `capture.py --write-staging`: write `staging.md` from the plan, and stop.
 - `capture.py --current [folder]`: list the current store screenshots (`existing/<store>/screenshots/`,
   `store-screenshots.json`'s shots, `design/current.json`, or the folder), to start the screens from; and stop.
+  `design/current.json`'s shots come by group (store, locale and slot: App Store and phones first), in order, each
+  with what it shows, the capture screen it maps to (or "not mapped yet") and its caption.

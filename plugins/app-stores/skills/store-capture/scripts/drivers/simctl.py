@@ -20,8 +20,16 @@ What it does, in order (CONTRACT.md 10.3, 10.5):
   ``script``. It can't tap or see elements: pair it with a UI driver for those.
 - the plan's ``staging.permissions`` for the platform are granted after install (``simctl privacy … grant``) and
   revoked in ``reset``.
-- screenshot: ``simctl io … screenshot --type=png --mask=ignored`` (``--display`` from ``target.display`` for a
-  device with more than one screen).
+- foldables (the iPhone Duo; ``posture``: ``folded``, ``open``, ``half-open``): ``simctl`` has no hinge command, and
+  Xcode opens one only from its Device Hub. The driver uses DevFlow's fold control (``maui devflow device fold set
+  folded|unfolded|partially-folded --udid <udid> --experimental``: the ``Microsoft.Maui.Cli`` tool, no agent needed,
+  any app; experimental, through private Simulator APIs, Apple silicon and Xcode 27.1 or later), reads which
+  display is active from its answer, and puts the posture back in ``reset``. ``target.foldCli`` names the command.
+- screenshot: ``simctl io … screenshot --type=png --mask=ignored`` with ``--display``: ``target.display``, else on a
+  simulator with more than one built-in screen (``simctl io <udid> enumerate``) the active one after a posture
+  change, or the one whose pixel size is the device's ``width`` x ``height`` (either way round).
+- a CoreSimulator hiccup (``server died``, ``Mach error -308``, an interrupted connection) while booting,
+  installing, launching or capturing is tried once more after a few seconds.
 - ``reset``: clear the status bar, put the appearance back, stop the app, shut down a simulator it booted, and
   with ``--cleanup`` delete its own.
 """
@@ -39,6 +47,14 @@ RUNTIME_PLATFORMS = {"ios": ("iOS",), "ipados": ("iOS",), "tvos": ("tvOS",), "wa
                      "visionos": ("visionOS", "xrOS")}
 STATUS_BAR_PLATFORMS = ("ios", "ipados")
 PREFIX = "appstores-"
+FOLD_CLI = ["maui", "devflow"]
+FOLD_MODES = {"folded": "folded", "open": "unfolded", "half-open": "partially-folded"}
+FOLD_INSTALL = ("install DevFlow's CLI (dotnet tool install -g Microsoft.Maui.Cli --prerelease): its fold control "
+                "works on any simulator without an agent; or open the simulator by hand in Xcode's Device Hub and "
+                "leave posture out of the plan")
+# CoreSimulator's own hiccups: worth one more try.
+TRANSIENT = ("server died", "(ipc/mig)", "mach error -308", "connection interrupted", "connection invalid",
+             "connection became invalid", "coresimulatorservice", "unable to lookup in current state")
 
 
 def apple_locale(locale):
@@ -85,6 +101,25 @@ def app_file_paths(driver, ctx, value, family):
     return src, rel
 
 
+def integrated_screens(enumerate_output):
+    """The built-in screens ``simctl io <udid> enumerate`` lists, as ``[(screen id, width, height)]`` (the iPhone
+    Duo: its cover and its inner display; a TV-out or CarPlay screen isn't one)."""
+    out = []
+    for block in re.split(r"\n\s*\(\d+\)\s", enumerate_output or ""):
+        sid = re.search(r"Screen ID:\s*(\d+)", block)
+        kind = re.search(r"Screen Type:\s*(\w+)", block)
+        size = re.search(r"Pixel Size:\s*\{(\d+),\s*(\d+)\}", block)
+        if sid and kind and size and kind.group(1) == "Integrated":
+            out.append((sid.group(1), int(size.group(1)), int(size.group(2))))
+    return out
+
+
+def transient(error):
+    """True when a simctl failure is CoreSimulator's own hiccup, worth trying once more."""
+    text = str(error).lower()
+    return any(t in text for t in TRANSIENT)
+
+
 def copy_replacing(src, dest):
     """Copy ``src`` to ``dest`` (making its folder), removing ``dest`` and a database's ``-wal``/``-shm`` first."""
     import shutil
@@ -100,7 +135,7 @@ class SimctlDriver(base.Driver):
 
     NAME = "simctl"
     PLATFORMS = ("ios", "ipados", "tvos", "watchos", "visionos")
-    STEPS = ("launch", "deepLink", "url", "appFile", "wait", "settle", "script")
+    STEPS = ("launch", "deepLink", "url", "appFile", "wait", "settle", "script", "posture")
     FINDERS = ()
     BOOT_TIMEOUT = 600
 
@@ -114,12 +149,35 @@ class SimctlDriver(base.Driver):
         self.launched = False
         self.granted = []
         self.info = {}
+        self.display = None           # the screen captured when the simulator has more than one
+        self.displays_read = False
+        self.original_posture = None
+        self.posture_changed = False
 
     # -- finding and creating -----------------------------------------------------------------------------
 
     def simctl(self, *args, **kw):
         """Run ``xcrun simctl <args>``."""
         return base.run(SIMCTL + [str(a) for a in args], **kw)
+
+    def simctl_again(self, *args, **kw):
+        """``simctl`` once more after a few seconds when CoreSimulator hiccups (``server died``, ``Mach error -308``):
+        for booting, installing, launching and capturing. A command run with ``check=False`` is tried again on a
+        non-zero exit with that kind of message too."""
+        try:
+            res = self.simctl(*args, **kw)
+        except base.CommandError as e:
+            if not transient(e):
+                raise
+            problem = str(e)
+        else:
+            if res.ok or not transient((res.err or "") + (res.out or "")):
+                return res
+            problem = (res.err or res.out).strip()
+        base.note("  CoreSimulator hiccupped (%s): trying once more in 5 s" % problem[:160])
+        self.warnings.append("simctl %s hit a CoreSimulator hiccup and was tried again: %s" % (args[0], problem[:160]))
+        base.sleep(5)
+        return self.simctl(*args, **kw)
 
     def list_json(self, what):
         """``simctl list <what> -j`` parsed."""
@@ -278,11 +336,13 @@ class SimctlDriver(base.Driver):
 
     def boot(self):
         """Boot the simulator and wait until it's fully up."""
-        res = self.simctl("boot", self.udid, check=False, timeout=self.BOOT_TIMEOUT)
+        res = self.simctl_again("boot", self.udid, check=False, timeout=self.BOOT_TIMEOUT)
         if not res.ok and "Booted" not in (res.err + res.out):
             raise base.CommandError(SIMCTL + ["boot", self.udid], res.code, res.out, res.err)
         self.booted_by_us = True
         self.simctl("bootstatus", self.udid, "-b", timeout=self.BOOT_TIMEOUT)
+        if self.state.get("posture"):
+            self.state.pop("posture", None)   # applied again after a reboot
 
     def shutdown(self):
         """Shut the simulator down."""
@@ -295,7 +355,7 @@ class SimctlDriver(base.Driver):
         path = self.path(app)
         if not base.DRY_RUN and not os.path.isdir(path):
             raise base.DriverError("the app to install isn't there: %s (build it first)" % path)
-        self.simctl("install", self.udid, path, timeout=600)
+        self.simctl_again("install", self.udid, path, timeout=600)
 
     def reset(self, device):
         """Clear the status bar, restore the appearance, stop the app, shut down what it booted, delete its own
@@ -310,6 +370,10 @@ class SimctlDriver(base.Driver):
             except base.DriverError as e:
                 warnings.append("%s: %s" % (what, e))
 
+        if self.posture_changed and self.original_posture in FOLD_MODES and \
+                self.info.get("posture") != self.original_posture:
+            attempt("putting the posture back (%s)" % self.original_posture,
+                    lambda: self.fold(device, self.original_posture))
         if self.changed.get("statusBar"):
             attempt("clearing the status bar", lambda: self.simctl("status_bar", self.udid, "clear"))
         original = self.changed.get("appearance")
@@ -431,8 +495,8 @@ class SimctlDriver(base.Driver):
                 ctx.warn("launch clean needs app.%s.app to reinstall from: nothing was cleared"
                          % ctx.device["platform"])
         env = dict(("SIMCTL_CHILD_" + k, str(v)) for k, v in (value.get("env") or {}).items())
-        self.simctl("launch", "--terminate-running-process", self.udid, bundle, *self.launch_args(ctx, value.get("args")),
-                    env=env or None, timeout=120)
+        self.simctl_again("launch", "--terminate-running-process", self.udid, bundle,
+                          *self.launch_args(ctx, value.get("args")), env=env or None, timeout=120)
         self.launched = True
 
     def step_appFile(self, ctx, value):
@@ -461,13 +525,121 @@ class SimctlDriver(base.Driver):
         """``simctl openurl`` (opens in Safari, or the app that claims it)."""
         self.step_deepLink(ctx, value)
 
+    # -- foldables -------------------------------------------------------------------------------------------------
+
+    def fold_cmd(self, device):
+        """The fold control's command (``target.foldCli``, default ``maui devflow``)."""
+        cli = (device.get("target") or {}).get("foldCli") or FOLD_CLI
+        return cli.split() if isinstance(cli, str) else list(cli)
+
+    def fold_state(self, device):
+        """``fold get --json``: ``{"mode", "hinges", "displays": [{"id", "active", …}]}`` (``{}`` when unread)."""
+        res = self.fold_run(device, ["get"], check=False, dry_output="{}")
+        return _first_json(res.out) or {}
+
+    def fold_run(self, device, args, check=True, dry_output="{}", timeout=90):
+        cmd = self.fold_cmd(device) + ["device", "fold"] + list(args) + ["--udid", self.udid, "--experimental",
+                                                                          "--json"]
+        try:
+            return base.run(cmd, check=check, timeout=timeout, dry_output=dry_output)
+        except base.ToolMissing as e:
+            raise base.ToolMissing("%s (%s)" % (e, FOLD_INSTALL)) from None
+
+    def fold(self, device, posture):
+        """Set the hinge and wait for the display handover (DevFlow's fold control, which verifies it); returns
+        the state it reports. A half-open hinge that settles a few degrees off is accepted with a warning."""
+        mode = FOLD_MODES[posture]
+        args = ["set", mode, "--timeout", "60"]
+        angle = None
+        if posture == "half-open":
+            angle = float((device.get("target") or {}).get("hingeAngle") or 90)
+            args += ["--angle", "%g" % angle]
+        res = self.fold_run(device, args, check=False)
+        data = _first_json(res.out) or {}
+        if res.ok and not data.get("error"):
+            return data.get("state") or data
+        problem = str(data.get("error") or (res.err or res.out).strip())[:300]
+        if posture == "half-open" and "not confirmed" in problem.lower():
+            state = self.fold_state(device)
+            hinges = state.get("hinges") or []
+            got = hinges[0].get("angleDegrees") if hinges and isinstance(hinges[0], dict) else None
+            if isinstance(got, (int, float)) and abs(got - angle) <= 10:
+                self.warnings.append("the hinge settled at %.0f degrees, not %g (DevFlow couldn't confirm the "
+                                     "exact angle)" % (got, angle))
+                return state
+        raise base.DriverError("couldn't put %s in the %s posture: %s (DevFlow's fold control is experimental: "
+                               "Apple silicon, Xcode 27.1 or later)" % (self.udid, posture, problem))
+
+    def apply_posture(self, device, posture, shot):
+        """Fold, open or half-open the simulator (the iPhone Duo) through DevFlow's fold control, and capture the
+        display it makes active (unless ``target.display`` names one). Already in that posture, nothing is set.
+        After a change the app's scene moves to the other display: ``target.postureSettle`` seconds (default 3)
+        are waited before the steps."""
+        back = dict((v, k) for k, v in FOLD_MODES.items())
+        state = None
+        if self.original_posture is None:
+            state = self.fold_state(device) or {}
+            self.original_posture = back.get(state.get("mode"), "unknown")
+            if back.get(state.get("mode")) != posture or posture == "half-open":
+                state = None
+        if state is None:
+            state = self.fold(device, posture)
+            self.posture_changed = True
+            base.sleep(float((device.get("target") or {}).get("postureSettle", 3)))
+        active = [str(d.get("id")) for d in state.get("displays") or [] if isinstance(d, dict) and d.get("active")]
+        if len(active) == 1:
+            self.display = active[0]
+            self.displays_read = True
+            base.note("  capturing display %s (active in the %s posture)" % (self.display, posture))
+        else:
+            self.displays_read = False
+            self.display = None
+        self.info["posture"] = posture
+
+    def screen_for(self, device):
+        """The ``--display`` to capture: ``target.display``; else the one a posture made active; else, with more than
+        one built-in screen, the one whose pixels are the device's size; ``None`` with one screen."""
+        explicit = (device.get("target") or {}).get("display")
+        if explicit not in (None, "", "auto"):
+            return str(explicit)
+        if self.displays_read or base.DRY_RUN:
+            return self.display
+        self.displays_read = True
+        screens = integrated_screens(self.simctl("io", self.udid, "enumerate", check=False, quiet=True).out)
+        if len(screens) <= 1:
+            self.display = None
+            return None
+        size = (device["width"], device["height"])
+        fits = [sid for sid, w, h in screens if (w, h) in (size, size[::-1])]
+        if len(fits) == 1:
+            self.display = fits[0]
+            base.note("  capturing screen %s (of %s: the one %dx%d)" % (fits[0], ", ".join(s[0] for s in screens),
+                                                                       size[0], size[1]))
+            return self.display
+        raise base.DriverError("%s has %d screens (%s) and none is just %dx%d: set target.display (simctl io %s "
+                               "enumerate)" % (self.udid, len(screens), ", ".join(
+                                   "%s %dx%d" % s for s in screens), size[0], size[1], self.udid))
+
     def screenshot(self, device, path):
         """``simctl io <udid> screenshot --type=png --mask=ignored [--display=…] <path>``."""
         args = ["io", self.udid, "screenshot", "--type=png", "--mask=ignored"]
-        display = (device.get("target") or {}).get("display")
+        display = self.screen_for(device)
         if display:
             args.append("--display=%s" % display)
-        self.simctl(*(args + [path]), timeout=60)
+        self.simctl_again(*(args + [path]), timeout=60)
+
+
+def _first_json(text):
+    """The first JSON object in a command's output, or ``None``."""
+    text = (text or "").strip()
+    for start in range(len(text)):
+        if text[start] == "{":
+            try:
+                value = json.JSONDecoder().raw_decode(text[start:])[0]
+            except ValueError:
+                continue
+            return value if isinstance(value, dict) else None
+    return None
 
 
 DRIVER = SimctlDriver

@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "build/SampleRecipes.app" },
+           "android": { "package": "com.example.samplerecipes", "activity": ".MainActivity" } },
+  "locales": ["en-US"],
+  "staging": { "account": { "kind": "bypass" }, "launch": { "args": { "SampleRecipesFakeSession": "demo" } },
+               "confirmed": { "screen": "servings", "device": "iphone-6.9", "on": "2026-11-12", "by": "the user, in chat" } },
+  "devices": [
+    { "id": "iphone-6.9", "platform": "ios", "kind": "phone", "driver": "appium", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max" } },
+    { "id": "duo-outer", "platform": "ios", "kind": "phone", "driver": "appium", "width": 1398, "height": 2034,
+      "posture": "folded", "target": { "deviceType": "iPhone Duo" } },
+    { "id": "duo-inner", "platform": "ios", "kind": "phone", "driver": "appium", "width": 2853, "height": 2007,
+      "posture": "open", "target": { "deviceType": "iPhone Duo" } },
+    { "id": "fold-inner", "platform": "android", "kind": "tablet", "driver": "adb", "width": 1920, "height": 1080,
+      "posture": "open", "target": { "avd": "appstores-fold", "systemImage": "system-images;android-36;google_apis;arm64-v8a",
+                                     "profile": "pixel_9_pro_fold", "wmSize": "1920x1080", "density": 320 } }
+  ],
+  "screens": [
+    { "id": "servings", "state": "Lemon Pasta scaled to 6 servings, the new amounts shown",
+      "steps": [ { "launch": {} },
+                 { "tap": { "xpath": "//XCUIElementTypeNavigationBar/XCUIElementTypeButton[not(@name)]" } },
+                 { "tap": { "text": "Lemon Pasta" } },
+                 { "type": { "id": "servings-field", "text": "6" } },
+                 { "tap": { "text": "Done", "$comment": "added 2026-11-18: the keyboard's Done key closes it" } },
+                 { "settle": true } ],
+      "verify": { "id": "ingredients" },
+      "overrides": {
+        "duo-outer": { "$comment": "the menu button sits outside a navigation bar on the cover display",
+          "steps": [ { "launch": {} }, { "tap": { "xpath": "//XCUIElementTypeButton[not(@name)]" } },
+                     { "tap": { "text": "Lemon Pasta" } }, { "type": { "id": "servings-field", "text": "6" } },
+                     { "settle": true } ] },
+        "duo-inner": { "steps": [ { "launch": {} }, { "tap": { "xpath": "//XCUIElementTypeButton[not(@name)]" } },
+                                  { "tap": { "text": "Lemon Pasta" } }, { "type": { "id": "servings-field", "text": "6" } },
+                                  { "settle": true } ] },
+        "android": { "steps": [ { "launch": {} }, { "tap": { "label": "Open navigation drawer" } },
+                                { "tap": { "text": "Lemon Pasta" } }, { "type": { "id": "servings-field", "text": "6" } },
+                                { "back": true }, { "settle": true } ] } } }
+  ]
+}

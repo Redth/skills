@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "build/SampleRecipes.app" },
+           "android": { "package": "com.example.samplerecipes", "activity": ".MainActivity", "apk": "build/app-Signed.apk" } },
+  "locales": ["en-US"],
+  "staging": {
+    "account": { "kind": "bypass", "how": "the Debug build's SampleRecipesFakeSession" },
+    "launch": { "args": { "SampleRecipesFakeSession": "demo" } },
+    "network": { "kind": "offline" },
+    "confirmed": { "screen": "plan", "device": "android-phone", "on": "2026-11-12", "by": "the user, in chat" }
+  },
+  "devices": [
+    { "id": "android-phone", "platform": "android", "kind": "phone", "driver": "adb", "width": 1080, "height": 1920,
+      "target": { "systemImage": "system-images;android-36;google_apis;arm64-v8a", "profile": "medium_phone",
+                  "wmSize": "1080x1920", "density": 420 } },
+    { "id": "fold-outer", "platform": "android", "kind": "phone", "driver": "adb", "width": 1080, "height": 1920,
+      "target": { "systemImage": "system-images;android-36;google_apis;arm64-v8a", "profile": "pixel_9_pro_fold",
+                  "wmSize": "1080x1920", "density": 420, "display": "4619827551948147201" } },
+    { "id": "fold-inner", "platform": "android", "kind": "tablet", "driver": "adb", "width": 1920, "height": 1080,
+      "target": { "systemImage": "system-images;android-36;google_apis;arm64-v8a", "profile": "pixel_9_pro_fold",
+                  "wmSize": "1920x1080", "density": 320, "display": "4619827259835644672" } },
+    { "id": "duo-inner", "platform": "ios", "kind": "phone", "driver": "appium", "width": 2007, "height": 2853,
+      "target": { "deviceType": "iPhone Duo", "display": "3" } }
+  ],
+  "screens": [
+    { "id": "plan", "state": "this week's plan, five invented dinners",
+      "steps": [ { "launch": {} }, { "wait": { "id": "plan-title", "timeout": 60 } }, { "settle": true } ],
+      "verify": { "text": "Lemon Pasta" },
+      "overrides": {
+        "fold-outer": { "steps": [ { "script": "./fold.sh folded 1080x1920" }, { "launch": {} },
+                                   { "wait": { "id": "plan-title", "timeout": 60 } }, { "settle": true } ] },
+        "fold-inner": { "steps": [ { "script": "./fold.sh unfolded 1920x1080" }, { "launch": {} },
+                                   { "wait": { "id": "plan-title", "timeout": 60 } }, { "settle": true } ] },
+        "duo-inner": { "steps": [ { "script": "./fold.sh unfolded" }, { "launch": {} },
+                                  { "wait": { "id": "plan-title", "timeout": 60 } }, { "settle": true } ] } } }
+  ]
+}

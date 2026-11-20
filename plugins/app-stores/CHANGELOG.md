@@ -38,6 +38,21 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - `store-capture`: decision-table row for an existing pipeline that needs a real account or secrets (reuse its data
   and ids, not its run); DevFlow's limits on iOS documented, with when to switch a device to Appium; a .NET MAUI
   section on seeding local data without a screenshot mode and `-p:EmbedAssembliesIntoApk=true` for Debug APKs.
+- `store-capture`: foldables. A device's (or screen's) `posture` (`folded`, `open`, `half-open`) and a `posture`
+  step: `adb` folds an emulator through its console and a real foldable through `cmd device_state`, then wakes and
+  unlocks it, finds the display in use, sets `wm size`/`wm density` again on it (each display's put back in its
+  posture) and re-applies demo mode; `screencap -d` takes the display in use by itself. `simctl` opens the iPhone
+  Duo simulator through DevFlow's fold control (experimental, no agent needed; `target.foldCli`, `hingeAngle`) and
+  captures the screen it made active, or the one of the device's size. Each posture is its own device; two can share
+  an AVD. sizes.md: the Duo's inner display captures landscape (2853x2007), and where foldable pictures go on Play.
+- `store-capture`: per-layout steps that follow the base steps. A device's `layout`; screens' `overrides` keyed by
+  platform, layout or device id; `stepsPatch` (prepend, append, remove, replace, insert before or after a step by its
+  `name` or position; a ref that's gone is a plan error) instead of whole copies that go stale; `omit` a screen on a
+  device that shows it inside another.
+- `store-capture`: the keyboard. A `hideKeyboard` step (Android: back only while the keyboard is up; Appium:
+  `mobile: hideKeyboard` with the iOS keyboard's Done or Return, then a Done button; `{"tap": …}` anywhere) and
+  `verify`'s `{"keyboard": "hidden"|"shown"|"any"}`, checked for `hidden` by default on a screen that types nothing,
+  so a shot with the keyboard up is a wrong state, not a pass.
 
 - `store-screenshots` 0.1.0 (#12): designed store screenshots from an app's real captures, one design for every
   store, size and locale. A brief and a storyboard agreed with the user before rendering; `store-screenshots.json`
@@ -98,6 +113,15 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   platform's App Review notes.
 
 ### Fixed
+- `store-capture`: `text` and `label` match the same way on every driver, as config.md promised: exactly, then
+  ignoring case and surrounding space, then contained (Appium's iOS and Mac predicates `==[c]` and `CONTAINS[c]`,
+  its Android and Windows XPaths `translate()` and `contains()`, the in-app agents' trees, the Mac's AppleScript);
+  the drivers that read a tree themselves evaluate XPath 1.0's everyday part (`contains()`, `not()`, `and`/`or`,
+  `translate()`, positions), where ElementTree's subset failed a cross-platform xpath; a CoreSimulator hiccup
+  ("server died") booting, installing, launching or capturing is tried once more; `capture.py --current` lists
+  `design/current.json` by group and order with what each shot shows, its capture and caption (it printed "?");
+  staging.md and SKILL.md: `staging.confirmed` only on the user's own answer, never a relayed one: stop and ask with
+  the first picture attached.
 - `pattern` rules skip `""` (a field cleared on purpose): Play's `video: ""` no longer fails the YouTube rule.
 - `store-listings` 0.1.0 (#11): one `store-listing.json` for the App Store and Google Play; the stores' rules as
   dated, sourced data (`rules/apple.json`, `rules/google.json`), checked offline; `listing.py` import (fastlane

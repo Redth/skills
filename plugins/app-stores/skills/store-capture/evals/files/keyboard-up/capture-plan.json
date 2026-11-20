@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "out": "captures",
+  "app": { "ios": { "bundleId": "com.example.samplerecipes", "app": "build/SampleRecipes.app" } },
+  "locales": ["en-US"],
+  "staging": { "account": { "kind": "bypass" }, "launch": { "args": { "SampleRecipesFakeSession": "demo" } },
+               "confirmed": { "screen": "plan", "device": "iphone-6.9", "on": "2026-11-12", "by": "the user, in chat" } },
+  "devices": [
+    { "id": "iphone-6.9", "platform": "ios", "kind": "phone", "driver": "appium", "width": 1320, "height": 2868,
+      "target": { "deviceType": "iPhone 17 Pro Max" } }
+  ],
+  "screens": [
+    { "id": "plan", "state": "this week's plan", "steps": [ { "launch": {} }, { "wait": { "id": "plan-title" } } ],
+      "verify": { "text": "Lemon Pasta" } },
+    { "id": "servings", "state": "Lemon Pasta scaled to 6 servings, the new amounts shown",
+      "steps": [ { "launch": {} }, { "tap": { "id": "plan-day-tuesday" } }, { "tap": { "id": "servings" } },
+                 { "type": { "id": "servings-field", "text": "6" } }, { "tap": { "id": "recipe-title" } } ],
+      "verify": [ { "id": "ingredients" }, { "keyboard": "hidden" } ] },
+    { "id": "search", "state": "the recipe search, results for 'pasta'",
+      "steps": [ { "launch": {} }, { "tap": { "id": "tab-search" } }, { "wait": { "id": "search-results" } } ],
+      "verify": { "id": "search-results" } }
+  ]
+}

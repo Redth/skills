@@ -18,7 +18,7 @@ class UiAutomatorDriver(adb.AdbDriver):
     """Element steps and screenshots on a connected Android device, changing nothing else."""
 
     NAME = "uiautomator"
-    STEPS = ("tap", "type", "wait", "scroll", "back", "swipe", "settle", "script")
+    STEPS = ("tap", "type", "wait", "scroll", "back", "swipe", "settle", "script", "hideKeyboard")
     MANAGES_DEVICE = False
 
     def prepare(self, device, plan):

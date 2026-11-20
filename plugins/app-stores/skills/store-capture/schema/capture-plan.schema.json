@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "capture-plan.json: which devices capture which screens in which locales, and how each screen is reached (CONTRACT.md 10.2). Paths are relative to the plan's own folder. Settings (locales, appearance, clock, statusBar, seed, flatten) resolve plan, then the device, then the screen, then the screen's overrides for that device's id or platform (each later one wins). staging (agreed with the user first) and each screen's state and verify say how the app is set up and what each screen must show. Uses only the subset appstores_lib/schema.py validates.",
+  "$comment": "capture-plan.json: which devices capture which screens in which locales, and how each screen is reached (CONTRACT.md 10.2). Paths are relative to the plan's own folder. Settings (locales, appearance, clock, statusBar, seed, flatten, posture) resolve plan, then the device, then the screen, then the screen's overrides for that device's platform, its layout, then its id (each later one wins). staging (agreed with the user first) and each screen's state and verify say how the app is set up and what each screen must show. Uses only the subset appstores_lib/schema.py validates.",
   "type": "object",
   "required": ["version", "devices", "screens"],
   "additionalProperties": false,
@@ -16,6 +16,7 @@
     "statusBar": { "$ref": "#/$defs/statusBar" },
     "seed": { "$ref": "#/$defs/seed" },
     "flatten": { "$ref": "#/$defs/flatten" },
+    "posture": { "$ref": "#/$defs/posture" },
     "staging": { "$ref": "#/$defs/staging" },
     "devices": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/device" } },
     "screens": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/screen" } }
@@ -30,6 +31,20 @@
     "statusBar": { "$comment": "clean: the plan's clock, full battery and signal, no notifications (simctl status_bar, Android's demo mode). as-is: left alone. Default clean.", "enum": ["clean", "as-is"] },
     "seed": { "$comment": "Passed to the app as ScreenshotSeed (a launch argument, an intent extra, a query parameter).", "type": ["string", "integer"] },
     "flatten": { "$comment": "The colour a picture with an alpha channel is flattened onto (#RRGGBB). Default #000000, as a device's masked corners are.", "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+    "posture": { "$comment": "A foldable's posture before the steps: folded (the cover display), open (unfolded: the inner display), half-open (tabletop or book, target.hingeAngle, default 90). Android emulators through their console, real foldables through cmd device_state, the iPhone Duo simulator through DevFlow's fold control. Each posture captured is its own device in the plan (its own id and size).", "enum": ["folded", "open", "unfolded", "half-open"] },
+    "stepName": { "$comment": "A step's handle, for an override's stepsPatch to name it by.", "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$", "maxLength": 64 },
+    "stepRef": { "$comment": "A step by its name, or by its 1-based position in the steps as they are when the patch entry runs (names survive edits; positions don't).", "anyOf": [ { "$ref": "#/$defs/stepName" }, { "type": "integer", "minimum": 1 } ] },
+    "stepPatch": {
+      "$comment": "One change to the steps before it: prepend or append steps, remove a step, replace one with steps, insert steps before or after one.",
+      "oneOf": [
+        { "type": "object", "required": ["prepend"], "additionalProperties": false, "properties": { "$comment": { "type": "string" }, "prepend": { "$ref": "#/$defs/steps" } } },
+        { "type": "object", "required": ["append"], "additionalProperties": false, "properties": { "$comment": { "type": "string" }, "append": { "$ref": "#/$defs/steps" } } },
+        { "type": "object", "required": ["remove"], "additionalProperties": false, "properties": { "$comment": { "type": "string" }, "remove": { "$ref": "#/$defs/stepRef" } } },
+        { "type": "object", "required": ["replace", "with"], "additionalProperties": false, "properties": { "$comment": { "type": "string" }, "replace": { "$ref": "#/$defs/stepRef" }, "with": { "$ref": "#/$defs/steps" } } },
+        { "type": "object", "required": ["before", "insert"], "additionalProperties": false, "properties": { "$comment": { "type": "string" }, "before": { "$ref": "#/$defs/stepRef" }, "insert": { "$ref": "#/$defs/steps" } } },
+        { "type": "object", "required": ["after", "insert"], "additionalProperties": false, "properties": { "$comment": { "type": "string" }, "after": { "$ref": "#/$defs/stepRef" }, "insert": { "$ref": "#/$defs/steps" } } }
+      ]
+    },
     "app": {
       "$comment": "The app on each platform. A device uses the entry for its platform, else its family's (ipados/tvos/watchos/visionos -> ios), merged with the device's own 'app'.",
       "type": "object",
@@ -85,10 +100,12 @@
         "id": { "$ref": "#/$defs/id" },
         "platform": { "$ref": "#/$defs/platform" },
         "kind": { "$comment": "phone, tablet, desktop, tv, watch or xr: which store slot its pictures are for (check_captures.py --rules).", "enum": ["phone", "tablet", "desktop", "tv", "watch", "xr"] },
+        "layout": { "$comment": "A name for how the app lays out on this device (wide, split, cover...): screens' overrides keyed by it apply to every device with it, after the platform's and before the device id's.", "$ref": "#/$defs/id" },
+        "posture": { "$ref": "#/$defs/posture" },
         "driver": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
         "width": { "$comment": "The exact pixel size this device promises (from the store's rules). Any other size is failed, never resized.", "type": "integer", "minimum": 1 },
         "height": { "type": "integer", "minimum": 1 },
-        "target": { "$comment": "The driver's own settings (simctl: deviceType, runtime, udid, display, localeScope; adb: systemImage, profile, avd, serial, wmSize, density, deviceLocale, navigation, statusBarMobile, statusBarCheck, adb, emulator, avdmanager; agents: agentPort, agentPlatform, appName, agentTimeout, host, screenshot; appium: server, capabilities; chrome: scale, viewport, mobile; macos: scale). references/config.md lists them all.", "type": "object" },
+        "target": { "$comment": "The driver's own settings (simctl: deviceType, runtime, udid, display (a screen id, or auto), localeScope, hingeAngle, foldCli, postureSettle; adb: systemImage, profile, avd, serial, wmSize, density, deviceLocale, display (a SurfaceFlinger display id, or auto), hingeAngle, navigation, statusBarMobile, statusBarCheck, adb, emulator, avdmanager; agents: agentPort, agentPlatform, appName, agentTimeout, host, screenshot; appium: server, capabilities; chrome: scale, viewport, mobile; macos: scale). references/config.md lists them all.", "type": "object" },
         "app": { "$comment": "Merged over the plan's app entry for this device's platform.", "type": "object" },
         "locales": { "$ref": "#/$defs/locales" },
         "appearance": { "$ref": "#/$defs/appearance" },
@@ -116,9 +133,10 @@
         "statusBar": { "$ref": "#/$defs/statusBar" },
         "seed": { "$ref": "#/$defs/seed" },
         "flatten": { "$ref": "#/$defs/flatten" },
+        "posture": { "$ref": "#/$defs/posture" },
         "steps": { "$ref": "#/$defs/steps" },
         "overrides": {
-          "$comment": "Per device id or platform: settings or steps that differ there ({\"android\": {\"steps\": [...]}}). A device id's entry wins over its platform's.",
+          "$comment": "Per device id, layout or platform: settings, steps or a patch to the steps that differ there ({\"android\": {\"steps\": [...]}}, {\"wide\": {\"stepsPatch\": [{\"remove\": \"open-tab\"}]}}). They apply platform, then layout, then device id.",
           "type": "object",
           "patternProperties": {
             "^[a-z0-9][a-z0-9_.-]*$": { "$ref": "#/$defs/screenOverride" }
@@ -132,7 +150,10 @@
       "additionalProperties": false,
       "properties": {
         "$comment": { "type": "string" },
-        "steps": { "$ref": "#/$defs/steps" },
+        "steps": { "$comment": "Replaces the steps before it (a whole copy: a later fix to the base steps doesn't reach it; prefer stepsPatch).", "$ref": "#/$defs/steps" },
+        "stepsPatch": { "$comment": "Changes the steps before it, entry by entry, so the base steps' fixes still reach this device.", "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/stepPatch" } },
+        "omit": { "$comment": "Leave this screen out here (true, or why: 'the open Duo shows it beside the overview').", "anyOf": [ { "type": "boolean" }, { "type": "string", "minLength": 1 } ] },
+        "posture": { "$ref": "#/$defs/posture" },
         "state": { "type": "string", "minLength": 1 },
         "verify": { "$ref": "#/$defs/verify" },
         "locales": { "$ref": "#/$defs/locales" },
@@ -162,7 +183,10 @@
     "envName": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
     "stringOrList": { "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "array", "minItems": 1, "items": { "type": "string" } } ] },
     "appPath": { "$comment": "A path inside the app's own data: iOS relative to its data container (Library/Caches/app.db), Android to /data/data/<package> (files/app.db, cache/app.db); one, or one per platform.", "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } } ] },
-    "verify": { "$comment": "An element (or a list) that must be on screen before the shot; otherwise the shot is missed, 'wrong state'. A driver that can't see elements reports it unchecked.", "anyOf": [ { "$ref": "#/$defs/element" }, { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/element" } } ] },
+    "keyboardCheck": { "$comment": "The on-screen keyboard: hidden (the default for a screen that types nothing, where the driver can tell), shown, or any (not checked).", "type": "object", "required": ["keyboard"], "additionalProperties": false, "properties": {
+      "$comment": { "type": "string" }, "keyboard": { "enum": ["hidden", "shown", "any"] }, "timeout": { "type": "number", "minimum": 0 } } },
+    "verifyCheck": { "anyOf": [ { "$ref": "#/$defs/element" }, { "$ref": "#/$defs/keyboardCheck" } ] },
+    "verify": { "$comment": "An element (or a list), and the keyboard's state, that must be so before the shot; otherwise the shot is missed, 'wrong state'. A driver that can't see elements reports it unchecked.", "anyOf": [ { "$ref": "#/$defs/verifyCheck" }, { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/verifyCheck" } } ] },
     "staging": {
       "$comment": "How the app is staged for the captures, agreed with the user before the plan is run (references/staging.md). capture.py puts launch and seed into every screen, grants the permissions, checks the account's variables are set, and captures more than one screen only once confirmed is set; capture.py --write-staging writes it readable as staging.md.",
       "type": "object",
@@ -201,7 +225,7 @@
       "$comment": "One kind a step: {\"launch\": {...}}, {\"tap\": {\"id\": \"search\"}}, ...",
       "oneOf": [
         { "type": "object", "required": ["launch"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "launch": { "type": "object", "additionalProperties": false, "properties": {
             "$comment": { "type": "string" },
             "args": { "$comment": "Launch arguments (iOS -Key value), intent extras (Android), query parameters (web).", "type": "object", "additionalProperties": { "$ref": "#/$defs/argValue" } },
@@ -209,20 +233,20 @@
             "clean": { "$comment": "Reinstall or clear the app's data first.", "type": "boolean" }
           } } } },
         { "type": "object", "required": ["deepLink"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "deepLink": { "type": "string", "minLength": 1 } } },
         { "type": "object", "required": ["url"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "url": { "type": "string", "minLength": 1 } } },
         { "type": "object", "required": ["tap"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "tap": { "anyOf": [
             { "$ref": "#/$defs/element" },
             { "type": "object", "required": ["x", "y"], "additionalProperties": false, "properties": {
               "x": { "type": "number" }, "y": { "type": "number" } } }
           ] } } },
         { "type": "object", "required": ["type"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "type": { "type": "object", "required": ["text"], "additionalProperties": false, "properties": {
             "text": { "type": "string" },
             "id": { "type": "string", "minLength": 1 },
@@ -232,7 +256,7 @@
             "into": { "$comment": "The field to type into, found by its text (placeholder).", "type": "string", "minLength": 1 }
           } } } },
         { "type": "object", "required": ["wait"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "wait": { "anyOf": [
             { "type": "number", "minimum": 0 },
             { "type": "object", "required": ["ms"], "additionalProperties": false, "properties": {
@@ -240,17 +264,17 @@
             { "$ref": "#/$defs/element" }
           ] } } },
         { "type": "object", "required": ["scroll"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "scroll": { "type": "object", "additionalProperties": false, "properties": {
             "to": { "$ref": "#/$defs/element" },
             "direction": { "enum": ["up", "down", "left", "right"] },
             "times": { "type": "integer", "minimum": 1, "maximum": 50 }
           } } } },
         { "type": "object", "required": ["back"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "back": { "anyOf": [ { "type": "boolean" }, { "type": "null" }, { "type": "object", "additionalProperties": false, "properties": {} } ] } } },
         { "type": "object", "required": ["swipe"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "swipe": { "type": "object", "additionalProperties": false, "properties": {
             "from": { "type": "array", "prefixItems": [ { "type": "number" }, { "type": "number" } ], "minItems": 2, "maxItems": 2 },
             "to": { "type": "array", "prefixItems": [ { "type": "number" }, { "type": "number" } ], "minItems": 2, "maxItems": 2 },
@@ -258,10 +282,10 @@
             "ms": { "type": "number", "minimum": 0 }
           } } } },
         { "type": "object", "required": ["flow"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "flow": { "$comment": "A Maestro flow's path or a UI test's name (string), or the flow driver's own object.", "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "object" } ] } } },
         { "type": "object", "required": ["script"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "script": { "anyOf": [
             { "type": "string", "minLength": 1 },
             { "type": "array", "minItems": 1, "items": { "type": "string" } },
@@ -270,11 +294,17 @@
               "timeout": { "type": "number", "minimum": 1 } } }
           ] } } },
         { "type": "object", "required": ["appFile"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "appFile": { "$comment": "Copy a file into the app's own data, the app stopped first (simctl's data container; Android's data folder through run-as, debug builds). Drivers with a host do it through the host.", "type": "object", "required": ["file", "into"], "additionalProperties": false, "properties": {
             "$comment": { "type": "string" }, "file": { "type": "string", "minLength": 1 }, "into": { "$ref": "#/$defs/appPath" } } } } },
+        { "type": "object", "required": ["posture"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
+          "posture": { "$comment": "Fold, open or half-open the device in the middle of the steps (the device's or screen's posture does it before them).", "$ref": "#/$defs/posture" } } },
+        { "type": "object", "required": ["hideKeyboard"], "additionalProperties": false, "properties": {
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
+          "hideKeyboard": { "$comment": "Close the on-screen keyboard if it's up (Android: back, only while it's up; iOS through Appium: its Done or Return key). {\"tap\": <element>} taps that element instead: a label outside the field.", "anyOf": [ { "const": true }, { "type": "object", "required": ["tap"], "additionalProperties": false, "properties": { "tap": { "$ref": "#/$defs/element" } } } ] } } },
         { "type": "object", "required": ["settle"], "additionalProperties": false, "properties": {
-          "$comment": { "type": "string" },
+          "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
           "settle": { "anyOf": [ { "type": "boolean" }, { "type": "null" }, { "type": "object", "additionalProperties": false, "properties": {
             "timeout": { "type": "number", "minimum": 0 },
             "ignore": { "$comment": "Rectangles [x, y, width, height] in the picture's pixels left out of the comparison (an animation that never stops).", "type": "array", "items": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number" } } } } } ] } } }

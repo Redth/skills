@@ -39,7 +39,7 @@ class FakeDriver(base.Driver):
 
     NAME = "fake"
     PLATFORMS = ()
-    STEPS = ("launch", "deepLink", "wait", "settle", "script", "tap", "appFile")
+    STEPS = ("launch", "deepLink", "wait", "settle", "script", "tap", "appFile", "posture")
     FINDERS = ("id", "text")
     behaviour = {}
     events = []
@@ -67,6 +67,9 @@ class FakeDriver(base.Driver):
 
     def step_deepLink(self, ctx, value):
         FakeDriver.events.append(("deepLink", value))
+
+    def apply_posture(self, device, posture, shot):
+        FakeDriver.events.append(("posture", device["id"], posture))
 
     def step_appFile(self, ctx, value):
         FakeDriver.events.append(("appFile", json.dumps(value, sort_keys=True)))
@@ -599,6 +602,30 @@ class StagingTests(CaptureCase):
         self.assertIn("home.png  1206x2622", self.stdout)
         self.assertNotIn("existing/apple", self.stdout)
 
+    def test_design_current_json_is_listed_by_group_with_what_each_shot_shows(self):
+        # Friction #34: every shot printed "1. ?  capture: overview", iPad and iPhone interleaved.
+        path = self.plan()
+        os.makedirs(os.path.join(self.tmp, "design"))
+        jsonio.dump({"version": 1, "source": "existing", "shots": [
+            {"file": "apple/screenshots/en-US/ipad/01.png", "group": "apple/en-US/ipad", "order": 1,
+             "screen": "the plan, five recipes", "capture": "plan", "caption": "Plan your week"},
+            {"file": "apple/screenshots/en-US/iphone/02.png", "group": "apple/en-US/iphone", "order": 2,
+             "screen": "a recipe's steps", "capture": None, "caption": "Cook along"},
+            {"file": "apple/screenshots/en-US/iphone/01.png", "group": "apple/en-US/iphone", "order": 1,
+             "screen": "the plan, five recipes", "capture": "plan", "caption": "Plan your week", "verdict": "keep"}]},
+            os.path.join(self.tmp, "design", "current.json"))
+        self.assertEqual(self.main("--plan", path, "--current"), 0)
+        self.assertNotIn("?", self.stdout)
+        iphone = self.stdout.index("design/current.json: apple/en-US/iphone")
+        ipad = self.stdout.index("design/current.json: apple/en-US/ipad")
+        self.assertLess(iphone, ipad, "phones first")
+        first = self.stdout.index("1. apple/screenshots/en-US/iphone/01.png", iphone)
+        second = self.stdout.index("2. apple/screenshots/en-US/iphone/02.png", iphone)
+        self.assertLess(first, second)
+        self.assertIn("shows: the plan, five recipes; capture: plan; caption: Plan your week; verdict: keep",
+                      self.stdout)
+        self.assertIn("capture: (not mapped yet)", self.stdout)
+
     def test_inspect_saves_each_screens_tree(self):
         path = self.plan()
         self.assertEqual(self.main("--plan", path, "--inspect"), 0)
@@ -606,6 +633,123 @@ class StagingTests(CaptureCase):
         with open(tree, encoding="utf-8") as f:
             self.assertIn("plan-title", f.read())
         self.assertTrue(any(l.startswith("tree    .inspect") for l in self.logged))
+
+
+class StepVariantTests(CaptureCase):
+    """Per-layout and per-device steps that follow the base steps (friction #53, #54, #61)."""
+
+    def variant_plan(self):
+        devices = [
+            {"id": "phone", "platform": "ios", "driver": "fake", "width": 120, "height": 260},
+            {"id": "duo-inner", "platform": "ios", "driver": "fake", "width": 260, "height": 180, "layout": "wide",
+             "posture": "open"},
+            {"id": "fold-inner", "platform": "android", "driver": "fake", "width": 260, "height": 180,
+             "layout": "wide", "posture": "open"},
+            {"id": "duo-outer", "platform": "ios", "driver": "fake", "width": 140, "height": 200, "posture": "folded"}]
+        screens = [
+            {"id": "overview", "steps": [{"launch": {}}, {"wait": {"id": "overview"}}]},
+            {"id": "servings", "steps": [
+                {"launch": {}},
+                {"tap": {"xpath": "//XCUIElementTypeNavigationBar/XCUIElementTypeButton[not(@name)]"}, "name": "menu"},
+                {"tap": {"text": "Scale servings"}},
+                {"type": {"id": "servings-field", "text": "12"}},
+                {"hideKeyboard": True, "name": "keyboard"},
+                {"wait": {"ms": 500}}],
+             "overrides": {
+                 "android": {"stepsPatch": [{"replace": "menu", "with": [{"tap": {"label": "Open navigation drawer"}}]}]},
+                 "duo-outer": {"stepsPatch": [{"replace": "menu", "with": [
+                     {"tap": {"xpath": "//XCUIElementTypeButton[not(@name)]"}, "name": "menu"}]}]}}},
+            {"id": "history", "steps": [{"launch": {}}, {"tap": {"id": "tab-history"}, "name": "open-tab"},
+                                         {"wait": {"id": "history-list"}}],
+             "overrides": {"wide": {"stepsPatch": [{"remove": "open-tab"}]},
+                           "duo-inner": {"omit": "the open Duo shows the history beside the plan"}}}]
+        return kit.sample_plan(devices, screens)
+
+    def steps_of(self, plan, device_id, screen_id):
+        device = capture.resolve_device(plan, [d for d in plan["devices"] if d["id"] == device_id][0])
+        for s in capture.screens_for(plan, device):
+            if s["id"] == screen_id:
+                return [base.describe_step(st) for st in s["steps"]]
+        return None
+
+    def test_a_fix_to_the_base_steps_reaches_every_device_that_patches_them(self):
+        plan = self.variant_plan()
+        self.assertEqual(capture.check_plan(plan), [])
+        # The base fix (the keyboard's hideKeyboard) is in every device's steps, patched or not.
+        for device in ("phone", "duo-outer", "fold-inner"):
+            self.assertIn("hideKeyboard", self.steps_of(plan, device, "servings"), device)
+        self.assertEqual(self.steps_of(plan, "fold-inner", "servings")[1], "tap {label: Open navigation drawer}")
+        self.assertEqual(self.steps_of(plan, "duo-outer", "servings")[1],
+                         "tap {xpath: //XCUIElementTypeButton[not(@name)]}")
+        # A second base fix, added after the overrides were written, still reaches them.
+        plan["screens"][1]["steps"].insert(-1, {"settle": True})
+        for device in ("phone", "duo-outer", "fold-inner"):
+            self.assertIn("settle", self.steps_of(plan, device, "servings"), device)
+        # A whole copy (steps) is what doesn't follow: that's why stepsPatch exists.
+        plan["screens"][1]["overrides"]["duo-outer"] = {"steps": [{"launch": {}}]}
+        self.assertNotIn("settle", self.steps_of(plan, "duo-outer", "servings"))
+
+    def test_a_layout_override_applies_to_every_device_with_that_layout(self):
+        plan = self.variant_plan()
+        self.assertEqual(self.steps_of(plan, "fold-inner", "history"), ["launch", "wait {id: history-list}"])
+        self.assertEqual(self.steps_of(plan, "phone", "history"),
+                         ["launch", "tap {id: tab-history}", "wait {id: history-list}"])
+        # duo-inner has the wide layout too, but its own override leaves the screen out.
+        self.assertIsNone(self.steps_of(plan, "duo-inner", "history"))
+
+    def test_a_patch_naming_a_step_that_is_gone_is_caught_when_the_plan_loads(self):
+        plan = self.variant_plan()
+        plan["screens"][2]["steps"][1]["name"] = "history-tab"
+        problems = capture.check_plan(plan)
+        self.assertEqual(problems, ["/screens/2/overrides/wide/stepsPatch/0: no step named open-tab (named here: "
+                                    "history-tab)"])
+        plan["screens"][2]["steps"][2]["name"] = "history-tab"
+        self.assertTrue(any("the step name history-tab is used twice" in p for p in capture.check_plan(plan)))
+
+    def test_an_override_key_may_be_a_layout(self):
+        plan = self.variant_plan()
+        plan["screens"][0]["overrides"] = {"tall": {"seed": "x"}}
+        self.assertTrue(any("tall is neither a device id, a device's platform nor a device's layout" in p
+                            for p in capture.check_plan(plan)))
+
+    def test_every_patch_kind(self):
+        steps = [{"launch": {}, "name": "a"}, {"wait": 1, "name": "b"}, {"back": True, "name": "c"}]
+        out = capture.patch_steps(steps, [{"prepend": [{"settle": True}]}, {"append": [{"wait": 2}]},
+                                          {"remove": "b"}, {"before": "c", "insert": [{"wait": 3}]},
+                                          {"after": "a", "insert": [{"wait": 4}]},
+                                          {"replace": 1, "with": [{"settle": False}]}])
+        self.assertEqual([base.describe_step(s) for s in out],
+                         ["settle False", "launch", "wait 4", "wait 3", "back", "wait 2"])
+        self.assertEqual(out[0], {"settle": False})
+        self.assertEqual(steps[1], {"wait": 1, "name": "b"}, "the base steps are never changed in place")
+        with self.assertRaises(capture.PatchError):
+            capture.patch_steps(steps, [{"remove": 9}])
+
+    def test_an_omitted_screen_is_left_out_and_said_so_and_postures_are_shown(self):
+        plan = self.variant_plan()
+        # What the fake driver can do: it taps nothing.
+        plan["screens"][1]["steps"] = [{"launch": {}, "name": "menu"}]
+        plan["screens"][1]["overrides"]["android"]["stepsPatch"][0]["with"] = [{"wait": {"text": "Menu"}}]
+        del plan["screens"][1]["overrides"]["duo-outer"]
+        plan["screens"][2]["steps"][1] = {"wait": {"id": "tab-history"}, "name": "open-tab"}
+        path = kit.write_plan(self.tmp, plan)
+        self.assertEqual(self.main("--plan", path, "--keep-going"), 0)
+        shots = set((e["device"], e["screen"]) for e in self.report()["shots"])
+        self.assertNotIn(("duo-inner", "history"), shots)
+        self.assertIn(("fold-inner", "history"), shots)
+        self.assertTrue(any("history isn't captured on duo-inner: the open Duo shows the history beside the plan"
+                            in l for l in self.logged))
+        self.assertTrue(any(l.startswith("device duo-outer (fake, ios, 140x200, folded)") for l in self.logged))
+        self.assertIn(("posture", "duo-outer", "folded"), FakeDriver.events)
+        self.assertIn(("posture", "fold-inner", "open"), FakeDriver.events)
+        self.assertFalse([e for e in FakeDriver.events if e[:2] == ("posture", "phone")])
+        self.assertEqual(self.main("--plan", path, "--write-staging"), 0)
+        with open(os.path.join(self.tmp, "staging.md"), encoding="utf-8") as f:
+            text = f.read()
+        for words in ("- `duo-inner`: open, the wide layout", "- `duo-outer`: folded",
+                      "on wide: without step open-tab", "not on duo-inner (the open Duo shows",
+                      "on android: step menu as wait {text: Menu}"):
+            self.assertIn(words, text)
 
 
 class SettleTests(unittest.TestCase):

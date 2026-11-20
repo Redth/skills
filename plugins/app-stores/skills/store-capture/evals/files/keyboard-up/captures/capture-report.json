@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-19T10:02:11Z",
+  "finishedAt": "2026-11-19T10:05:40Z",
+  "plan": "capture-plan.json",
+  "shots": [
+    { "locale": "en-US", "device": "iphone-6.9", "screen": "plan", "driver": "appium", "status": "taken",
+      "path": "en-US/iphone-6.9/plan.png", "width": 1320, "height": 2868, "statusBar": "verified", "fixes": [],
+      "warnings": [], "state": "this week's plan", "stateCheck": "passed",
+      "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2", "via": "appium" } },
+    { "locale": "en-US", "device": "iphone-6.9", "screen": "servings", "driver": "appium", "status": "missed",
+      "reason": "wrong state: the keyboard is up (end the steps with hideKeyboard; or change verify's keyboard) (the screen should show: Lemon Pasta scaled to 6 servings, the new amounts shown)",
+      "kept": "none", "state": "Lemon Pasta scaled to 6 servings, the new amounts shown", "stateCheck": "failed",
+      "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2", "via": "appium" }, "statusBar": "verified",
+      "fixes": [], "warnings": [] },
+    { "locale": "en-US", "device": "iphone-6.9", "screen": "search", "driver": "appium", "status": "missed",
+      "reason": "wrong state: the keyboard is up, and the screen types nothing (end the steps with hideKeyboard; verify {\"keyboard\": \"any\"} allows it) (the screen should show: the recipe search, results for 'pasta')",
+      "kept": "previous", "state": "the recipe search, results for 'pasta'", "stateCheck": "failed",
+      "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2", "via": "appium" }, "statusBar": "verified",
+      "fixes": [], "warnings": [] }
+  ]
+}

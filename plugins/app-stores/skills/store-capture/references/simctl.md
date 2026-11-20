@@ -22,7 +22,12 @@ here). Commands below are from `xcrun simctl help` in current Xcode; `<udid>` is
   and owns `appstores-<device id>`, reuses it on later runs, and deletes it only with `capture.py --cleanup`.
 - `localeScope: "app"` (optional): give the app the locale by launch arguments only, skipping the device language
   and its reboot, when no system UI shows.
-- `display` (optional): a display id from `simctl io <udid> enumerate`, for devices with more than one screen.
+- `display` (optional): a screen id from `simctl io <udid> enumerate`, for devices with more than one screen. By
+  default the driver captures the screen a posture change made active, else the built-in screen whose pixel size is
+  the device's `width`×`height` (either way round). The iPhone Duo refuses a capture without one ("Invalid
+  argument").
+- `hingeAngle`, `foldCli`: a foldable's half-open angle (default 90) and the fold control's command (default
+  `["maui", "devflow"]`): [The iPhone Duo](#the-iphone-duo).
 
 `script` steps get the simulator as `APPSTORES_UDID` (`xcrun simctl get_app_container "$APPSTORES_UDID" <bundle>
 data` finds the app's data), with `APPSTORES_DEVICE`, `APPSTORES_PLATFORM`, `APPSTORES_APP_ID`, `APPSTORES_LOCALE`
@@ -86,14 +91,56 @@ xcrun simctl io <udid> screenshot --type=png --mask=ignored out.png
 - The framebuffer at the device's native pixels, portrait unless the app's scene is rotated.
 - **Always `--mask=ignored`.** `--mask=alpha` makes the rounded corners transparent (Apple rejects alpha);
   `black` paints them black.
-- **Two displays** (the iPhone Duo simulator: inner 2007×2853 and outer 1398×2034): `--display <id>` is required;
-  capture each as its own device in the plan, with `target.display`.
+- **Two displays** (the iPhone Duo simulator): `--display <id>` is required; capture each as its own device in the
+  plan ([The iPhone Duo](#the-iphone-duo)).
 - The Dynamic Island isn't in the framebuffer: the status bar shows split around an empty area. That's what the
   store expects; a frame added later draws the island.
 - Landscape: rotate in the app (its screenshot mode, or XCUITest's `XCUIDevice.shared.orientation`); `simctl` has
   no rotate command. Check the PNG's size; never assume.
 - `simctl io <udid> screenConfig geometry` can change a screen's geometry within its mode, but don't use it to turn
   one device into another class: pick the right device type.
+
+## The iPhone Duo
+
+The iPhone Duo simulator has two built-in screens (`simctl io <udid> enumerate`, "Connected Screens"):
+
+| Screen | Id | Pixels captured | In use |
+|---|---|---|---|
+| LCD (the cover, outer) | 1 | 1398×2034, portrait | folded (how it boots) |
+| LCD-1 (inner) | 3 | **2853×2007, landscape** (it's listed as 2007×2853) | open |
+
+`simctl` has no hinge command, and Xcode opens the simulator only from its Device Hub (a click). What opens it from
+a script is **DevFlow's fold control**, part of the `Microsoft.Maui.Cli` .NET tool (`dotnet tool install -g
+Microsoft.Maui.Cli --prerelease`): it needs no agent in the app, so it works whatever the app is built with and
+whichever driver captures it:
+
+```sh
+maui devflow device fold get --udid <udid> --experimental --json            # mode, hinge angle, which display is active
+maui devflow device fold set unfolded --udid <udid> --experimental --timeout 60 --json
+maui devflow device fold set folded --udid <udid> --experimental --timeout 60 --json
+maui devflow device fold set partially-folded --angle 90 --udid <udid> --experimental --timeout 60 --json
+```
+
+It's **experimental**: it drives private Simulator APIs (Apple silicon, Xcode 27.1 or later), never a real device.
+The `simctl` driver (and every driver it hosts: Appium, DevFlow, Ailoha, Maestro, XCUITest) uses it for a device's
+`posture` (`folded`, `open`, `half-open`) or a `posture` step, captures the display it reports active, and folds
+the simulator back in `reset`. Seen 2026-11-19 (Xcode 27.2, iOS 27.2): folded and unfolded switch in about 5 s and
+are confirmed; `partially-folded` settled at 85° for 90° and wasn't confirmed, so a half-open hinge within 10° is
+accepted with a warning, and anything further off misses the shot. After a change, the app's scene takes a moment to move to the other display (a launch
+straight after the unfold drew a blank page that `settle` took as still): the driver waits `target.postureSettle`
+seconds (default 3) before the steps; wait for an element after the launch rather than a fixed time. A posture the
+simulator is already in isn't set again, nor put back. Ailoha has no fold control of its own: the
+`simctl` host still uses DevFlow's CLI. Without it, open the simulator by hand in Xcode's Device Hub and leave
+`posture` out (the inner display is captured as long as it's the one in use).
+
+App Store slots: `IPHONE_DUO_OUTER` (1398×2034) and `IPHONE_DUO_INNER`, captured landscape (2853×2007: `width`
+2853, `height` 2007; don't try to rotate it). [sizes.md](sizes.md).
+
+## CoreSimulator hiccups
+
+A transient CoreSimulator failure ("Mach error -308 - (ipc/mig) server died", an interrupted connection) can fail
+one `simctl install`, `boot`, `launch` or `io … screenshot`. The driver tries such a command once more after 5 s
+(and says so in the report); any other failure, or a second one, is reported as it is.
 
 ## Apple TV, Vision Pro, Watch
 
@@ -106,6 +153,6 @@ xcrun simctl io <udid> screenshot --type=png --mask=ignored out.png
 
 ## Reset (always, in `finally`)
 
-`status_bar clear`; the appearance back; the app stopped; a simulator the driver booted shut down; with
-`--cleanup`, its own simulators deleted. A person's own simulator named by the plan is never erased, deleted or
+`status_bar clear`; the appearance back; a foldable's posture back; the app stopped; a simulator the driver booted
+shut down; with `--cleanup`, its own simulators deleted. A person's own simulator named by the plan is never erased, deleted or
 given another device language.

@@ -83,6 +83,7 @@ class MaestroDriver(HostedDriver):
     STEPS = ("flow", "launch", "deepLink", "url", "tap", "type", "wait", "scroll", "back", "swipe", "settle")
     FINDERS = ("id", "text", "label")
     HOST_STEPS = ()
+    POSTURE_SETTING = True   # the device's posture is set by the host before the flow runs
 
     def __init__(self, options=None):
         """Set up."""

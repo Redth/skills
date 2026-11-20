@@ -26,7 +26,10 @@ own). Always `-s <serial>`: with two devices attached, a bare `adb` fails or pic
   reset after.
 - `deviceLocale: true`: set the device's language as well as the app's (the default is the app's only, Android 13
   and later).
-- `display`: a display id for `screencap -d` (foldables, desktop modes).
+- `display`: a display id for `screencap -d`: SurfaceFlinger's long id (`dumpsys SurfaceFlinger --display-id`), not
+  0 or 1. By default, on a device with more than one physical display (a foldable), the one in use is captured.
+- `hingeAngle`: a `half-open` posture's hinge, in degrees (default 90). The device's `posture` is in
+  [Foldables](#foldables).
 - `navigation`: `gesture` or `threebutton` (or `twobutton`): the navigation mode, through SystemUI's navigation bar
   overlays (`cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.gestural`), put back
   after. Gesture navigation leaves a thin handle over the bottom of the content instead of a bar of buttons; the
@@ -57,7 +60,7 @@ device) and `APPSTORES_SERIAL`, with `APPSTORES_DEVICE`, `APPSTORES_PLATFORM`, `
 | Launch with extras | `adb -s <serial> shell am start -W -S -n com.example.samplerecipes/.MainActivity --es ScreenshotScreen plan --es ScreenshotSeed demo` (`-S` stops it first; the driver types each value: `--es` strings, `--ez` booleans, `--ei` integers, `--ef` floats) |
 | Deep link | `adb -s <serial> shell am start -W -a android.intent.action.VIEW -d 'samplerecipes://recipe/demo' com.example.samplerecipes` |
 | Tap, type, swipe, back | `input tap <x> <y>`, `input text 'pasta'` (spaces as `%s`), `input swipe x1 y1 x2 y2 300`, `input keyevent KEYCODE_BACK` |
-| Find an element | `uiautomator dump /sdcard/ui.xml` then `adb exec-out cat /sdcard/ui.xml`: match `resource-id`, `text` or `content-desc`, tap the centre of its `bounds` |
+| Find an element | `uiautomator dump /sdcard/ui.xml` then `adb exec-out cat /sdcard/ui.xml`: match `resource-id`, `text` or `content-desc` (text: exact, then ignoring case, then contained), or an xpath with `contains()`, `not()`, `and`/`or` ([config.md](config.md#steps)); tap the centre of its `bounds` |
 | D-pad (TV) | `input keyevent KEYCODE_DPAD_RIGHT`, `KEYCODE_DPAD_CENTER` |
 
 A `.NET MAUI` `AutomationId`, a Compose `Modifier.testTag` (with `testTagsAsResourceId = true`) and a View's
@@ -148,6 +151,41 @@ adb -s <serial> exec-out screencap -p > out.png
 - Leave `--preserve-display-colors` off, so the output is the system's sRGB-processed picture.
 - Real devices: check the size, and that the device's own status bar honours demo mode (some makers' skins don't).
 
+## Foldables
+
+A foldable emulator (`pixel_9_pro_fold`, `pixel_10_pro_fold`, `pixel_fold`) or device has two physical displays: the
+cover (outer) one in use when folded, the inner one when open or half-open. The plan captures each posture as its
+own device (`"posture": "folded"` or `"open"`, its own id and size; [config.md](config.md#foldables)); two devices
+can share one AVD (`"avd": "appstores-fold"` with the `systemImage`: created when missing).
+
+| What | Command |
+|---|---|
+| Fold, open, half-open (emulator) | `adb -s <serial> emu fold`, `emu unfold`, `emu posture 2` (1 closed, 2 half-opened, 3 opened, 4 flipped, 5 tent) and `emu sensor set hinge-angle0 90` |
+| The same on a real foldable | `adb -s <serial> shell cmd device_state state <id>` (ids from `cmd device_state print-states`: `CLOSED`, `HALF_OPENED`, `OPENED`); `cmd device_state state reset` after |
+| Which posture it's in | `adb -s <serial> shell cmd device_state print-state` (an id) |
+| Which display is in use | `adb -s <serial> shell dumpsys display`: the viewport `isActive=true, displayId=0, uniqueId='local:<id>'` |
+| The displays | `adb -s <serial> shell dumpsys SurfaceFlinger --display-id` |
+| Capture one | `adb -s <serial> exec-out screencap -p -d <id>` |
+
+What a fold undoes, and what the driver does about it (each seen on an API 36 Pixel 9 Pro Fold image, 2026-11-19):
+
+- **It locks the screen.** Folding (and unfolding again) brings up the keyguard, and the next launch lands behind it
+  ("didn't appear within 60 s"; `--inspect` shows `keyguard_root_view`). The driver wakes and unlocks it (`input
+  keyevent KEYCODE_WAKEUP`, `wm dismiss-keyguard`) and waits for `isKeyguardShowing=false` in `dumpsys window`; a
+  device with a PIN stays locked, with a warning.
+- **`wm size` and `wm density` are kept per physical display.** A size set while open stays on the inner display
+  and never reaches the cover one; folding back finds the cover display at its own size (1080×2424). The driver sets
+  them again on the display in use after every posture change, and in `reset` puts each display's back in the
+  posture it was in use in, then the posture.
+- **`screencap` without `-d` prints a warning before the PNG** ("Multiple displays were found…") and may capture the
+  display that's off. The driver passes the display in use, and drops anything printed before a picture.
+- **Demo mode** is applied again after a posture change, entered twice as after a boot (a stray icon beside 9:41
+  on the cover display otherwise).
+
+Play has no foldable slot ([sizes.md](sizes.md#foldables)): the cover display's pictures are phone pictures; the
+inner display's ~1:1 shape fits the phone slot as it is, or the tablet slots laid out at 16:9 (`wmSize
+"1920x1080"`, landscape).
+
 ## TV, Wear, Fire
 
 - Android TV: `tv_1080p` (1920×1080) or `tv_4k` (3840×2160) profiles; at least one TV screenshot is needed to
@@ -158,6 +196,12 @@ adb -s <serial> exec-out screencap -p > out.png
 
 ## Reset (always, in `finally`)
 
-Demo mode `exit`; the display size and density back; dark mode, language and animation scales back to what they
-were; the app stopped; an emulator the driver started stopped; with `--cleanup`, its own AVD deleted. A person's own
-device is never wiped.
+Demo mode `exit`; the display size and density back (on each display a foldable's posture changes used); the
+posture back; dark mode, language and animation scales back to what they were; the app stopped; an emulator the
+driver started stopped; with `--cleanup`, its own AVD deleted. A person's own device is never wiped.
+
+## The keyboard
+
+`hideKeyboard` presses back only while `dumpsys input_method` says the keyboard is up (`mInputShown=true`; with it
+down, back would navigate). `verify`'s keyboard check reads the same, so a screen that types nothing and ends with
+the keyboard up is `missed`, "wrong state" ([config.md](config.md#verify-and-the-keyboard)).

@@ -8,7 +8,9 @@ Which device (``target``):
   (``emulator -avd … -no-window -no-audio -no-boot-anim -no-snapshot-save``; ``readOnly: true`` adds
   ``-read-only`` so the AVD's disk is never written) and stopped after.
 - ``systemImage`` (and ``profile``, a device definition such as ``medium_phone``): an AVD of our own,
-  ``appstores-<device id>``, created with ``avdmanager`` if it isn't there and deleted with ``--cleanup``.
+  ``appstores-<device id>``, created with ``avdmanager`` if it isn't there and deleted with ``--cleanup``. With
+  ``avd`` too, named ``appstores-…``, that AVD is created when it isn't there (two postures of one foldable can
+  share one).
 
 What it does (CONTRACT.md 10.3, 10.5):
 
@@ -34,9 +36,21 @@ What it does (CONTRACT.md 10.3, 10.5):
   (``input``), ``wait``/``scroll`` with elements found in ``uiautomator dump`` by ``id`` (resource id), ``text``,
   ``label`` (content description) or ``xpath``; ``appFile`` (a file pushed into the app's own data folder through
   ``run-as``: debug builds only).
-- screenshot: ``adb exec-out screencap -p`` (``-d <display>`` from ``target.display``).
-- ``reset``: leave demo mode, put back the display size, density, dark mode, language and animation scales, stop
-  the app, stop an emulator it started, and with ``--cleanup`` delete its own AVD.
+- foldables (``posture``: ``folded``, ``open``, ``half-open``; the device's setting, a screen's, or a ``posture``
+  step): the emulator's console (``adb emu fold``, ``emu unfold``, ``emu posture 2`` with ``emu sensor set
+  hinge-angle0 <target.hingeAngle>``), a real device's ``cmd device_state state <id>`` (``state reset`` after),
+  checked with ``cmd device_state print-state``. A posture change locks the screen and moves the app to another
+  physical display, so after one the screen is woken and unlocked (``input keyevent KEYCODE_WAKEUP``, ``wm
+  dismiss-keyguard``), the display in use is found again, ``wm size``/``wm density`` are set again on it (each
+  physical display keeps its own override, and each is put back), and demo mode is applied again.
+- the keyboard: ``hideKeyboard`` presses back only while ``dumpsys input_method`` says the keyboard is up
+  (``mInputShown``); ``verify``'s keyboard check reads the same.
+- screenshot: ``adb exec-out screencap -p`` with ``-d <display>``: ``target.display`` (SurfaceFlinger's long id,
+  ``dumpsys SurfaceFlinger --display-id``), or on a device with more than one physical display the one in use
+  (``dumpsys display``'s active viewport for display 0). Text a screencap prints before the PNG is dropped.
+- ``reset``: leave demo mode, put back the display size and density (on each display it changed), the posture,
+  dark mode, language and animation scales, stop the app, stop an emulator it started, and with ``--cleanup``
+  delete its own AVD.
 """
 
 from __future__ import annotations
@@ -61,6 +75,11 @@ UI_DUMP = "/sdcard/appstores-ui.xml"
 NAV_OVERLAYS = {"gesture": "com.android.internal.systemui.navbar.gestural",
                 "threebutton": "com.android.internal.systemui.navbar.threebutton",
                 "twobutton": "com.android.internal.systemui.navbar.twobutton"}
+# A posture's device state (cmd device_state print-states) and the emulator console's command for it.
+POSTURE_STATES = {"folded": "CLOSED", "open": "OPENED", "half-open": "HALF_OPENED"}
+STATE_POSTURES = dict((v, k) for k, v in POSTURE_STATES.items())
+CONSOLE_POSTURES = {"folded": ("fold",), "open": ("unfold",), "half-open": ("posture", "2")}
+DRY_STATES = {"CLOSED": 0, "HALF_OPENED": 1, "OPENED": 2}
 STATUS_ICONS = ("bluetooth", "volume", "alarm", "location", "sync", "mute", "speakerphone", "zen", "eri", "tty",
                 "cast", "hotspot")
 
@@ -138,6 +157,40 @@ def input_text(text):
     return text.replace("%", "\\%").replace(" ", "%s")
 
 
+def parse_states(output):
+    """``cmd device_state print-states`` as ``{"CLOSED": 0, "HALF_OPENED": 1, "OPENED": 2, …}``."""
+    return dict((name, int(ident)) for ident, name in
+                re.findall(r"identifier=(\d+),\s*name='([A-Z_]+)'", output or ""))
+
+
+def parse_displays(output):
+    """The physical display ids ``dumpsys SurfaceFlinger --display-id`` lists (``Display 4619827259835644672 …``)."""
+    return re.findall(r"^Display (\d+)", output or "", re.M)
+
+
+def active_display(output):
+    """The physical display behind display 0 now (``dumpsys display``): the active viewport's
+    ``uniqueId='local:<id>'``, else the one display device whose state is ON; ``None`` when it can't tell."""
+    m = re.search(r"isActive=true, displayId=0, uniqueId='local:(\d+)'", output or "")
+    if m:
+        return m.group(1)
+    on = re.findall(r"mPhysicalDisplayId=(\d+)\s+mState=ON", output or "")
+    return on[0] if len(set(on)) == 1 else None
+
+
+def keyboard_up(output):
+    """Whether ``dumpsys input_method`` says the keyboard is showing (``mInputShown=true``, or ``mImeWindowVis``
+    with its visible bit); ``None`` when it says neither."""
+    if re.search(r"mInputShown=true", output or ""):
+        return True
+    vis = [int(v) for v in re.findall(r"mImeWindowVis=(\d+)", output or "")]
+    if any(v & 2 for v in vis):
+        return True
+    if re.search(r"mInputShown=false", output or "") or vis:
+        return False
+    return None
+
+
 def parse_size(output, label):
     """``Physical size: 1080x2400`` (or ``density``) from ``wm size``/``wm density`` output, by its label."""
     m = re.search(r"%s (?:size|density): (\S+)" % label, output or "")
@@ -150,10 +203,12 @@ class AdbDriver(base.Driver):
     NAME = "adb"
     PLATFORMS = ("android",)
     STEPS = ("launch", "deepLink", "url", "appFile", "tap", "type", "wait", "scroll", "back", "swipe", "settle",
-             "script")
+             "script", "posture", "hideKeyboard")
     FINDERS = ("id", "text", "label", "xpath")
     MANAGES_DEVICE = True     # the uiautomator driver leaves size, locale, appearance and status bar alone
     BOOT_TIMEOUT = 600
+    POSTURE_TIMEOUT = 20     # seconds a posture change has to show in cmd device_state print-state
+    KEYGUARD_TIMEOUT = 10    # seconds the lock screen has to go after one
 
     def __init__(self, options=None):
         """Set up; nothing runs until ``prepare``."""
@@ -169,6 +224,13 @@ class AdbDriver(base.Driver):
         self.screen_size = None
         self.log_path = None
         self.granted = []
+        self.display = None          # the physical display captured (on a device with more than one)
+        self.sizes = {}              # display (None: the only one) -> {"wmSize": before, "density": before}
+        self.display_posture = {}    # display -> the posture it was in use in (None: before any change)
+        self.states = None           # cmd device_state print-states
+        self.original_posture = None
+        self.posture_changed = False
+        self.demo_fresh = False      # demo mode to enter twice again (after a posture change)
 
     # -- commands -------------------------------------------------------------------------------------------
 
@@ -242,6 +304,8 @@ class AdbDriver(base.Driver):
             if not avd and t.get("systemImage"):
                 avd = PREFIX + device["id"]
                 self.create_avd(avd, t)
+            elif avd and t.get("systemImage") and avd.startswith(PREFIX):
+                self.create_avd(avd, t)
             if not avd:
                 raise base.DriverError("%s needs target.serial, target.avd or target.systemImage" % device["id"])
             self.info["avd"] = avd
@@ -250,7 +314,15 @@ class AdbDriver(base.Driver):
         sdk = self.shell("getprop", "ro.build.version.sdk", quiet=True, dry_output="36").out.strip()
         self.sdk = int(sdk) if sdk.isdigit() else 0
         self.info["android"] = "API %d" % self.sdk if self.sdk else None
+        self.display = self.resolve_display(device)
         if self.MANAGES_DEVICE:
+            if device.get("posture"):
+                posture = base.posture_of(device["posture"])
+                self.set_posture(device, posture)
+                self.unlock(device, None)
+                self.display = self.resolve_display(device)
+                self.state["posture"] = posture
+                self.info["posture"] = posture
             self.lay_out(device, t)
             if t.get("animations", "off") == "off":
                 for key in ANIMATIONS:
@@ -360,20 +432,174 @@ class AdbDriver(base.Driver):
         return ": " + " / ".join(text[-lines:]) if text else ""
 
     def lay_out(self, device, t):
-        """``wm size`` the device's size (and ``wm density``), remembering what to put back."""
+        """``wm size`` the device's size (and ``wm density``) on the display in use, remembering what to put back:
+        each physical display keeps its own override, so a foldable's are remembered (and put back) one by one."""
+        key = self.display
+        saved = self.sizes.setdefault(key, {})
+        self.display_posture.setdefault(key, self.state.get("posture"))
         wanted = t["wmSize"] if "wmSize" in t else "%dx%d" % (device["width"], device["height"])
         # Under --dry-run the device's own size isn't known: show the wm size a real run would set.
         out = self.shell("wm", "size", quiet=True, dry_output="Physical size: (the device's)").out
         physical, override = parse_size(out, "Physical"), parse_size(out, "Override")
         self.screen_size = wanted or override or physical
         if wanted and (override or physical) != wanted:
-            self.changed["wmSize"] = override or "reset"
+            saved.setdefault("wmSize", override or "reset")
             self.shell("wm", "size", wanted)
         if t.get("density"):
             out = self.shell("wm", "density", quiet=True, dry_output="").out
             override = parse_size(out, "Override")
-            self.changed["density"] = override or "reset"
+            saved.setdefault("density", override or "reset")
             self.shell("wm", "density", str(t["density"]))
+
+    # -- foldables ------------------------------------------------------------------------------------------------
+
+    def is_emulator(self):
+        return (self.serial or "").startswith("emulator-")
+
+    def device_states(self):
+        """``cmd device_state print-states`` (cached): a foldable has ``CLOSED`` and ``OPENED``."""
+        if self.states is None:
+            out = self.shell("cmd", "device_state", "print-states", check=False, quiet=True, dry_output="").out
+            self.states = parse_states(out) or (dict(DRY_STATES) if base.DRY_RUN else {})
+        return self.states
+
+    def current_posture(self):
+        """The posture the device is in now (``cmd device_state print-state``), or ``None``."""
+        out = self.shell("cmd", "device_state", "print-state", check=False, quiet=True, dry_output="2").out.strip()
+        names = dict((v, k) for k, v in self.device_states().items())
+        name = names.get(int(out)) if out.isdigit() else None
+        return STATE_POSTURES.get(name)
+
+    def set_posture(self, device, posture):
+        """Fold, unfold or half-open the device and wait until its device state says so: the emulator's console
+        (``emu fold``/``unfold``/``posture 2`` and the hinge angle), a real foldable's ``cmd device_state state``."""
+        states = self.device_states()
+        want = POSTURE_STATES[posture]
+        if "CLOSED" not in states or "OPENED" not in states:
+            raise base.DriverError("%s isn't a foldable (cmd device_state print-states lists no CLOSED and OPENED): "
+                                   "give the device a foldable profile (pixel_9_pro_fold) or leave posture out"
+                                   % (self.serial,))
+        if want not in states:
+            raise base.DriverError("%s has no %s state (it has %s)" % (self.serial, want, ", ".join(sorted(states))))
+        if self.original_posture is None:
+            self.original_posture = self.current_posture() or "unknown"
+        t = device.get("target") or {}
+        if self.is_emulator():
+            res = self.adb_run("emu", *CONSOLE_POSTURES[posture], check=False, timeout=30)
+            if not res.ok or (res.out or "").strip().startswith("KO"):
+                raise base.DriverError("the emulator's console refused %s: %s" % (
+                    " ".join(CONSOLE_POSTURES[posture]), (res.out or res.err or "").strip()[:200]))
+            if posture == "half-open":
+                angle = t.get("hingeAngle") or 90
+                self.adb_run("emu", "sensor", "set", "hinge-angle0", "%g" % float(angle), check=False, timeout=30)
+        else:
+            self.shell("cmd", "device_state", "state", str(states[want]))
+            self.changed["deviceState"] = True
+        self.posture_changed = True
+
+        def there():
+            out = self.shell("cmd", "device_state", "print-state", check=False, quiet=True, dry_output="").out
+            return out.strip() == str(states[want])
+
+        if not base.DRY_RUN:
+            base.poll(there, self.POSTURE_TIMEOUT, interval=0.5, what="%s to be %s" % (self.serial, posture))
+
+    def keyguard_showing(self):
+        out = self.shell("dumpsys", "window", check=False, quiet=True, timeout=60, dry_output="").out
+        m = re.search(r"isKeyguardShowing=(true|false)", out or "")
+        return bool(m and m.group(1) == "true")
+
+    def unlock(self, device, shot):
+        """Wake the screen and dismiss the lock screen a fold brings up (an emulator's has no PIN; a person's
+        device with one stays locked: a warning)."""
+        self.shell("input", "keyevent", "KEYCODE_WAKEUP", check=False)
+        self.shell("wm", "dismiss-keyguard", check=False)
+        if base.DRY_RUN:
+            return
+        try:
+            base.poll(lambda: not self.keyguard_showing(), self.KEYGUARD_TIMEOUT, interval=0.5,
+                      what="the lock screen to go")
+        except base.StepFailed:
+            message = ("the lock screen is still up after the posture change (a PIN?): the next launch lands behind "
+                       "it; unlock %s by hand" % self.serial)
+            if shot is not None:
+                shot.warnings.append(message)
+            else:
+                self.warnings.append(message)
+            base.note("  warning: %s" % message)
+
+    def apply_posture(self, device, posture, shot):
+        """Put the foldable in ``posture``, then make right what that undid: wake and unlock it, find the display
+        now in use, lay out on it again, and apply demo mode again (entered twice, as after a boot)."""
+        if not self.MANAGES_DEVICE:
+            raise base.StepSkipped("the %s driver leaves the device as it is: use the adb driver to fold it"
+                                   % self.NAME)
+        self.set_posture(device, posture)
+        self.unlock(device, shot)
+        self.display = self.resolve_display(device)
+        self.state["posture"] = posture
+        self.info["posture"] = posture
+        self.lay_out(device, device.get("target") or {})
+        self.state.pop("statusBar", None)
+        self.demo_fresh = True
+
+    def resolve_display(self, device):
+        """The physical display to capture: ``target.display`` when it names one; else, on a device with more than
+        one (``dumpsys SurfaceFlinger --display-id``), the one in use; ``None`` on a device with one."""
+        explicit = (device.get("target") or {}).get("display")
+        if explicit not in (None, "", "auto"):
+            return str(explicit)
+        ids = parse_displays(self.shell("dumpsys", "SurfaceFlinger", "--display-id", check=False, quiet=True,
+                                        dry_output="").out)
+        if len(ids) <= 1:
+            return None
+        found = active_display(self.shell("dumpsys", "display", check=False, quiet=True, timeout=60,
+                                          dry_output="").out)
+        if found in ids:
+            base.note("  capturing display %s (of %s: the one in use)" % (found, ", ".join(ids)))
+            return found
+        raise base.DriverError("%s has %d displays (%s) and which is in use couldn't be read from dumpsys display: "
+                               "set target.display to one" % (self.serial, len(ids), ", ".join(ids)))
+
+    def restore_posture(self, posture):
+        """Back to ``posture`` (reset): the console on an emulator, ``cmd device_state state reset`` on a device."""
+        if not self.is_emulator():
+            self.shell("cmd", "device_state", "state", "reset")
+            return
+        if posture in CONSOLE_POSTURES:
+            self.adb_run("emu", *CONSOLE_POSTURES[posture], check=False, timeout=30)
+            states = self.device_states()
+            want = str(states.get(POSTURE_STATES[posture], ""))
+            try:
+                base.poll(lambda: self.shell("cmd", "device_state", "print-state", check=False, quiet=True,
+                                             dry_output=want).out.strip() == want,
+                          self.POSTURE_TIMEOUT, interval=0.5, what="%s to be %s again" % (self.serial, posture))
+            except base.StepFailed:
+                pass
+
+    # -- the keyboard -------------------------------------------------------------------------------------------
+
+    def keyboard_shown(self, ctx):
+        """``dumpsys input_method``: is the keyboard up (``None`` when it doesn't say)."""
+        if base.DRY_RUN:
+            return None
+        out = self.shell("dumpsys", "input_method", check=False, quiet=True, timeout=60).out
+        return keyboard_up(out)
+
+    def hide_keyboard(self, ctx, value):
+        """Close the keyboard: the back key, pressed only while the keyboard is up (with it down, back would
+        navigate)."""
+        if base.DRY_RUN:
+            base.note("  (dry run: the back key would be pressed if dumpsys input_method says the keyboard is up)")
+            return
+        shown = self.keyboard_shown(ctx)
+        if shown is None:
+            raise base.StepFailed("step %d: hideKeyboard: dumpsys input_method doesn't say whether the keyboard is "
+                                  "up, so back wasn't pressed (it might navigate): give hideKeyboard a tap" % ctx.index)
+        if not shown:
+            return
+        self.shell("input", "keyevent", "KEYCODE_BACK")
+        base.poll(lambda: self.keyboard_shown(ctx) is False, 3, interval=0.3, what="the keyboard to close")
 
     def reset(self, device):
         """Put back everything changed; stop an emulator it started; delete its own AVD with ``--cleanup``."""
@@ -415,10 +641,7 @@ class AdbDriver(base.Driver):
                 attempt("restoring %s" % key, "settings", "delete", "global", key)
             else:
                 attempt("restoring %s" % key, "settings", "put", "global", key, old)
-        if "density" in self.changed:
-            attempt("restoring the density", "wm", "density", self.changed["density"])
-        if "wmSize" in self.changed:
-            attempt("restoring the display size", "wm", "size", self.changed["wmSize"])
+        self.restore_sizes(warnings, attempt)
         if self.launched and package:
             attempt("stopping the app", "am", "force-stop", package)
         if self.started:
@@ -437,6 +660,37 @@ class AdbDriver(base.Driver):
             except base.DriverError as e:
                 warnings.append("deleting %s: %s" % (self.avd_created, e))
         return warnings
+
+    def restore_sizes(self, warnings, attempt):
+        """Put back each display's size and density, in the posture it was in use in, then the posture."""
+
+        def put_back(key, where):
+            saved = self.sizes.get(key) or {}
+            if "density" in saved:
+                attempt("restoring the density%s" % where, "wm", "density", saved["density"])
+            if "wmSize" in saved:
+                attempt("restoring the display size%s" % where, "wm", "size", saved["wmSize"])
+
+        original = self.original_posture
+        first = [k for k in self.sizes if self.display_posture.get(k) not in (None, original)]
+        for key in first:
+            posture = self.display_posture[key]
+            try:
+                if self.is_emulator():
+                    self.restore_posture(posture)
+                else:
+                    self.shell("cmd", "device_state", "state", str(self.device_states()[POSTURE_STATES[posture]]))
+                put_back(key, " of display %s (%s)" % (key, posture))
+            except (base.DriverError, KeyError) as e:
+                warnings.append("restoring display %s (%s): %s" % (key, posture, e))
+        if self.posture_changed:
+            try:
+                self.restore_posture(original if original in POSTURE_STATES else "open")
+            except base.DriverError as e:
+                warnings.append("restoring the posture (%s): %s" % (original, e))
+        for key in self.sizes:
+            if key not in first:
+                put_back(key, "" if key is None else " of display %s" % key)
 
     # -- per screen --------------------------------------------------------------------------------------------
 
@@ -496,8 +750,9 @@ class AdbDriver(base.Driver):
         self.shell("settings", "put", "global", "sysui_demo_allowed", "1")
         # The first pass after a boot can leave the real Wi-Fi icon beside demo mode's (two Wi-Fi icons on an
         # API 36 image, seen 2026-11-14): the first time, enter, leave and enter again.
-        passes = 1 if self.changed.get("demo") else 2
+        passes = 1 if self.changed.get("demo") and not self.demo_fresh else 2
         self.changed["demo"] = True
+        self.demo_fresh = False
         for n in range(passes):
             if n:
                 self.shell("am", "broadcast", "-a", DEMO, "-e", "command", "exit")
@@ -740,18 +995,27 @@ class AdbDriver(base.Driver):
         self.shell("input", "swipe", *(coords + (ms,)))
 
     def screenshot(self, device, path):
-        """``adb exec-out screencap -p [-d <display>]`` written to ``path``."""
+        """``adb exec-out screencap -p [-d <display>]`` written to ``path``: ``target.display``, or the display in
+        use on a device with more than one (``resolve_display``). A warning screencap prints before the PNG (a
+        device with several displays and none named) is dropped."""
         args = ["exec-out", "screencap", "-p"]
         display = (device.get("target") or {}).get("display")
+        if display in (None, "", "auto"):
+            display = self.display
         if display is not None:
             args += ["-d", str(display)]
         res = self.adb_run(*args, binary=True, timeout=60)
         if base.DRY_RUN:
             return
-        if not res.out.startswith(b"\x89PNG"):
-            raise base.DriverError("screencap didn't return a PNG: %r" % res.out[:120])
+        data = res.out
+        start = data.find(b"\x89PNG")
+        if start < 0:
+            raise base.DriverError("screencap didn't return a PNG: %r" % data[:120])
+        if start:
+            base.note("  (screencap printed before the picture: %s)" % data[:start].decode("utf-8", "replace")
+                      .strip().splitlines()[0][:160])
         with open(path, "wb") as f:
-            f.write(res.out)
+            f.write(data[start:])
 
 
 DRIVER = AdbDriver
