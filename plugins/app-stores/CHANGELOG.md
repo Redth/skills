@@ -109,6 +109,17 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - `store-capture`: `fill` warns when a field it typed that the screen's `verify` names is out of sight once
   `scrollTo` has scrolled the form back (a `verify` sees only what's on screen); config.md and staging.md say to
   verify only what the shot shows.
+- `store-capture`: `capture.py --record` records a screen's steps for a preview video, from just before its first
+  `launch` (after the device is prepared and any reboot a locale change needs) until a second after its last step,
+  stopped before the `verify`, the screenshot and the reset, to `<out>/<locale>/<device>/<screen>.mov` (simulators,
+  and the drivers they host: `simctl io recordVideo` on the display the screenshots take, so the iPhone Duo's cover
+  or inner one) or `.mp4` (Android: `screenrecord` on the device, pulled after, warned about past its 180 s); other
+  drivers are refused before anything runs. simctl holds a still screen's last frame back until the next change, so
+  a moment's status bar change (the battery at 99 % for a second, then back) flushes it; the report's `recording`
+  gives the file, its length, the step it started at, the display and the flush's time to trim at (`video.py
+  encode --end`). In a real trial `video.py record --during "capture.py …"` ended as `capture.py` rebooted the
+  simulator for its language, and its reset shut it down: video.md now says to use `--record`, why, how to trim the
+  flush, and that the steps' `wait`s set the pacing; SKILL.md's step 9 and a failure mode say so too.
 
 - `store-screenshots` 0.1.0 (#12): designed store screenshots from an app's real captures, one design for every
   store, size and locale. A brief and a storyboard agreed with the user before rendering; `store-screenshots.json`

@@ -143,6 +143,9 @@ class Hooks(object):
         self.log = []
         self.saved = (base.RUNNER, base.SPAWNER, base.SLEEP, base.CLOCK, base.LOG, base.DRY_RUN)
         self.spawned = []
+        self.spawned_at = []     # for each spawn, how many commands had run before it (to order it among them)
+        self.signals = []        # (spawned line, signal, how many commands had run before it)
+        self.spawn_rules = []
         base.RUNNER = self.runner
         base.SPAWNER = self.spawn
         base.SLEEP = self.time.sleep
@@ -150,9 +153,27 @@ class Hooks(object):
         base.LOG = self.log.append
         base.DRY_RUN = False
 
+    def on_spawn(self, pattern, log="", on_signal=None):
+        """A spawned command matching ``pattern`` writes ``log`` to its log file at once (``Recording started``),
+        and ``on_signal(cmd)`` runs when it's sent a signal (a recorder finishing its file)."""
+        self.spawn_rules.append((re.compile(pattern), log, on_signal))
+        return self
+
     def spawn(self, cmd, log_path=None, env=None, cwd=None):
-        """A fake ``SPAWNER``: records the command and returns a process that's always running."""
-        self.spawned.append(base.quote(cmd))
+        """A fake ``SPAWNER``: records the command and returns a process that runs until it's stopped or signalled."""
+        line = base.quote(cmd)
+        self.spawned.append(line)
+        self.spawned_at.append(len(self.runner.calls))
+        rule = None
+        for r in reversed(self.spawn_rules):
+            if r[0].search(line):
+                rule = r
+                break
+        if rule and rule[1] and log_path:
+            os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
+            with open(log_path, "a") as f:
+                f.write(rule[1])
+        hooks = self
 
         class Proc(object):
             def __init__(self):
@@ -166,6 +187,12 @@ class Hooks(object):
 
             def kill(self):
                 self.stopped = True
+
+            def send_signal(self, sig):
+                hooks.signals.append((line, sig, len(hooks.runner.calls)))
+                self.stopped = True
+                if rule and rule[2]:
+                    rule[2](cmd)
 
             def wait(self, timeout=None):
                 return 0

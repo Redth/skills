@@ -1016,6 +1016,19 @@ a fake for tests) and talk HTTP only to `localhost`/`127.0.0.1` through `web.py`
 screen's `verify` after its steps (`Shot.state_check`: `passed`, `failed`, `unchecked`, `none`) and, with
 `--inspect`, saves its UI tree (`inspect_tree`).
 
+**Recording** (`--record`): `base.run_screen` starts the recording before the screen's first `launch` step (else
+its first step), after `enter_screen` (the locale's reboot, the posture, the status bar), and stops it after the last
+step, before `verify`, the screenshot and `reset` (`begin_recording`, `end_recording`; a failed step stops it and
+keeps nothing); drivers that run a tool for the whole screen (`xcuitest`, `maestro`) record around that run
+(`recorded`), once for a run several screens share. The device's driver records (`record_support`,
+`start_recording`, `stop_recording`, `discard_recording`; hosted drivers forward to their host): `simctl` with `simctl
+io <udid> recordVideo --codec=h264 --mask=ignored [--display=…] --force <file>.mov` on the display it screenshots,
+waiting for "Recording started", then a second after the last step the flush (`status_bar override --batteryLevel
+99`, a second, SIGINT, the battery back to 100 or the status bar cleared), since simctl holds the last frame back
+until the screen changes; `adb` with `screenrecord --bit-rate 20000000 --time-limit 180 [--display-id …]`, stopped
+with `pkill -INT screenrecord`, pulled, deleted from the device. Any other driver, or a hosted one with no host, is
+refused before anything runs.
+
 **In-app agents are pinned**: `devflow` and `ailoha` list the agents, read each one's status (device id, package,
 process), and use only the one that is the plan's app on the dedicated device (the simulator's UDID, directly or
 through the process's path; on Android the process `pidof` reports on the serial), passing `--agent-port` (and on
@@ -1052,7 +1065,10 @@ device's size — and `<out>/capture-report.json`:
                "driver": "simctl", "source": { "deviceType": "iPhone 17 Pro Max", "runtime": "iOS 27.2" },
                "statusBar": "verified" | "overridden" | "unverified" | "none", "fixes": [], "warnings": [],
                "panes": ["in id 'servings': scrolled its nearest scrolling ancestor, android.widget.ScrollView …"],
-               "state": "…", "stateCheck": "passed" | "failed" | "unchecked", "appRevision": "<git commit>" },
+               "state": "…", "stateCheck": "passed" | "failed" | "unchecked", "appRevision": "<git commit>",
+               "recording": { "path": "en-US/iphone-6.9/plan.mov", "seconds": 22.4, "by": "simctl recordVideo",
+                              "from": "step 1 (launch …)", "display": "3",
+                              "flush": { "by": "status bar battery 99%", "at": 21.4 } | null } },
              { "…": "status missed: not reached (kept: previous|none, reason); failed: wrong size etc.; skipped: a step or device the driver can't do" } ],
   "app": { "revision": "<git commit>", "describe": "…", "committed": "…", "dirty": false, "repo": ".",
            "builds": { "ios": { "version": "2.1", "build": "214" } } } }
@@ -1065,7 +1081,11 @@ partial run's kept entries keep theirs. A run warns when the app moved since the
 Adapters write into a temp folder and move files into place at the end. A run keeps the report's earlier entries
 for plan items it didn't run (filters) and drops those the plan no longer has (removed or omitted), naming them in
 `notes`. `panes` (left out when empty) says what a
-scroll's `in` scrolled where it wasn't the element named. `fixes` lists what was changed
+scroll's `in` scrolled where it wasn't the element named. `recording` (with `--record`, on a taken shot) is the
+screen's steps recorded beside its picture (`.mov` from a simulator, `.mp4` from Android), moved into place with
+it: `seconds` from its start to the stop, `from` the step it started at, `display` when the device has more than
+one, `flush` the moment's status bar change that flushed a simulator's last frames, `at` seconds in (trim there:
+`video.py encode --end`), `null` when none was made. `fixes` lists what was changed
 (`alpha-flattened`, `converted-to-srgb`, `16-bit-to-8-bit`), never a resize; an alpha channel that's all opaque is
 flattened without a per-shot mention and counted once in the report's `notes`. `check_captures.py` reads PNG headers
 against the plan (and, with `--rules`, the stores' accepted sizes; a required App Store display type no device fills
@@ -1084,9 +1104,11 @@ the plan names them (create and own dedicated ones by default: `appstores-<devic
 ### 10.6 Commands
 
 - `capture.py [--plan capture-plan.json] [--devices …] [--screens …] [--locales …] [--keep-going] [--cleanup]
-  [--dry-run] [--inspect]`: `--dry-run` prints each device's preparation and each step as the driver would run it,
-  running nothing; `--inspect` saves each screen's UI tree to `<out>/.inspect/`. Exit 3 when a staged plan isn't
-  confirmed and the run has more than one screen, or a staging account's variable isn't set.
+  [--dry-run] [--inspect] [--record]`: `--dry-run` prints each device's preparation and each step as the driver
+  would run it, running nothing; `--inspect` saves each screen's UI tree to `<out>/.inspect/`; `--record` records
+  each screen's steps to `<out>/<locale>/<device>/<screen>.mov|.mp4` (10.3, 10.4). Exit 3 when a staged plan isn't
+  confirmed and the run has more than one screen, a staging account's variable isn't set, or `--record` names a
+  device it can't record.
 - `capture.py --changes [revision]`: what changed in the app since the last capture (the oldest `appRevision` the
   report keeps, or the revision given), in `appSource.paths` and the screens' `sources`, uncommitted changes
   included: the commits, the files, and the screens to re-check, each with why (its `sources` changed; a step's or

@@ -269,6 +269,29 @@ class HostedDriver(base.Driver):
         """``appFile`` (a file copied into the app's own data) by the host."""
         self.host_step(ctx, "appFile", value)
 
+    def record_support(self, device):
+        """A screen is recorded by the device's host (``capture.py --record``): none, none recorded."""
+        h = self.host(device)
+        if h is None:
+            return "%s records a screen through its host (simctl or adb), and %s has none" % (self.NAME, device["id"])
+        return h.record_support(device)
+
+    def recording_ext(self, device):
+        """The host's."""
+        return self.host(device).recording_ext(device)
+
+    def start_recording(self, device, path):
+        """The host starts it."""
+        return self.host(device).start_recording(device, path)
+
+    def stop_recording(self, device, rec, shot):
+        """The host stops it."""
+        return self.host(device).stop_recording(device, rec, shot)
+
+    def discard_recording(self, device, rec):
+        """The host stops it."""
+        self.host(device).discard_recording(device, rec)
+
     def use_host_screenshot(self, device):
         """True when the host takes the screenshots (the default when there is one)."""
         t = device.get("target") or {}

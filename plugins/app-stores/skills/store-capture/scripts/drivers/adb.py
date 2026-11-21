@@ -48,6 +48,10 @@ What it does (CONTRACT.md 10.3, 10.5):
 - screenshot: ``adb exec-out screencap -p`` with ``-d <display>``: ``target.display`` (SurfaceFlinger's long id,
   ``dumpsys SurfaceFlinger --display-id``), or on a device with more than one physical display the one in use
   (``dumpsys display``'s active viewport for display 0). Text a screencap prints before the PNG is dropped.
+- recording (``capture.py --record``): ``screenrecord --bit-rate 20000000 --time-limit 180 [--display-id …]`` on the
+  device (the display the screenshots take) from the screen's first ``launch`` until a second after its last step,
+  stopped with ``pkill -INT screenrecord`` before ``verify``, the screenshot and ``reset``, then pulled and deleted
+  from the device. It stops by itself at 180 s (a warning says so); no flush is needed.
 - ``reset``: leave demo mode, put back the display size and density (on each display it changed), the posture,
   dark mode, language and animation scales, stop the app, stop an emulator it started, and with ``--cleanup``
   delete its own AVD.
@@ -1124,14 +1128,80 @@ class AdbDriver(base.Driver):
             coords = self._swipe_for(ctx, value.get("direction") or "up")
         self.shell("input", "swipe", *(coords + (ms,)))
 
+    # -- recording (capture.py --record) ---------------------------------------------------------------------
+
+    RECORD_LIMIT = 180                              # seconds: screenrecord's longest on most Android versions
+    RECORD_REMOTE = "/sdcard/appstores-recording.mp4"
+
+    def record_support(self, device):
+        """Every Android device records (``screenrecord``)."""
+        return None
+
+    def capture_display(self, device):
+        """The physical display the screenshots (and recordings) take: ``target.display``, else the one in use."""
+        display = (device.get("target") or {}).get("display")
+        if display in (None, "", "auto"):
+            display = self.display
+        return display
+
+    def start_recording(self, device, path):
+        """``adb shell screenrecord --bit-rate 20000000 --time-limit 180 [--display-id …] /sdcard/…`` in the
+        background; it takes a moment to start."""
+        display = self.capture_display(device)
+        args = ["screenrecord", "--bit-rate", "20000000", "--time-limit", str(self.RECORD_LIMIT)]
+        if display is not None:
+            args += ["--display-id", str(display)]
+        args.append(self.RECORD_REMOTE)
+        line = " ".join(shlex.quote(str(a)) for a in args)
+        if not base.DRY_RUN:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+        log = path + ".log"
+        proc = base.spawn(self.adb + ["-s", self.serial, "shell", line], log_path=log)
+        started = base.CLOCK()
+        base.sleep(1)
+        if proc is not None and proc.poll() is not None:
+            raise base.DriverError("screenrecord stopped as it started: %s" % (_read(log).strip()[-300:]
+                                                                               or "it said nothing"))
+        return {"proc": proc, "file": path, "log": log, "display": display, "started": started}
+
+    def stop_recording(self, device, rec, shot):
+        """A second for the last step's settled frames, then ``pkill -INT screenrecord`` (it finishes the file),
+        pull it and delete it from the device. Raises ``DriverError`` without a file."""
+        base.sleep(self.RECORD_TAIL)
+        seconds = base.CLOCK() - rec["started"]
+        if seconds > self.RECORD_LIMIT:
+            shot.warnings.append("screenrecord stops at %d s and the steps took %.0f s: the recording ends before "
+                                 "the last of them (shorten the steps' waits)" % (self.RECORD_LIMIT, seconds))
+            seconds = float(self.RECORD_LIMIT)
+        self.shell("pkill", "-INT", "screenrecord", check=False)
+        proc = rec.get("proc")
+        if proc is not None:
+            try:
+                proc.wait(timeout=30)
+            except Exception:  # noqa: BLE001 - still running: stop the local adb; the file may be cut short
+                base.stop(proc)
+        try:
+            self.adb_run("pull", self.RECORD_REMOTE, rec["file"], timeout=600)
+        finally:
+            self.shell("rm", "-f", self.RECORD_REMOTE, check=False)
+        if not base.DRY_RUN and not (os.path.isfile(rec["file"]) and os.path.getsize(rec["file"]) > 0):
+            raise base.DriverError("screenrecord left no video: %s" % (_read(rec["log"]).strip()[-300:]
+                                                                      or "it said nothing"))
+        return {"file": rec["file"], "seconds": round(seconds, 1), "by": "adb screenrecord",
+                "display": None if rec.get("display") is None else str(rec["display"]), "flush": None}
+
+    def discard_recording(self, device, rec):
+        """Stop it on the device and delete its file there."""
+        self.shell("pkill", "-INT", "screenrecord", check=False)
+        base.stop(rec.get("proc"))
+        self.shell("rm", "-f", self.RECORD_REMOTE, check=False)
+
     def screenshot(self, device, path):
         """``adb exec-out screencap -p [-d <display>]`` written to ``path``: ``target.display``, or the display in
         use on a device with more than one (``resolve_display``). A warning screencap prints before the PNG (a
         device with several displays and none named) is dropped."""
         args = ["exec-out", "screencap", "-p"]
-        display = (device.get("target") or {}).get("display")
-        if display in (None, "", "auto"):
-            display = self.display
+        display = self.capture_display(device)
         if display is not None:
             args += ["-d", str(display)]
         res = self.adb_run(*args, binary=True, timeout=60)
@@ -1146,6 +1216,15 @@ class AdbDriver(base.Driver):
                       .strip().splitlines()[0][:160])
         with open(path, "wb") as f:
             f.write(data[start:])
+
+
+def _read(path):
+    """A log file's text (empty when it isn't there)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return ""
 
 
 DRIVER = AdbDriver
