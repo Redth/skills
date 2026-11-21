@@ -1,0 +1,54 @@
+{
+  "$schema": "../schema/preview-edit.schema.json",
+  "$comment": "Sample Recipes' iPhone preview (the invented example app): plan the week, open a recipe, the shopping list builds itself, the end card. Copy it beside the screenshots config (store-screenshots' design/ folder next to it); the three takes recorded with store-capture (capture.py --record) and dumped with video.py frames --width 886 into frames/. Frame numbers come from looking at the dumped frames; re-pick them after a new take.",
+  "name": "iphone",
+  "width": 886,
+  "height": 1920,
+  "fps": 30,
+  "style": "design/baseline/screenshot-style.json",
+  "styleRoot": ".",
+  "headSize": 88,
+  "footage": {"w": 886, "h": 1920, "frame": "phone", "full": 0.8, "float": {"scale": 0.62, "cy": 1210}},
+  "segments": [
+    {"frames": "frames/iphone-take-plan", "ops": [
+      ["mark", "open"], ["hold", 1, 2.6],
+      ["mark", "plan"], ["play", 1, 150],
+      ["mark", "drag"], ["play", 151, 240], ["hold", 240, 1.2]
+    ]},
+    {"slide": 0.8, "shift": 760},
+    {"frames": "frames/iphone-take-recipe", "ops": [
+      ["mark", "recipe"], ["hold", 1, 1.8],
+      ["play", 1, 120],
+      ["mark", "card"], ["hold", 120, 3.0]
+    ]},
+    {"dissolve": 0.5},
+    {"frames": "frames/iphone-take-shop", "ops": [
+      ["mark", "shop"], ["play", 1, 96, 1.5],
+      ["hold", 96, 1.4],
+      ["mark", "end"], ["hold", 96, 3.2]
+    ]}
+  ],
+  "camera": [
+    [0, 0], ["@plan+0.2", 0], ["@plan+1.2", 1], ["@drag+2.0", 1],
+    ["@recipe-0.8", 0], ["@card-0.6", 0], ["@card+0.2", 0.6], ["@shop-0.2", 0.6], ["@shop+0.6", 1],
+    ["@end-0.4", 1], ["@end+0.4", 0]
+  ],
+  "overlays": [
+    {"kind": "headline", "lines": ["Plan the", "[whole week]"], "in": "@open+0.3", "out": "@plan+0.6"},
+    {"kind": "touch", "at": [640, 980], "to": [640, 1300], "in": "@drag-0.4", "press": "@drag", "moveIn": "@drag+0.2",
+     "moveFor": 1.0, "out": "@drag+1.6"},
+    {"kind": "headline", "lines": ["Every recipe,", "[step by step]"], "in": "@recipe-0.2", "out": "@recipe+1.8"},
+    {"kind": "spotlight", "rect": [48, 1012, 790, 360], "r": 26, "pad": 14, "dim": 0.5, "in": "@card+0.3",
+     "out": "@card+2.8"},
+    {"kind": "headline", "lines": ["The list", "[writes itself]"], "in": "@shop-0.2", "out": "@shop+1.4"}
+  ],
+  "endOut": "@end",
+  "end": {
+    "in": "@end+0.5",
+    "mark": "design/art/icon-1024.png",
+    "name": "Sample Recipes",
+    "by": "by Example Studio",
+    "tagLines": ["A week of meals,", "[planned in minutes]"],
+    "fine": "Free to download. Sign-in required to sync. Premium features available by subscription."
+  }
+}

@@ -21,11 +21,13 @@ Stores and forms with no API get a checklist with the answers drafted. Any app, 
 | [`store-listings`](./skills/store-listings/) | 0.1.0 | starting from the live listing (pulled read-only, or from Apple's public lookup without keys), the config and its importers (fastlane, Triple-T, Expo); the words and their checks; building each store's output; page previews; plan and apply for Apple and Google; forms with no API as drafted answers; checklists for Steam and itch.io | [#11](https://github.com/Redth/skills/issues/11) |
 | [`store-screenshots`](./skills/store-screenshots/) | 0.1.0 | the listing's current set read first (what to keep), the user's examples, two to four rendered directions, one iterated into an approved baseline that later updates are checked against; the brief and a storyboard agreed before rendering; layouts (full-bleed, band, framed, cut off, tilt, pair, callout, hero, gameplay) and drawn device frames; eight starting styles; every size and locale from one design through headless Chrome; mocks of Apple's search row, the product page and Play's listing; screenshot checks per store | [#12](https://github.com/Redth/skills/issues/12) |
 | [`store-capture`](./skills/store-capture/) | 0.1.0 | the app's real screens, staged with the user (sign-in, demo data, each screen's state, a check it's right) and at exactly each store's sizes, on any stack, by the technique that fits: a screenshot mode (launch argument or deep link, sketched per stack), the DevFlow (.NET MAUI) or Ailoha in-app agents, Appium, XCUITest, UI Automator, Maestro, macOS Accessibility, `simctl`, `adb`, headless Chrome; importers for fastlane snapshot and screengrab, xcresult, Maestro, Flutter, Detox and Playwright; dedicated simulators and emulators, a clean status bar, demo data, one locale at a time, everything put back; a report of what was taken, missed (the old picture kept, and said so) or failed (never resized); preview videos recorded, encoded to spec with ffmpeg and checked | [#13](https://github.com/Redth/skills/issues/13) |
+| [`store-previews`](./skills/store-previews/) | 0.1.0 | App Store previews (and portrait Play promo videos) from the app's real recordings: a storyboard agreed first (beats, headlines, the poster frame, an end card with the account and subscription disclosure); an edit file naming frames held, played and marked, dissolves and slides, a calm camera that never crops the device, a foldable folded then open and panned; headlines, touch hotspots and a spotlight with an even margin; drawn device frames and the screenshots' locked style; every frame drawn in headless Chrome, then encoded and checked with `store-capture` | [#33](https://github.com/Redth/skills/issues/33) |
 | `store-signing` | to follow | signing, notarising and uploading builds to TestFlight, Play, Amazon, Steam and itch.io | [#14](https://github.com/Redth/skills/issues/14) |
 | `game-achievements` | to follow, if it earns its place | Game Center and Play Games achievements from one list | [#15](https://github.com/Redth/skills/issues/15) |
 
 Each hands the next a folder: capture writes the captures, screenshots renders them into store sizes, listings
-checks and sends them. Each works alone: `store-listings` takes PNGs from any tool.
+checks and sends them; previews composes capture's recorded takes into the preview videos. Each works alone:
+`store-listings` takes PNGs from any tool.
 
 ## For consumers: using it
 
@@ -101,16 +103,26 @@ python3 <skill>/scripts/video.py encode raw.mov --slot APP_IPHONE_67 --out previ
 
 `store-screenshots` designs from that folder; `store-listings` can send it as it is.
 
+And for a preview video (`store-previews`), once the storyboard is agreed and the takes are recorded
+(`capture.py --record`) and dumped (`video.py frames`):
+
+```sh
+python3 <skill>/scripts/compose.py edit.json --dry-run          # the length, the marks, every frame found
+python3 <skill>/scripts/compose.py edit.json --frames 0,150 --stills   # key frames as PNGs, to look at first
+python3 <skill>/scripts/compose.py edit.json                    # every frame → out/<name>-master.mp4
+# then store-capture: video.py encode out/<name>-master.mp4 --slot APP_IPHONE_67 --out preview.mp4; video.py check
+```
+
 ### Prerequisites
 
 - **Python 3.8+** (stdlib only), on macOS or Linux.
 - **`openssl`**, to sign the stores' API tokens (only `push.py` needs it).
 - **Google Chrome or Chromium**, for `preview --png` (set `CHROME` to point at it; the HTML preview works
-  without it) and for `store-screenshots`' rendering and sheets (required there).
+  without it), for `store-screenshots`' rendering and sheets and for `store-previews`' frames (required there).
 - For `store-capture`, the tools of the technique chosen: Xcode (`simctl`, `xcuitest`), the Android SDK's
   platform-tools and emulator (`adb`, `uiautomator`), the DevFlow (`dotnet tool install -g Microsoft.Maui.Cli
   --prerelease`) or Ailoha (`npm install -g @ailoha/cli`) CLI, an Appium 2/3 server and drivers, the Maestro CLI,
-  Chrome; `ffmpeg` and `ffprobe` for video. Each is detected, never bundled.
+  Chrome; `ffmpeg` and `ffprobe` for video (and for `store-previews`' master). Each is detected, never bundled.
 - To send: an **App Store Connect API key** (App Manager or Admin) in `ASC_KEY_ID`, `ASC_ISSUER_ID` and
   `ASC_PRIVATE_KEY`, and/or a **Google Play service account** with Manage store presence in
   `GOOGLE_PLAY_SERVICE_ACCOUNT`. Keys may be a path, the text, or base64.
@@ -118,7 +130,7 @@ python3 <skill>/scripts/video.py encode raw.mov --slot APP_IPHONE_67 --out previ
 ### Network and privacy
 
 - **No network by default.** `import`, `check`, `build`, `preview` and `diff` work offline, and so does all of
-  `store-screenshots`: fonts and frames are files, nothing is fetched.
+  `store-screenshots` and `store-previews`: fonts, frames and recordings are files, nothing is fetched.
 - **Only `push.py` reaches a network,** only the stores' own hosts (`api.appstoreconnect.apple.com` and the
   upload hosts Apple names, `oauth2.googleapis.com`, `androidpublisher.googleapis.com`; for `pull`, Apple's public
   `itunes.apple.com`, its `*.mzstatic.com` CDN and Play's image hosts), and **only `push.py apply` writes.**

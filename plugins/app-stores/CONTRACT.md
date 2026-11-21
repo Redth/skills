@@ -5,7 +5,7 @@ Build to it; change it here first if it must change.
 
 `app-stores` takes an app's store presence from one config to the stores it's on: the App Store, Google Play
 (and, to follow, the Amazon Appstore, Steam and itch.io). Any app, any stack. Proposal issues: #11
-(`store-listings`), #12 (`store-screenshots`), #13 (`store-capture`); to follow: #14 (`store-signing`), #15
+(`store-listings`), #12 (`store-screenshots`), #13 (`store-capture`), #33 (`store-previews`); to follow: #14 (`store-signing`), #15
 (`game-achievements`).
 
 Hard constraints everywhere:
@@ -1161,6 +1161,69 @@ the plan names them (create and own dedicated ones by default: `appstores-<devic
 
 Exit codes as the other skills': 0, 1 (a shot failed or missed with nothing kept), 2 (refused: another capture is
 writing to the same folder), 3 (usage/env).
+
+## 11. `store-previews`
+
+Composes store preview videos from an app's recorded takes. Proposal issue #33. It sits between `store-capture`'s
+`video.py frames` (its input: numbered frames of each take) and `video.py encode`/`check` (its master's next
+step), and reads `store-screenshots`' locked `screenshot-style.json` for the look.
+
+### 11.1 Layout
+
+```
+skills/store-previews/
+  SKILL.md  VERSION
+  references/   apple-previews.md (Apple's preview rules and specs, Play's promo video; sourced and dated),
+                storyboard.md, motion.md, editing.md (recording takes for an edit, dumping, picking, measuring,
+                marks), edit.md (every field of the edit), devices.md (sizes, device frame classes, iPad, foldables),
+                checking.md
+  schema/preview-edit.schema.json
+  templates/preview.html   one frame of the video: setup(edit) once (returns a Promise), then frame(i)
+  examples/sample-edit.json
+  scripts/
+    appstores_lib/   (copied)
+    compose.py  test_compose.py
+  evals/  evals.json  trigger-evals.json
+```
+
+### 11.2 The edit: `edit.json`
+
+Schema `schema/preview-edit.schema.json`; every field in `references/edit.md`. Required: `name`, `width`,
+`height`, `footage` (`w`, `h`, the dumped frames' size), `segments`. Paths are relative to the edit. Times are
+seconds or `"@mark"`, `"@mark+s"`, `"@mark-s"`; footage positions are the dumped frames' pixels.
+
+- **Segments:** `{"frames": dir, "footage"?, "ops": [...]}` with ops `["hold", i, s]`, `["play", a, b]`,
+  `["play", a, b, step]`, `["mark", name]`; `{"dissolve": s}`; `{"slide": s, "shift"?}`. A transition overlaps the
+  end of the segment before with the start of the next; during a slide the outgoing screen holds its last frame. A
+  mark is the time its op list has reached, counted from the overlap.
+- **Camera and pan:** `[[time, value], ...]`, running forward in time (else exit 3); camera 0 floating at the
+  footage's `float` (`scale`, `cy`), 1 at its `full` scale centred; eased in-out quartic (camera) and cubic (pan).
+  A footage with `pan: true` stays floating and takes no spotlight.
+- **Overlays:** `headline` (`lines`, `in`, `out`, `top`), `touch` (`at`, `to`, `in`, `press`, `hold`, `moveIn`,
+  `moveFor`, `out`), `spotlight` (`rect`, `r`, `pad`, `dim`, `in`, `out`); `out` after `in` (else exit 3).
+- **The look:** `style` (a `screenshot-style.json`: `theme.palette` `background`, `background2`, `ink`,
+  `accent`; `theme.fonts[0]`; `theme.background` of kind `image`), its relative paths found under `styleRoot`,
+  then beside the style and its parents; `theme` over it; `background` over that.
+- **Device frames:** `footage.frame` names store-screenshots' device classes (`phone`, `phone-classic`,
+  `foldable-outer`, `foldable-inner`, `tablet`) or `none`, bezel and radius as fractions of the screen's short side,
+  kept in step with `store-screenshots`' `frames.py` `CLASSES` by hand.
+
+### 11.3 What compose.py works out per frame
+
+`compose.timeline(edit)` returns one entry a frame: `a` (the frame file), `fa` (its footage), `b`/`fb`/`mix` (a
+dissolve's incoming frame), `slide`/`shift` (a slide's progress), `k` (the camera), `pan`, and `spot` (the
+spotlight's hole `{x, y, w, h, r, alpha, dim}` in footage pixels: the rect grown by `pad` + up to 60 px while
+fading in, radius `r + pad`). The page draws headlines, touches and the end card from the time.
+
+### 11.4 Commands
+
+- `compose.py <edit> [--out DIR] [--dry-run] [--frames N,M,...] [--stills] [--json]`: `--dry-run` checks the
+  edit, prints the frame count, length and marks, and warns outside 15-30 s; `--frames` renders only those frames
+  (`--stills`: as `still-<n>.png` to look at); with neither, every frame to `<out>/<name>/NNNNN.jpg`, then ffmpeg
+  (libx264, CRF 12, yuv420p) to `<out>/<name>-master.mp4`. `<out>` defaults to `out/` beside the edit.
+
+Exit codes: 0; 1 (a render or ffmpeg failed); 3 (usage/env: an invalid edit, an unknown mark, keys out of
+order, a missing frame file, a frame number out of range, no Chrome, no ffmpeg for a master).
 
 ## 9. Versioning
 
