@@ -1103,6 +1103,12 @@ the plan names them (create and own dedicated ones by default: `appstores-<devic
   encode to each store's preview spec with ffmpeg (constant frame rate, H.264, a silent audio track when there's
   none, the exact size), and check with ffprobe against the rules' `video` rules. ffmpeg/ffprobe are detected,
   never bundled.
+- `video.py frames <video> <out-dir> [--width W | --size WxH] [--format jpg|png] [--quality N] [--json]
+  [--dry-run]`: every recorded frame, in order, as `frame-00001.<format>` on (an empty folder; existing frames are
+  refused, exit 3), through a two-ffmpeg pipe (decoded once to `rawvideo` rgb24 with `-fps_mode passthrough`, read
+  back as `-f rawvideo -s WxH -r 30 -i -`), so the recording's timestamps play no part. Prints the count and size,
+  a note when the stream's frame count differs, and a note when ffprobe reports a display rotation (the frames
+  are written turned upright; `--size` forces a size, warned when its shape isn't the picture's).
 
 Exit codes as the other skills': 0, 1 (a shot failed or missed with nothing kept), 2 (refused: another capture is
 writing to the same folder), 3 (usage/env).

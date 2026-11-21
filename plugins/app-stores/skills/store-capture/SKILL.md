@@ -195,8 +195,9 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
    (`store-listings`) is next.
 9. **Video (when asked).** `video.py record --from simctl|adb|chrome` on the dedicated device with the status bar
    clean, `video.py encode … --slot <display type>` to that slot's preview size (constant 30 fps, H.264, a silent
-   stereo track when there's none, trimmed with `--start`/`--end`), and `video.py check` against the rules. Then
-   watch it through. Detail: [references/video.md](references/video.md).
+   stereo track when there's none, trimmed with `--start`/`--end`), and `video.py check` against the rules. To
+   edit a simulator recording (hold a beat, cut a pause), `video.py frames` first and edit by frame index, never
+   by its timestamps. Then watch it through. Detail: [references/video.md](references/video.md).
 
 Exit codes: 0; 1 (a shot failed, or was missed or skipped with no previous picture kept; for `check_captures.py`
 and `video.py check`, a problem found); 2 (`capture.py` refused: another capture is writing to the same folder);
@@ -312,6 +313,7 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 | `skipped`: a step the driver can't do | e.g. a `tap` on the `simctl` driver | use a driver that taps (agent, Appium, XCUITest), or reach the screen by launch argument |
 | Half the screen in another language | the app's language was set but the system's wasn't (alerts, keyboard) | set the device language too ([clean-state.md](references/clean-state.md)) |
 | Video rejected: frame rate or audio | variable or 60 fps; no audio track | `video.py encode` (constant 30 fps, silent stereo AAC) |
+| An edit of a simulator recording: a cut lands on the wrong moment, frames are missing, or a squeezed picture | simctl's timestamps don't follow the wall clock and some clash (seeking, `fps=`, `setpts` and the image muxers go wrong or drop frames); a stream stored on its side with a rotation | `video.py frames` and edit by frame index; a squeezed picture: `--size` with the display's shape ([video.md](references/video.md#editing-a-simulator-recording-by-frame-index)) |
 | Exit 3: a tool not found | Xcode, platform-tools, Chrome, ffmpeg, a CLI isn't installed or on `PATH` | install it, or choose another technique |
 
 ## References
@@ -331,7 +333,7 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 | [desktop.md](references/desktop.md) | Mac App Store windows, Windows apps, Steam and itch.io |
 | [engines.md](references/engines.md) | Unity, Godot, Unreal: rendering each picture at its exact size |
 | [importing.md](references/importing.md) | fastlane snapshot and screengrab, xcresult, Maestro, Flutter, Detox, Playwright, a folder |
-| [video.md](references/video.md) | recording, trimming, encoding and checking preview videos |
+| [video.md](references/video.md) | recording, trimming, editing by frame index, encoding and checking preview videos |
 | [clean-state.md](references/clean-state.md) | demo data, the clock, the status bar, locale, appearance, transient UI |
 | [sizes.md](references/sizes.md) | which simulator, emulator or viewport renders which store size natively |
 | [pitfalls.md](references/pitfalls.md) | what went wrong before, and how to avoid it |
