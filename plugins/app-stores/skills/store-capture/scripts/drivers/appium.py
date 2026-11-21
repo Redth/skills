@@ -12,6 +12,11 @@ One session a locale (the language is a session capability): ``POST /session`` w
 ``appium:optionalIntentArguments`` on Android, ``appium:arguments`` on a Mac), ``appium:noReset``, and on a
 simulator ``appium:isHeadless`` (we capture through ``simctl io``, so no Simulator window is needed, and Xcode 27
 moved Simulator.app where XCUITest's driver can't open it); anything in ``target.capabilities`` is added as is.
+On a simulator the session also gets its own WebDriverAgent port (``appium:wdaLocalPort``, 8130-8199) and MJPEG
+port (``appium:mjpegServerPort``, 9130-9199), derived from the plan's device id, never WDA's 8100: another Appium
+server's session on 8100 would otherwise answer ours for its own simulator. A port something else already listens
+on is passed over (a WebDriverAgent is used only when its ``/status`` names our simulator); a port the plan sets is
+kept as it is.
 ``DELETE /session/<id>`` in ``reset``. A session that fails is reported with its own cause; before the next
 screen the simulator is booted again if the failure shut it down, and the session is tried once more.
 
@@ -36,6 +41,7 @@ from __future__ import annotations
 import base64
 import json
 import xml.etree.ElementTree as ET
+import zlib
 
 from . import base
 from .hosted import HostedDriver, type_target
@@ -47,6 +53,36 @@ FAMILY = {"ios": "ios", "ipados": "ios", "tvos": "ios", "visionos": "ios", "watc
 AUTOMATION = {"ios": ("iOS", "XCUITest"), "android": ("Android", "UiAutomator2"), "mac": ("mac", "Mac2"),
               "windows": ("Windows", "Windows")}
 TVOS = ("tvos",)
+
+# An XCUITest session on a simulator: WebDriverAgent's port on this machine and its MJPEG stream's, one of each a
+# plan device (from its id), never WDA's defaults (8100, 9100), which every other Appium server's sessions use.
+WDA_PORTS = (8130, 8199)
+MJPEG_PORTS = (9130, 9199)
+WDA_PORT = "appium:wdaLocalPort"
+MJPEG_PORT = "appium:mjpegServerPort"
+
+
+def derived_port(device_id, ports):
+    """The port in ``ports`` (``(first, last)``) the plan's ``device_id`` maps to: the same on every run and machine
+    (a CRC-32 of the id, not Python's salted ``hash``)."""
+    first, last = ports
+    return first + zlib.crc32(str(device_id).encode("utf-8")) % (last - first + 1)
+
+
+def status_udids(value):
+    """Every string under a key that names a UDID (``udid``, ``deviceUDID``, …) at any depth of a ``/status`` reply,
+    upper-cased."""
+    out = set()
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if "udid" in str(k).lower() and isinstance(v, str) and v.strip():
+                out.add(v.strip().upper())
+            else:
+                out |= status_udids(v)
+    elif isinstance(value, list):
+        for v in value:
+            out |= status_udids(v)
+    return out
 
 
 def _lit(text):
@@ -165,6 +201,8 @@ class AppiumDriver(HostedDriver):
         self.session = None
         self.session_locale = None
         self.session_error = None
+        self.ports = None         # the ports this driver chose for the device's sessions (once a run)
+        self.session_ports = {}   # the WDA and MJPEG ports the last session asked for (the plan's or ours)
 
     def has_own_step(self, kind):
         return kind in ("launch", "deepLink", "hideKeyboard")
@@ -199,8 +237,12 @@ class AppiumDriver(HostedDriver):
             if ok_missing and err in ("no such element", "stale element reference"):
                 return None
             msg = value.get("message") if isinstance(value, dict) else res.text()[:300]
-            raise base.DriverError("Appium %s %s: %s%s" % (method, path, err or res.status,
-                                                           (": " + str(msg).splitlines()[0]) if msg else ""))
+            hint = ""
+            if err == "invalid session id" and self.family(device) == "ios":
+                hint = " (the session is gone: if it had only just started, another simulator's WebDriverAgent " \
+                       "may have answered on its port; see appium.md, running beside other Appium servers)"
+            raise base.DriverError("Appium %s %s: %s%s%s" % (method, path, err or res.status,
+                                                             (": " + str(msg).splitlines()[0]) if msg else "", hint))
         return value
 
     def sid(self):
@@ -269,6 +311,7 @@ class AppiumDriver(HostedDriver):
             caps["appium:noReset"] = True
             if self.host_name(device) == "simctl":
                 caps["appium:isHeadless"] = True
+                caps.update(self.wda_ports(device))
         elif fam == "android":
             if ref:
                 caps["appium:udid"] = ref
@@ -303,6 +346,7 @@ class AppiumDriver(HostedDriver):
         """``POST /session`` for ``locale`` (quitting the one before)."""
         self.quit_session(device)
         caps = self.capabilities_for(device, locale)
+        self.session_ports = dict((k, caps[k]) for k in (WDA_PORT, MJPEG_PORT) if k in caps)
         value = self.wd(device, "POST", "/session", {"capabilities": {"alwaysMatch": caps, "firstMatch": [{}]}},
                         timeout=self.SESSION_TIMEOUT, dry_value={"sessionId": "dry-run", "capabilities": caps})
         sid = (value or {}).get("sessionId")
@@ -310,6 +354,89 @@ class AppiumDriver(HostedDriver):
             raise base.DriverError("Appium gave no session id")
         self.session = sid
         self.session_locale = locale
+
+    # -- WebDriverAgent's ports ----------------------------------------------------------------------------
+
+    def wda_ports(self, device):
+        """``appium:wdaLocalPort`` and ``appium:mjpegServerPort`` for an XCUITest session on a simulator, chosen once
+        a run: each the port the plan's device id maps to (``derived_port``; the same offset in both ranges), else
+        the next one nothing else listens on. One the plan's ``target.capabilities`` sets is left to the plan (as is
+        WDA's port when the plan gives ``appium:webDriverAgentUrl``). *Why:* XCUITest's default is 8100 for every
+        session; with another Appium server's session on it for another simulator, our session's commands went to
+        that simulator ("invalid session id" right after the session started)."""
+        if self.ports is not None:
+            return self.ports
+        planned = (device.get("target") or {}).get("capabilities") or {}
+        offset = derived_port(device.get("id", ""), WDA_PORTS) - WDA_PORTS[0]
+        out = {}
+        if WDA_PORT not in planned and "appium:webDriverAgentUrl" not in planned:
+            out[WDA_PORT] = self.free_port(device, WDA_PORTS, offset, "WebDriverAgent", self.wda_port_taken)
+        if MJPEG_PORT not in planned:
+            out[MJPEG_PORT] = self.free_port(device, MJPEG_PORTS, offset, "the MJPEG stream", self.port_taken)
+        self.ports = out
+        if out:
+            said = ", ".join("%s %d" % ("WebDriverAgent" if k == WDA_PORT else "MJPEG", v) for k, v in out.items())
+            base.note("  this device's own ports (from its id, never WebDriverAgent's 8100): %s%s" % (
+                said, " (a real run first checks nothing else listens on them)" if base.DRY_RUN else ""))
+        return out
+
+    def free_port(self, device, ports, offset, what, taken):
+        """The first port in ``ports`` from ``offset`` on (wrapping) that ``taken`` has no reason against; one passed
+        over is logged and kept in the device's warnings. Nothing is checked in a dry run."""
+        first, last = ports
+        size = last - first + 1
+        passed = []
+        for i in range(size):
+            port = first + (offset + i) % size
+            why = None if base.DRY_RUN else taken(device, port)
+            if not why:
+                if passed:
+                    one = len(passed) == 1
+                    msg = "%s's port%s %s %s taken (%s): using %d" % (
+                        what, "" if one else "s", ", ".join(str(p) for p, _ in passed), "is" if one else "are",
+                        passed[0][1] if one else "; ".join("%d: %s" % (p, w) for p, w in passed[:3]), port)
+                    base.note("  " + msg)
+                    self.warnings.append(msg)
+                return port
+            passed.append((port, why))
+        raise base.DriverError("no free port for %s in %d-%d: %s (set %s in target.capabilities)" % (
+            what, first, last, passed[0][1], WDA_PORT if what == "WebDriverAgent" else MJPEG_PORT))
+
+    def port_taken(self, device, port):
+        """Why ``port`` can't be this device's (something listens on it), or ``None``."""
+        return "something else listens on it" if base.LISTENING(port) else None
+
+    def wda_port_taken(self, device, port):
+        """Why ``port`` can't be this device's WebDriverAgent port, or ``None``: free, or a WebDriverAgent whose
+        ``GET /status`` names this device's simulator. Anything else listening (another simulator's WebDriverAgent,
+        one that doesn't say which simulator it serves, another program) is a reason."""
+        if not base.LISTENING(port):
+            return None
+        try:
+            res = base.http("GET", "http://127.0.0.1:%d/status" % port, timeout=5)
+            data = res.json() if res.body else None
+        except (base.DriverError, ValueError):
+            data = None
+        if not isinstance(data, dict):
+            return "something that isn't a WebDriverAgent listens on it"
+        udids = status_udids(data)
+        ours = str(self.device_ref(device) or "").strip().upper()
+        if ours and ours in udids:
+            return None
+        if udids:
+            return "the WebDriverAgent of another simulator (%s) listens on it" % ", ".join(sorted(udids))
+        return "a WebDriverAgent or server that doesn't say which simulator it serves listens on it (another " \
+               "Appium server's?)"
+
+    def source(self, device):
+        """The host's description of the device, plus the WebDriverAgent and MJPEG ports its sessions asked for
+        (``wdaPort``, ``mjpegPort``)."""
+        out = HostedDriver.source(self, device)
+        if WDA_PORT in self.session_ports:
+            out["wdaPort"] = self.session_ports[WDA_PORT]
+        if MJPEG_PORT in self.session_ports:
+            out["mjpegPort"] = self.session_ports[MJPEG_PORT]
+        return out
 
     def quit_session(self, device):
         """``DELETE /session/<id>`` (errors ignored)."""

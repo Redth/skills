@@ -21,8 +21,11 @@
     --plate-pad, --band-pad               padding around the words on a plate or in a band (u)
     --pair-overlap, --pair-stagger        how two devices overlap (share of a device) and step (share of its height)
 
-  On body: --caption-factor scales the caption's sizePct per aspect class (a landscape slot is shown about three
-  times as big as a portrait one in the stores, so its words need less of its width).
+  On body: --caption-factor scales the caption's sizePct per caption class, body[data-caption-class] (a landscape
+  slot is shown about three times as big as a portrait one in the stores, so its words need less of its width).
+  The caption class is the aspect class, except on an Apple phone slot in portrait: the App Store's search shows
+  every iPhone display type three across, so its captions take the tall factor even when its shape is mid (an
+  iPhone Duo's displays). Its margins and device sizes still go by its shape. A target's captionClass overrides it.
 
   Right-to-left: set.html puts dir and lang on <html> and each slot; everything here uses logical properties or
   is placed by the engine with the direction in mind. Nothing is mirrored but the layout (never the captures).
@@ -64,13 +67,14 @@ body {
   font-synthesis-style: none;   /* a bold may be synthesised for a script whose font has none (Arabic, Thai) */
 }
 
-/* Aspect classes: how much of sizePct a caption gets. With the default 9.5u (floor 7u) on a tall slot: mid about
+/* Caption classes: how much of sizePct a caption gets. With the default 9.5u (floor 7u) on a tall slot: mid about
    6.1u (floor 4.5u), square 8u, wide 4.6u (floor 3.4u). The screenshot-craft measurements: iPad sets 4.2-6.1u,
-   wide games mostly wordless; the search row needs about 9.5u on a tall shot to reach 11 pt. */
-body[data-aspect="tall"] { --caption-factor: 1; }
-body[data-aspect="mid"] { --caption-factor: 0.64; }
-body[data-aspect="square"] { --caption-factor: 0.84; }
-body[data-aspect="wide"] { --caption-factor: 0.48; }
+   wide games mostly wordless; the search row needs about 9.5u on a tall shot to reach 11 pt. An Apple phone slot
+   in portrait is in the tall class whatever its shape (set.html, from render.py). */
+body[data-caption-class="tall"] { --caption-factor: 1; }
+body[data-caption-class="mid"] { --caption-factor: 0.64; }
+body[data-caption-class="square"] { --caption-factor: 0.84; }
+body[data-caption-class="wide"] { --caption-factor: 0.48; }
 
 /* Shadows and hairlines that suit a dark or a light field. */
 body[data-tone="dark"] {

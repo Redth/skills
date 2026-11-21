@@ -30,17 +30,27 @@ fastlane frameit 10% of the width (https://github.com/fastlane/fastlane/blob/ca0
 Koubou "minimum 10vw, recommended 11-14vw" (https://github.com/bitomule/koubou/blob/11c5a12/skills/koubou/design-guide.md).
 Vendor guides that say 56 to 72 px on a 1290-px canvas (4.3 to 5.6u) are half what good sets do: too small in search.
 
-| Aspect class | Starts at | Floor | Shots 1-3 warn under |
+| Caption class | Starts at | Floor | Shots 1-3 warn under |
 |---|---|---|---|
-| tall (iPhone, Play phone) | 9.5u | 7u (about 12 pt on the product page) | 9.5u |
+| tall (iPhone, Play phone, and every Apple phone slot in portrait) | 9.5u | 7u (about 12 pt on the product page) | 9.5u |
 | mid (iPad) | about 6.1u | about 4.5u | 6u |
 | square (Wear) | about 8u | about 5.9u | none |
 | wide (landscape, TV, Mac) | about 4.6u | about 3.4u | 4u |
 
+**Apple phone slots are tall, whatever their shape.** A slot's caption class is its aspect class
+([layouts.md](layouts.md)), with one exception. An App Store target whose size is an iPhone display type
+(`rules/apple.json`'s `phone` slots), in portrait, is in the tall class even when its shape is mid. Examples are
+an iPhone Duo's outer display (1398x2034, 0.69), its inner display (2007x2853, 0.70) and the 3.5-inch iPhone
+(640x960). Search shows these three across, about 118 pt each, like any iPhone shot. At mid's factor their captions
+come out around 7 to 8 pt there. The slot keeps its shape's margins and device size; only the words take the tall
+size. `render.py` and `check.py` decide the class the same way (`scripts/slots.py`), and the render report gives
+each file's `captionClass` beside its `aspectClass`. A target's `captionClass` sets the class itself
+([config.md](config.md)). The search-size check still holds an Apple phone slot to 11 pt whatever its class.
+
 **How the config expresses it:** `caption.sizePct` (theme or style) is the font size it starts at and `floorPct`
-the smallest it may shrink to, both in u on a tall slot; other aspect classes scale them (mid 0.64, square 0.84, wide
-0.48). The defaults are 9.5 and 7. The caption shrinks from one toward the other until it fits in `maxLines` (2), and
-keeps room for two lines at its starting size so the device and the caption's top stay put across the set.
+the smallest it may shrink to, both in u on a tall slot; other caption classes scale them (mid 0.64, square 0.84,
+wide 0.48). The defaults are 9.5 and 7. The caption shrinks from one toward the other until it fits in `maxLines`
+(2), and keeps room for two lines at its starting size so the device and the caption's top stay put across the set.
 
 **How to check it:**
 

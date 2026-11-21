@@ -195,8 +195,9 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
    (`store-listings`) is next.
 9. **Video (when asked).** `video.py record --from simctl|adb|chrome` on the dedicated device with the status bar
    clean, `video.py encode … --slot <display type>` to that slot's preview size (constant 30 fps, H.264, a silent
-   stereo track when there's none, trimmed with `--start`/`--end`), and `video.py check` against the rules. Then
-   watch it through. Detail: [references/video.md](references/video.md).
+   stereo track when there's none, trimmed with `--start`/`--end`), and `video.py check` against the rules. To
+   edit a simulator recording (hold a beat, cut a pause), `video.py frames` first and edit by frame index, never
+   by its timestamps. Then watch it through. Detail: [references/video.md](references/video.md).
 
 Exit codes: 0; 1 (a shot failed, or was missed or skipped with no previous picture kept; for `check_captures.py`
 and `video.py check`, a problem found); 2 (`capture.py` refused: another capture is writing to the same folder);
@@ -311,9 +312,12 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 | Alpha in a PNG | `--mask=alpha`, a window capture's corners, a transparent background | the drivers flatten it and list `alpha-flattened`; fix the source if it recurs |
 | The agent isn't found (DevFlow, Ailoha) | a release build, the port not forwarded, the broker not running | a debug build; the agent's status command; `adb forward` on Android ([devflow.md](references/devflow.md), [ailoha.md](references/ailoha.md)) |
 | Appium: session won't start | server not running, driver not installed, wrong capabilities; "Simulator.app does not exist" | `appium driver list --installed`; `appium:isHeadless` (the default on simulators); capabilities in [appium.md](references/appium.md) |
+| Appium on iOS: "invalid session id" right after the session starts, or a session's commands land on another simulator | another Appium server's WebDriverAgent holds the port our session's was given (8100 by default) and answered for its own simulator | the driver gives each simulator device its own `appium:wdaLocalPort` and `appium:mjpegServerPort` and passes over a taken one (the log and the device's `warnings` say so); a port set in `target.capabilities` is kept as it is, so check it isn't 8100 or another server's ([appium.md](references/appium.md#beside-other-appium-servers)) |
+| The user's Simulator windows closed when an Appium run started | XCUITest's driver closes Simulator.app's windows when a session starts, even headless; their simulators stay booted | tell the user (before the first run, ideally); don't touch their simulators to bring the windows back |
 | `skipped`: a step the driver can't do | e.g. a `tap` on the `simctl` driver | use a driver that taps (agent, Appium, XCUITest), or reach the screen by launch argument |
 | Half the screen in another language | the app's language was set but the system's wasn't (alerts, keyboard) | set the device language too ([clean-state.md](references/clean-state.md)) |
 | Video rejected: frame rate or audio | variable or 60 fps; no audio track | `video.py encode` (constant 30 fps, silent stereo AAC) |
+| An edit of a simulator recording: a cut lands on the wrong moment, frames are missing, or a squeezed picture | simctl's timestamps don't follow the wall clock and some clash (seeking, `fps=`, `setpts` and the image muxers go wrong or drop frames); a stream stored on its side with a rotation | `video.py frames` and edit by frame index; a squeezed picture: `--size` with the display's shape ([video.md](references/video.md#editing-a-simulator-recording-by-frame-index)) |
 | Exit 3: a tool not found | Xcode, platform-tools, Chrome, ffmpeg, a CLI isn't installed or on `PATH` | install it, or choose another technique |
 
 ## References
@@ -333,7 +337,7 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 | [desktop.md](references/desktop.md) | Mac App Store windows, Windows apps, Steam and itch.io |
 | [engines.md](references/engines.md) | Unity, Godot, Unreal: rendering each picture at its exact size |
 | [importing.md](references/importing.md) | fastlane snapshot and screengrab, xcresult, Maestro, Flutter, Detox, Playwright, a folder |
-| [video.md](references/video.md) | recording, trimming, encoding and checking preview videos |
+| [video.md](references/video.md) | recording, trimming, editing by frame index, encoding and checking preview videos |
 | [clean-state.md](references/clean-state.md) | demo data, the clock, the status bar, locale, appearance, transient UI |
 | [sizes.md](references/sizes.md) | which simulator, emulator or viewport renders which store size natively |
 | [pitfalls.md](references/pitfalls.md) | what went wrong before, and how to avoid it |

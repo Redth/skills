@@ -626,8 +626,8 @@ Beside `store-listing.json` usually; paths relative to it. Plain JSON, schema in
   shows it at (never upscaled past 1.0; the check says when it would be).
 - **Targets** are the output screens: each one's id is the `screens` name `store-listing.json` uses, `width`×`height`
   its exact pixels, `store` which store's rules apply, `capture` which capture device feeds it, optional overrides
-  (`frame`, `layout`, `caption`). Output: `<out>/<locale>/<target id>/<shot id>.png` — exactly the folder layout
-  `store-listings` reads.
+  (`frame`, `layout`, `caption`, `captionClass`: §8.3). Output: `<out>/<locale>/<target id>/<shot id>.png` —
+  exactly the folder layout `store-listings` reads.
 - **Shots** are the ordered set: `capture` (the capture screen id), `layout`, `caption` and `kicker`/`proof` (string
   keys), `targets` (null = all), layout options (`tilt`: `left`|`right`, `callout`: rect as fractions of the capture
   and a scale, `pair`: a second capture, `at`: `top`|`bottom` for `fullbleed`).
@@ -642,6 +642,12 @@ Beside `store-listing.json` usually; paths relative to it. Plain JSON, schema in
 
 `--u` is 1% of the slot's width. Aspect classes: `tall` (< 0.6 w/h), `mid` (0.6–0.85), `square` (0.85–1.2), `wide`
 (> 1.2); each layout's CSS has rules per class (`[data-aspect="tall"]` etc.), so one design renders every size.
+The caption's factor on `sizePct`/`floorPct` (tall 1, mid 0.64, square 0.84, wide 0.48) goes by the slot's caption
+class (`[data-caption-class]`, the job's `slot.captionClass`). That's its aspect class, except that an App Store
+target sized as an iPhone display type (`rules/apple.json`'s `phone` slots), in portrait, is `tall` whatever its
+shape: search shows it three across. A target's `captionClass` overrides it. `scripts/slots.py` decides it for
+`render.py` and `check.py` alike. The report gives each file's `aspectClass` and `captionClass`, and the drift
+check reports a changed caption class whatever the tolerances.
 
 | Layout | What it is |
 |---|---|
@@ -663,7 +669,8 @@ Beside `store-listing.json` usually; paths relative to it. Plain JSON, schema in
   "version": 1, "renderedAt": "…", "config": "store-screenshots.json", "inputsSha256": "…",
   "files": [
     { "path": "en-US/iphone/plan.png", "locale": "en-US", "target": "iphone", "store": "apple", "shot": "plan",
-      "layout": "hero", "width": 1320, "height": 2868, "captureFallback": false, "stringFallback": false,
+      "layout": "hero", "width": 1320, "height": 2868, "aspectClass": "tall", "captionClass": "tall",
+      "captureFallback": false, "stringFallback": false,
       "caption": { "text": "Plan a week of meals in minutes", "lines": 2, "fontPx": 105.6, "floorPx": 79.2,
                    "atFloor": false, "fits": true, "box": [x, y, w, h], "textShare": 0.11,
                    "missingGlyphs": [] },
@@ -1043,6 +1050,15 @@ creates an AVD (and in `--dry-run`) it checks the `systemImage` is installed the
 naming that SDK and the SDK folders that have it (`$ANDROID_SDK_ROOT`, `$ANDROID_HOME`, the usual default places);
 the emulator gets `ANDROID_SDK_ROOT` when only `ANDROID_HOME` is set.
 
+**Appium's WebDriverAgent port**: an XCUITest session on a simulator asks for the device's own
+`appium:wdaLocalPort` (8130-8199) and `appium:mjpegServerPort` (9130-9199), the same offset in both, derived from
+the plan's device id (CRC-32), never WebDriverAgent's default 8100; chosen once a run, before the first session.
+A port something already listens on (`base.LISTENING`, 127.0.0.1) is passed over for the next in the range, logged
+and kept in the device's warnings, unless it's a WebDriverAgent whose `GET /status` names the device's own
+simulator; one that names another, or none, is passed over. A port `target.capabilities` sets is kept unchecked;
+with `appium:webDriverAgentUrl` no WDA port is set. The report's `devices` entry carries them as `source.wdaPort`
+and `source.mjpegPort`; `--dry-run` prints them.
+
 **Network**: drivers talk only to the local machine (simulators, emulators, devices over adb, a local Appium
 server, the in-app agents on loopback ports). Nothing reaches the internet.
 
@@ -1066,7 +1082,8 @@ device's size — and `<out>/capture-report.json`:
 
 `app` is the app this run captured (git's, of `appSource.repo`; `builds` from an iOS-family `.app`'s `Info.plist`),
 left out when the app isn't in a git checkout; each taken shot's `appRevision` is the commit it was taken at, so a
-partial run's kept entries keep theirs. A run warns when the app moved since the shots the report keeps.
+partial run's kept entries keep theirs. `devices` lists each device's `id`, `driver`, `source` (an Appium
+simulator's with `wdaPort` and `mjpegPort`) and `warnings`. A run warns when the app moved since the shots the report keeps.
 
 Adapters write into a temp folder and move files into place at the end. A run keeps the report's earlier entries
 for plan items it didn't run (filters) and drops those the plan no longer has (removed or omitted), naming them in
@@ -1109,6 +1126,12 @@ the plan names them (create and own dedicated ones by default: `appstores-<devic
   encode to each store's preview spec with ffmpeg (constant frame rate, H.264, a silent audio track when there's
   none, the exact size), and check with ffprobe against the rules' `video` rules. ffmpeg/ffprobe are detected,
   never bundled.
+- `video.py frames <video> <out-dir> [--width W | --size WxH] [--format jpg|png] [--quality N] [--json]
+  [--dry-run]`: every recorded frame, in order, as `frame-00001.<format>` on (an empty folder; existing frames are
+  refused, exit 3), through a two-ffmpeg pipe (decoded once to `rawvideo` rgb24 with `-fps_mode passthrough`, read
+  back as `-f rawvideo -s WxH -r 30 -i -`), so the recording's timestamps play no part. Prints the count and size,
+  a note when the stream's frame count differs, and a note when ffprobe reports a display rotation (the frames
+  are written turned upright; `--size` forces a size, warned when its shape isn't the picture's).
 
 Exit codes as the other skills': 0, 1 (a shot failed or missed with nothing kept), 2 (refused: another capture is
 writing to the same folder), 3 (usage/env).

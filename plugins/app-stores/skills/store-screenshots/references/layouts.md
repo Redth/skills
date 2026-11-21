@@ -16,6 +16,10 @@ Store sets used the pattern on 2026-11-14: a picture of what's current, not of w
   | `square` | 0.85 to 1.2 | Wear OS (1:1) |
   | `wide` | over 1.2 | landscape phones and tablets, Mac 16:10, TV 16:9, XR 8:5 |
 
+  The class sets the margins and the device's size. The caption's size goes by its caption class, which is the
+  same but for Apple phone slots in portrait: those take `tall`'s caption size whatever their shape
+  ([legibility.md](legibility.md)).
+
 - **Overrides,** most specific first: a target's `layouts` entry for the shot, then the target's
   `layout`/`frame`/`caption`, then `stores.<store>`, then the shot, then the theme. So "framed-bleed on Apple, band on Play" is one shot with `"stores": { "google": { "frame":
   "none" } }`, and a shot that won't read on a tablet can change layout for that target alone.

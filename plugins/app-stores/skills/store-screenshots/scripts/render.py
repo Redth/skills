@@ -42,6 +42,7 @@ from appstores_lib import jsonio  # noqa: E402
 from appstores_lib import png  # noqa: E402
 from appstores_lib import schema  # noqa: E402
 import frames  # noqa: E402
+import slots  # noqa: E402
 import styles  # noqa: E402
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -106,14 +107,15 @@ def is_rtl(locale):
 
 def aspect_class(width, height):
     """The aspect class a slot falls in: tall (w/h < 0.6), mid (0.6-0.85), square (0.85-1.2) or wide (> 1.2)."""
-    a = width / float(height)
-    if a < 0.6:
-        return "tall"
-    if a < 0.85:
-        return "mid"
-    if a <= 1.2:
-        return "square"
-    return "wide"
+    return slots.aspect_class(width, height)
+
+
+def caption_class(target):
+    """``(class, why)``: the class whose caption factor a target's captions take (slots.py): its aspect class, a
+    tall slot's on an Apple phone slot in portrait (search shows it three across like any iPhone's), or the
+    target's ``captionClass``."""
+    return slots.caption_class(target["store"], target["width"], target["height"],
+                               override=target.get("captionClass"))
 
 
 def _dir_digest(folder):
@@ -594,10 +596,10 @@ class Resolver:
         fallbacks = {"captures": [], "strings": []}
         theme = self.theme_job(files, target)
         members = group if group else [shot]
-        slots = []
+        page_slots = []
         for s in members:
             fb = {"captures": [], "strings": []} if s is not shot else fallbacks
-            slots.append(self.slot(locale, target_id, s, files, fb))
+            page_slots.append(self.slot(locale, target_id, s, files, fb))
         panorama = None
         if group:
             panorama = {"count": len(group), "seam": pano.get("seam", 6) if pano.get("seam") is not None else 6,
@@ -607,18 +609,25 @@ class Resolver:
                 files.append(p)
                 panorama["background"] = file_url(p)
         index = members.index(shot)
+        cap_class, why = caption_class(target)
         job = {"version": 1, "index": index, "lang": locale, "dir": "rtl" if is_rtl(locale) else "ltr",
-               "slot": {"width": target["width"], "height": target["height"]},
-               "theme": theme, "panorama": panorama, "slots": slots}
+               "slot": {"width": target["width"], "height": target["height"], "captionClass": cap_class},
+               "theme": theme, "panorama": panorama, "slots": page_slots}
         # Every config value the file depends on, as written: the target (its frame, device, layouts...), its
         # store's overrides, the shots drawn on the page, the theme and the panorama. A change to any of them renders
         # the file again even when it draws the same job (render.py's cache keys on this too).
         config_view = {"target": target, "store": self.stores.get(target["store"]), "theme": self.theme,
                        "shots": [s for s in members], "panorama": pano if group else None}
+        notes = list(page_slots[index].get("notes") or [])
+        if why == "apple-phone" and page_slots[index]["caption"]:
+            notes.append("captions sized as a tall slot's, not a %s one's: Apple's search shows every iPhone "
+                         "display type three across (a target's captionClass overrides it)"
+                         % aspect_class(target["width"], target["height"]))
         return {"job": job, "files": sorted(set(files)), "fallbacks": fallbacks, "configView": config_view,
-                "layout": slots[index]["layout"], "capturePath": slots[index]["capturePath"],
-                "role": shot.get("role"), "tilt": slots[index]["tilt"] if slots[index]["layout"] == "tilt" else None,
-                "notes": slots[index].get("notes") or []}
+                "layout": page_slots[index]["layout"], "capturePath": page_slots[index]["capturePath"],
+                "role": shot.get("role"), "captionClass": cap_class,
+                "tilt": page_slots[index]["tilt"] if page_slots[index]["layout"] == "tilt" else None,
+                "notes": notes}
 
     def inputs_hash(self, unit, templates_digest):
         """The hash of everything that goes into one file: the job (with each file's path replaced by its
@@ -687,6 +696,7 @@ def file_entry(unit, page, out_path, inputs):
         "shot": unit["shot"], "role": unit.get("role"), "layout": unit["layout"], "tilt": unit.get("tilt"),
         "width": unit["width"], "height": unit["height"],
         "aspectClass": aspect_class(unit["width"], unit["height"]),
+        "captionClass": unit.get("captionClass") or aspect_class(unit["width"], unit["height"]),
         "capture": unit["capturePath"],
         "captureFallback": bool(fb["captures"]) and unit["capturePath"] in fb["captures"],
         "stringFallback": bool(fb["strings"]),
@@ -776,7 +786,8 @@ def run(config_path, locales=None, targets=None, shots=None, out=None, force=Fal
         if (not force and old and old.get("inputsSha256") == u["inputs"] and os.path.isfile(out_path)
                 and old.get("sha256") == png.sha256(out_path) and not old.get("errors")):
             fresh = dict(old)
-            fresh.update({"role": u.get("role"), "tilt": u.get("tilt"), "background": u["background"]})
+            fresh.update({"role": u.get("role"), "tilt": u.get("tilt"), "background": u["background"],
+                          "captionClass": u.get("captionClass")})
             entries[u["path"]] = fresh
             continue
         todo.append(u)

@@ -127,6 +127,7 @@ Each target is one output screen: one set of files per locale.
 | `capture` | the capture device id whose captures feed it |
 | `device` (optional) | the device class its drawn frames take when the capture's shape doesn't say: `foldable-inner` for a foldable's inner display, `foldable-outer`, `phone-classic`... ([frames.md](frames.md)) |
 | `slot` (optional, Google) | the Play slot it fills when `store-listing.json` doesn't say |
+| `captionClass` (optional) | `tall`, `mid`, `square` or `wide`: whose caption size its captions take (the factor on `sizePct` and `floorPct`). By default this is its aspect class, except that an Apple phone slot in portrait is `tall` whatever its shape (an iPhone Duo's displays: [legibility.md](legibility.md)). Its margins and device size still follow its shape. `"mid"` keeps the size an iPhone Duo target had before. The search-size check still warns if that's under 11 pt in search |
 | `hero` (optional) | the hero's mark on this target alone, over `theme.hero` key by key: `{ "widthPct": 24 }` on a landscape slot |
 | `layouts` (optional) | a shot's layout on this target alone, by shot id: `{ "plan": "fold" }` folds shot `plan` on a foldable's target while it stays `framed-bleed` elsewhere. Beats every other layout setting |
 | `frame`, `layout`, `caption` (optional) | overrides for this target alone: e.g. `"frame": "tablet"` on an iPad, `"caption": false` on Play's tablets |
@@ -184,7 +185,8 @@ goes to, or give a store its own key through a separate shot.
   the hash of each file's inputs; `render.py --force` renders everything again.
 - `<out>/sheets/*.png` (from `sheet.py --png`): the mock-ups and the contact sheet; `compare-<target>.png` from
   `sheet.py --compare` (against a previous render, the baseline, or the live set's pictures).
-- Per file the report also gives `uiShare` (the share of the slot showing the app's screen), the frame's `class`,
+- Per file the report also gives `aspectClass` (what its margins and device size follow), `captionClass` (what its
+  caption size follows), `uiShare` (the share of the slot showing the app's screen), the frame's `class`,
   `screenRadius` and `corners` (what its rounded corners would have cut, and the radius used), a fold's `fold`, a
   maker's art's `art` (its scale, its fit, where its screen came from), and `notes` (a hero that's another layout on
   Play, buttons left off an Apple frame).

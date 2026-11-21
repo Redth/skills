@@ -223,6 +223,16 @@ happen to any app.
   through the CLI, retry a command another client turned away, and say so when one holds the lease.
 - **A .NET Debug APK that won't start.** Fast Deployment leaves the assemblies out of the APK; `adb install` then
   gives an app that crashes on start. Build with `-p:EmbedAssembliesIntoApk=true`.
+- **Another Appium server's WebDriverAgent answered our session.** XCUITest's driver puts every session's
+  WebDriverAgent on port 8100 unless told otherwise. In a real trial another project's Appium server held 8100 for
+  its own simulator: our `POST /session` went to that WebDriverAgent, the next `mobile: terminateApp` failed with
+  "invalid session id: Session does not exist", and our app commands were sent into someone else's simulator. The
+  driver now gives each simulator device its own `appium:wdaLocalPort` (8130-8199) and `appium:mjpegServerPort`
+  (9130-9199) from its id, and passes over a port another WebDriverAgent or program holds
+  ([appium.md](appium.md#beside-other-appium-servers)). Setting them by hand in `target.capabilities` works too.
+- **Appium closes the Simulator windows.** Starting an XCUITest session closes Simulator.app's windows, even with
+  `appium:isHeadless`: the user's own simulators stay booted, but their windows close. Tell the user before the
+  first Appium run on iOS; it isn't something to fix by touching their simulators.
 - **Simulator.app moved** (Xcode 27): Appium's XCUITest driver failed to open it; `appium:isHeadless` (the default
   on simulators now) avoids it. A failed session also left the simulator shut down, and the next screens failed
   with "device is not booted": the driver now boots it again and reports the session's own error.
