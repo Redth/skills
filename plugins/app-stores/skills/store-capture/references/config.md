@@ -407,6 +407,7 @@ Written to `<out>/capture-report.json` after every run.
 | `warnings` | what a person should look at (a screen that didn't settle, a wait that couldn't see elements, a field `fill` typed that's out of sight for its `verify`) |
 | `panes` | what each scroll's `in` scrolled where it wasn't the element named: its nearest scrolling ancestor, or the element itself when nothing around it scrolls ([scrolling in a pane](#scrolling-in-a-pane)); left out when there's nothing to say |
 | `source` | what produced it (device type and runtime, AVD and API level, browser) |
+| `recording` | with `capture.py --record`, the screen's steps recorded: `path` (`<locale>/<device>/<screen>.mov` from a simulator, `.mp4` from Android, beside the picture), `seconds` (from its start to the stop), `by` (`simctl recordVideo`, `adb screenrecord`), `from` (the step it started at: the first `launch`), `display` (when the device has more than one), `flush` (`{"by": "status bar battery 99%", "at": 21.4}`: the moment's change that flushed a simulator's last frames, that many seconds in: `video.py encode … --end 21.4`; `null` on Android, or where there's no status bar). Left out without `--record`, and when the shot isn't taken |
 | `appRevision` | the app's commit when this shot was taken (a taken shot, when the app is in a git checkout): what `--changes` starts from |
 
 Each PNG is exactly its device's `width`×`height`, 8-bit RGB (no alpha, no `tRNS`), sRGB, not interlaced. Files are
@@ -426,6 +427,14 @@ on a device), naming them in `notes`.
   run. It never deletes one the plan names by UDID, serial or AVD name.
 - `capture.py --inspect`: also save each screen's UI tree (after its steps, or where they stopped) to
   `<out>/.inspect/<locale>/<device>/<screen>.txt`, for writing steps and `verify`.
+- `capture.py --record`: also record each screen's steps, for a preview video: from just before its first `launch`
+  (after the device is prepared, any seed, and any reboot a locale change needs) until a second after its last
+  step, stopped before its `verify`, the screenshot and the reset, to `<out>/<locale>/<device>/<screen>.mov`
+  (simulators: `simctl io recordVideo` on the display the screenshots take, its last frames flushed by a moment's
+  status bar change) or `.mp4` (Android: `screenrecord`, pulled after; 180 s at most). Devices whose driver has no
+  simulator or Android device under it (`chrome`, `macos`, a Mac or Windows app, `target.host: "none"`) are refused
+  before anything runs (exit 3). The report's `recording` says where, how long and where to trim
+  ([video.md](video.md#recording-a-screens-steps-capturepy---record)).
 - `capture.py --write-staging`: write `staging.md` from the plan, and stop.
 - `capture.py --changes [revision]`: what changed in the app since the last capture (the oldest `appRevision` the
   report keeps, or `revision`: a commit, tag or branch), in `appSource.paths` and the screens' `sources`

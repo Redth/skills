@@ -193,11 +193,17 @@ The scripts are in this skill's `scripts/` folder; run them with `python3`, from
    as its captures. Captures to send as they are: name the plan's devices as `store-listing.json`'s screens and
    its screens as the shots, and the folder is the listing's screenshots folder; `listing.py check`
    (`store-listings`) is next.
-9. **Video (when asked).** `video.py record --from simctl|adb|chrome` on the dedicated device with the status bar
-   clean, `video.py encode … --slot <display type>` to that slot's preview size (constant 30 fps, H.264, a silent
-   stereo track when there's none, trimmed with `--start`/`--end`), and `video.py check` against the rules. To
-   edit a simulator recording (hold a beat, cut a pause), `video.py frames` first and edit by frame index, never
-   by its timestamps. Then watch it through. Detail: [references/video.md](references/video.md).
+9. **Video (when asked).** Record the screen whose steps show the moments: `capture.py --record --devices <one>
+   --screens <it>` records them on the dedicated device, staged and with the status bar clean, from its first
+   `launch` (after any reboot) to a second after its last step, before the verify and the reset, to
+   `<out>/<locale>/<device>/<screen>.mov` (a simulator) or `.mp4` (Android); the steps' `wait`s set the pacing. Not
+   `video.py record --during "capture.py …"`: preparing reboots the simulator and the reset shuts it down, ending
+   the recording. To edit a simulator recording (hold a beat, cut a pause), `video.py frames` first and edit by
+   frame index, never by its timestamps. Then `video.py encode … --slot <display type> --end <recording.flush.at>`
+   (the report's: a simulator's recording ends on a moment's status bar change that flushed its last frames) to
+   that slot's preview size (constant 30 fps, H.264, a silent stereo track when there's none, trimmed with
+   `--start`/`--end`), and `video.py check` against the rules. A web page: `video.py record --from chrome`. Then
+   watch it through. Detail: [references/video.md](references/video.md).
 
 Exit codes: 0; 1 (a shot failed, or was missed or skipped with no previous picture kept; for `check_captures.py`
 and `video.py check`, a problem found); 2 (`capture.py` refused: another capture is writing to the same folder);
@@ -316,6 +322,8 @@ and `video.py check`, a problem found); 2 (`capture.py` refused: another capture
 | The user's Simulator windows closed when an Appium run started | XCUITest's driver closes Simulator.app's windows when a session starts, even headless; their simulators stay booted | tell the user (before the first run, ideally); don't touch their simulators to bring the windows back |
 | `skipped`: a step the driver can't do | e.g. a `tap` on the `simctl` driver | use a driver that taps (agent, Appium, XCUITest), or reach the screen by launch argument |
 | Half the screen in another language | the app's language was set but the system's wasn't (alerts, keyboard) | set the device language too ([clean-state.md](references/clean-state.md)) |
+| The recording ends early, is empty, or misses the last moment | `video.py record --during "capture.py …"`: preparing rebooted the simulator for its language and the reset shut it down, ending the recording; or simctl held the settled last frames back (it writes a frame only on a change) | `capture.py --record` (from the first `launch`, after the reboot, to before the reset; it flushes the last frames with a moment's status bar change: trim at the report's `recording.flush.at`); the iPhone Duo's display is the screenshots' (`target.display`) ([video.md](references/video.md#recording-a-screens-steps-capturepy---record)) |
+| Exit 3: "--record can't record on …" | the device has no simulator or Android device under it (Chrome, a Mac app, `target.host: "none"`) | leave it out (`--devices`); a web page: `video.py record --from chrome` |
 | Video rejected: frame rate or audio | variable or 60 fps; no audio track | `video.py encode` (constant 30 fps, silent stereo AAC) |
 | An edit of a simulator recording: a cut lands on the wrong moment, frames are missing, or a squeezed picture | simctl's timestamps don't follow the wall clock and some clash (seeking, `fps=`, `setpts` and the image muxers go wrong or drop frames); a stream stored on its side with a rotation | `video.py frames` and edit by frame index; a squeezed picture: `--size` with the display's shape ([video.md](references/video.md#editing-a-simulator-recording-by-frame-index)) |
 | Exit 3: a tool not found | Xcode, platform-tools, Chrome, ffmpeg, a CLI isn't installed or on `PATH` | install it, or choose another technique |
