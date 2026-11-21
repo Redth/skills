@@ -485,15 +485,21 @@ class AppiumDriver(HostedDriver):
             {"type": "pointer", "id": "finger1", "parameters": {"pointerType": "touch"}, "actions": acts}]})
         self.wd(ctx.device, "DELETE", self.sid() + "/actions")
 
+    TYPES_AT_A_RATE = True
+    SCROLL_SWIPES = True
+
     def step_type(self, ctx, value):
         """``/element/<id>/value`` into the element beside ``text`` (``id``/``label``/``xpath``, or ``into``: the
-        field showing that text), else into the focused one (``/element/active``)."""
+        field showing that text), else into the focused one (``/element/active``). With ``rate`` (keys a second), one
+        ``/element/<id>/value`` a character, paced: XCUITest and UiAutomator2 both add to what the field holds, so a
+        recording shows each key land and the value appear a character at a time."""
         if isinstance(value, str):
             value = {"text": value}
         value = value or {}
         text = value.get("text")
         if text is None:
             raise base.StepFailed("step %d: type needs text" % ctx.index)
+        rate = self.rate_of(ctx, value)
         target = type_target(value)
         if base.element_query(target):
             ref = self.ref(ctx, target)
@@ -502,7 +508,25 @@ class AppiumDriver(HostedDriver):
             ref = (active or {}).get(W3C_ELEMENT) or (active or {}).get("ELEMENT")
             if not ref:
                 raise base.StepFailed("step %d: nothing has focus to type into" % ctx.index)
+        if rate:
+            base.note("  typing %r key by key, %g a second" % (str(text), rate))
+            for n, key in enumerate(str(text)):
+                if n:
+                    base.sleep(1.0 / rate)
+                self.wd(ctx.device, "POST", self.sid() + "/element/%s/value" % ref, {"text": key})
+            return
         self.wd(ctx.device, "POST", self.sid() + "/element/%s/value" % ref, {"text": str(text)})
+
+    def editable(self, ctx, query, element):
+        """The element's own type, else its tag name from the server (``GET /element/<id>/name``: XCUITest's
+        ``XCUIElementTypeTextField``, UiAutomator2's ``android.widget.EditText``)."""
+        if base.Driver.editable(self, ctx, query, element):
+            return True
+        ref = element.attrs.get("ref") if element is not None else None
+        if not ref or base.DRY_RUN:
+            return False
+        name = self.wd(ctx.device, "GET", self.sid() + "/element/%s/name" % ref, ok_missing=True)
+        return base.is_editable(name)
 
     def window(self, ctx):
         """The window's rectangle (``/window/rect``) as ``(left, top, width, height)``."""

@@ -380,14 +380,27 @@ class ChromeDriver(base.Driver):
         self.click(r["x"], r["y"])
         self.frames()
 
+    TYPES_AT_A_RATE = True
+
     def step_type(self, ctx, value):
-        """Focus the named field (if any), then insert the text."""
+        """Focus the named field (if any), then insert the text; with ``rate`` (keys a second), a character at a
+        time, paced."""
         query = base.step_element("type", value)
         target = {query[0]: query[1], "timeout": value.get("timeout")} if query else None
+        rate = self.rate_of(ctx, value)
         if target:
             query = self._target(ctx, target, "type into")
             self.locate(query, scroll=True, focus=True)
-        self.cdp("Input.insertText", {"text": value["text"]})
+        text = str(value["text"])
+        if rate:
+            base.note("  typing %r key by key, %g a second" % (text, rate))
+            for n, key in enumerate(text):
+                if n:
+                    base.sleep(1.0 / rate)
+                self.cdp("Input.insertText", {"text": key})
+            self.frames()
+            return
+        self.cdp("Input.insertText", {"text": text})
         self.frames()
 
     def step_scroll(self, ctx, value):

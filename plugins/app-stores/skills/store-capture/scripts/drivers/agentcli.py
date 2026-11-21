@@ -606,10 +606,15 @@ class AgentCliDriver(HostedDriver):
         if text is None:
             raise base.StepFailed("step %d: type needs text" % ctx.index)
         query = base.element_query(type_target(value))
+        if query is None and self.host_has(ctx.device, "type"):
+            # the host types into what has focus, key by key where it can (adb)
+            typed = {"text": text}
+            if value.get("rate") is not None:
+                typed["rate"] = value["rate"]
+            self.host(ctx.device).step_type(ctx, typed)
+            return
+        self.rate_of(ctx, value)        # the agent's fill puts a value in at once: a rate is left out, with a warning
         if query is None:
-            if self.host_has(ctx.device, "type"):
-                self.host(ctx.device).step_type(ctx, {"text": text})
-                return
             raise base.StepFailed("step %d: %s fills an element: give type an id (or css/xpath) beside its text"
                                   % (ctx.index, self.NAME))
         args = self.finder_args(query) if query[0] in ("id", "text") else None

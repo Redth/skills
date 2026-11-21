@@ -928,12 +928,13 @@ skills/store-capture/
 - **Devices** promise an exact `width`×`height` (from the store's rules); a capture that comes out any other size is
   `failed`, never resized. `driver` picks the technique; `target` is the driver's own settings.
 - **Screens** are reached by **steps**, run in order, then a screenshot. Step kinds: `launch` (`args`, `env`,
-  `clean`: reinstall/clear data first), `deepLink` (a URL), `url` (web), `tap`, `type` (`text`, optional target),
+  `clean`: reinstall/clear data first), `deepLink` (a URL), `url` (web), `tap`, `type` (`text`, optional target, optional `rate`: keys a second, typed key by key where the driver can, else left out with a warning),
   `wait` (`ms`, or an element to appear, with `timeout`), `scroll` (`to` an element, looked for one way then the
   other until the content stops moving, or `"top"`/`"bottom"`; or a `direction`; `in` an element: a pane scrolled
   within, not the screen's middle: the scroll view or anything inside it, whose nearest scrolling ancestor (a dump's
   or page source's `scrollable="true"`, a scroll view's type in a tree without that, the page's overflow container)
-  is what's scrolled, else the element itself, said in the report's `panes` and kept for the screen's later scrolls
+  is what's scrolled, else the element itself (but never a text field on a driver that swipes: the screen then, with
+  a warning), said in the report's `panes` and kept for the screen's later scrolls
   once the element named is out of sight; on iOS through Appium a quick `mobile: swipe`, never a direction-only `mobile:
   scroll`, whose opening press can land on a field and reopen the keyboard), `back`,
   `swipe`, `flow` (a Maestro flow or a UI test name, run by the driver that understands it), `script` (a command
@@ -948,7 +949,7 @@ skills/store-capture/
   last a `tap` on something neutral; still up, the step fails naming each try), `unfocus` (clear a text field's
   focus so no caret blinks: `tap` first if given, then Android's Escape only while the dump shows a focused field,
   failing if the screen changed; the web's `blur()`), `fill` (a form's fields typed in one step: a list of
-  `{field, text}` (`field` an element or an id), or `{fields, in, keyboard, unfocus, scrollTo}`: each field
+  `{field, text, rate?}` (`field` an element or an id), or `{fields, in, keyboard, unfocus, scrollTo, rate}`: each field
   scrolled into view both ways within `in` and typed, the keyboard closed before the next on Android; then the
   keyboard closed, the focus cleared and, with `scrollTo`, the form scrolled back, with a warning for each field the
   screen's `verify` names that's out of sight then (a `verify` sees only what's on screen); nothing submitted). Any step may carry a `name`. Elements are found by `id` (accessibility identifier / automation id /

@@ -530,6 +530,42 @@ def fill_fields(value):
     return out
 
 
+def typing_rate(value):
+    """A ``type``'s (or a fill field's) ``rate`` as keys a second, or ``None`` (the value goes in at once). Raises
+    ``ValueError`` for anything but a number above 0."""
+    rate = value.get("rate") if isinstance(value, dict) else None
+    if rate is None:
+        return None
+    if isinstance(rate, bool) or not isinstance(rate, (int, float)) or rate <= 0:
+        raise ValueError("rate is keys a second: a number above 0, not %r" % (rate,))
+    return float(rate)
+
+
+def fill_rates(value):
+    """Each of a ``fill``'s fields' typing ``rate`` (its own, else the fill's; ``None`` for at once), in the order of
+    ``fill_fields``."""
+    opts = fill_options(value)
+    default = opts.get("rate")
+    return [entry.get("rate", default) if isinstance(entry, dict) else default for entry in opts.get("fields") or []]
+
+
+# What an editable text field is called in each UI tree (iOS and the Mac, Android, the web, Windows, the in-app
+# agents' frameworks): a swipe on one taps it, focusing it and bringing the keyboard back.
+EDITABLE_TYPES = ("XCUIElementTypeTextField", "XCUIElementTypeSecureTextField", "XCUIElementTypeTextView",
+                  "XCUIElementTypeSearchField", "android.widget.EditText", "android.widget.AutoCompleteTextView",
+                  "android.widget.MultiAutoCompleteTextView", "input", "textarea", "Edit", "TextBox", "Entry",
+                  "Editor", "SearchBar", "TextField", "SecureField", "TextEditor")
+
+
+def is_editable(name):
+    """True when ``name`` (an element's type, class or tag) is an editable text field."""
+    if not name:
+        return False
+    name = str(name)
+    short = name.rsplit(".", 1)[-1]
+    return name in EDITABLE_TYPES or short in EDITABLE_TYPES or name.lower() in ("input", "textarea")
+
+
 def step_elements(kind, value):
     """Every element a step names, as ``(finder, wanted)``: its own (``step_element``), a scroll's ``in``, a
     ``fill``'s fields, its ``in`` and ``scrollTo``, and the ``done`` and ``tap`` a ``hideKeyboard``, ``unfocus`` or a
@@ -1841,6 +1877,7 @@ class Driver(object):
             raise StepFailed("step %d: fill has no fields" % ctx.index)
         within = opts.get("in")
         android = ctx.device.get("platform") == "android"
+        rates = fill_rates(opts)
         for n, (query, text) in enumerate(fields, 1):
             where = "step %d (fill, field %d: %s)" % (ctx.index, n, describe_query(query))
             note("  fill %d: %s <- %r" % (n, describe_query(query), text))
@@ -1852,7 +1889,10 @@ class Driver(object):
                         note("  the keyboard didn't close before the next field: %s" % str(e)[:160])
                 if "scroll" in self.STEPS:
                     self.bring_into_view(ctx, query, within)
-                self.step_type(ctx, {query[0]: query[1], "text": text})
+                typed = {query[0]: query[1], "text": text}
+                if rates[n - 1] is not None:
+                    typed["rate"] = rates[n - 1]
+                self.step_type(ctx, typed)
             except StepFailed as e:
                 raise StepFailed("%s: %s" % (where, e)) from None
         keyboard = opts.get("keyboard", True)
@@ -1870,6 +1910,32 @@ class Driver(object):
                     how["in"] = within
                 self.step_scroll(ctx, how)
                 self.warn_out_of_sight(ctx, fields, opts["scrollTo"])
+
+    TYPES_AT_A_RATE = False     # True where step_type can type key by key (honours rate)
+    SCROLL_SWIPES = False       # True where a scroll is a finger's swipe (it taps what it starts on), not a call
+
+    def rate_of(self, ctx, value):
+        """``value``'s typing ``rate`` (keys a second) for this driver's ``step_type``: ``None`` for at once, and for
+        a driver that can't type key by key (with a warning that it's left out)."""
+        try:
+            rate = typing_rate(value)
+        except ValueError as e:
+            raise StepFailed("step %d: %s" % (ctx.index, e)) from None
+        if rate is not None and not self.TYPES_AT_A_RATE:
+            ctx.warn("step %d: the %s driver puts a value in at once, so rate is left out" % (ctx.index, self.NAME))
+            return None
+        return rate
+
+    def editable(self, ctx, query, element):
+        """True when ``element`` (``query``'s) is an editable text field: its class or type in the tree it came from
+        (the base: what the element says of itself; drivers that can ask the app for more override it)."""
+        if element is None:
+            return False
+        node = getattr(element, "node", None)
+        names = [element.cls, element.attrs.get("type"), element.attrs.get("class"), element.attrs.get("tag")]
+        if node is not None:
+            names += [node.attrib.get("type"), node.attrib.get("class"), node.tag]
+        return any(is_editable(n) for n in names)
 
     def warn_out_of_sight(self, ctx, fields, scroll_to):
         """After a fill's ``scrollTo``: each field it typed into that the screen's ``verify`` names but that's out of
@@ -1973,9 +2039,23 @@ class Driver(object):
             if how == "ancestor":
                 container = element_
             self.say_pane(ctx, query, how, what)
+        if self.SCROLL_SWIPES and container is found and self.editable_safely(ctx, query, found):
+            # A swipe on a text field taps it: the field takes the focus and the keyboard comes back (and a scroll
+            # to an end does it again on every try). Scroll the screen instead.
+            ctx.warn("step %d: scroll in %s: nothing that scrolls was found around it and it's a text field, so the "
+                     "screen was scrolled instead (a swipe on a text field taps it and opens the keyboard); name the "
+                     "pane's scroll view or something else inside it" % (ctx.index, describe_query(query)))
+            return None
         container.attrs.setdefault("query", query)
         ctx.shot.scrolled_in[query] = container
         return container
+
+    def editable_safely(self, ctx, query, element):
+        """``editable``, False when the driver can't tell."""
+        try:
+            return bool(self.editable(ctx, query, element))
+        except (DriverError, XPathError, StepFailed):
+            return False
 
     def say_pane(self, ctx, query, how, what):
         """Put in the shot's ``panes`` (once) what a scroll ``in`` ``query`` scrolled when it wasn't the element
