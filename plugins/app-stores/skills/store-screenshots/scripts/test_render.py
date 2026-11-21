@@ -786,5 +786,76 @@ class TrialRegressionTests(Base):
         code, still, _ = self.run_render(path)
         self.assertEqual(still["rendered"], 0)
 
+
+class PhoneSlotCaptionTests(Base):
+    """What a real trial found: an iPhone Duo's outer display (1398x2034, w/h 0.687) fell in the mid aspect class,
+    so its captions took the iPad's 0.64 factor and came out under 11 pt in Apple's search row, where check.py
+    judges it as a phone. An Apple phone slot in portrait now takes the tall factor; its margins stay mid's."""
+
+    TARGETS = {
+        "duo-outer": {"store": "apple", "width": 1398, "height": 2034, "capture": "duo-outer"},
+        "ipad": {"store": "apple", "width": 1488, "height": 2266, "capture": "ipad", "frame": "tablet"},
+        "play": {"store": "google", "width": 1080, "height": 1920, "capture": "play"},
+    }
+
+    def config(self, **extra):
+        cfg = kit.base_config()
+        cfg["theme"]["caption"].update({"sizePct": 9.8, "floorPct": 6.0})
+        cfg["targets"] = copy.deepcopy(self.TARGETS)
+        cfg["targets"].update(extra)
+        cfg["strings"]["en-US"]["cap.plan"] = "Plan meals"
+        return cfg
+
+    def test_the_caption_class_of_each_kind_of_slot(self):
+        cls = render.caption_class
+        self.assertEqual(cls(self.TARGETS["duo-outer"]), ("tall", "apple-phone"))
+        self.assertEqual(cls({"store": "apple", "width": 2007, "height": 2853}), ("tall", "apple-phone"))  # inner
+        self.assertEqual(cls({"store": "apple", "width": 640, "height": 960}), ("tall", "apple-phone"))    # 3.5"
+        self.assertEqual(cls({"store": "apple", "width": 1320, "height": 2868}), ("tall", None))
+        self.assertEqual(cls({"store": "apple", "width": 1136, "height": 640}), ("wide", None))  # landscape iPhone
+        self.assertEqual(cls(self.TARGETS["ipad"]), ("mid", None))
+        self.assertEqual(cls({"store": "apple", "width": 2064, "height": 2752}), ("mid", None))
+        self.assertEqual(cls(self.TARGETS["play"]), ("tall", None))
+        # Play's shapes are its own: a Play target at the Duo's pixels is still mid (it's no App Store slot).
+        self.assertEqual(cls({"store": "google", "width": 1398, "height": 2034}), ("mid", None))
+        self.assertEqual(cls({"store": "apple", "width": 450, "height": 600}), ("mid", None))      # no display type
+        self.assertEqual(cls(dict(self.TARGETS["duo-outer"], captionClass="mid")), ("mid", "captionClass"))
+        self.assertEqual(cls(dict(self.TARGETS["ipad"], captionClass="tall")), ("tall", "captionClass"))
+
+    def test_the_job_carries_the_class_and_the_schema_takes_an_override(self):
+        cfg = self.config(**{"duo-mid": {"store": "apple", "width": 1398, "height": 2034, "capture": "duo-outer",
+                                         "captionClass": "mid"}})
+        path = self.project(cfg)
+        res = render.Resolver(render.load_config(path), path)
+        units = dict((u["target"], u) for u in res.units())
+        got = dict((t, (u["job"]["slot"]["captionClass"], u["captionClass"])) for t, u in units.items())
+        self.assertEqual(got, {"duo-outer": ("tall", "tall"), "duo-mid": ("mid", "mid"), "ipad": ("mid", "mid"),
+                               "play": ("tall", "tall")})
+        self.assertTrue(any("three across" in n for n in units["duo-outer"]["notes"]), units["duo-outer"]["notes"])
+        self.assertEqual(units["duo-mid"]["notes"], [])
+        cfg["targets"]["ipad"]["captionClass"] = "huge"
+        with self.assertRaises(render.UsageError):
+            render.load_config(self.project(cfg, name="q"))
+
+    @unittest.skipUnless(CHROME, "needs Google Chrome or Chromium")
+    def test_an_apple_phone_slot_of_a_mid_shape_renders_captions_at_the_tall_factor(self):
+        cfg = self.config(**{"duo-mid": {"store": "apple", "width": 1398, "height": 2034, "capture": "duo-outer",
+                                         "captionClass": "mid"}})
+        code, report, lines = self.run_render(self.project(cfg))
+        self.assertEqual(code, render.EXIT_OK, "\n".join(lines))
+
+        def u(path):
+            f = self.entry(report, path)
+            return round(100.0 * f["caption"]["fontPx"] / f["width"], 2), f["aspectClass"], f["captionClass"]
+        self.assertEqual(u("en-US/duo-outer/plan.png"), (9.8, "mid", "tall"))
+        self.assertEqual(u("en-US/duo-mid/plan.png"), (round(9.8 * 0.64, 2), "mid", "mid"))   # the override wins
+        self.assertEqual(u("en-US/ipad/plan.png"), (round(9.8 * 0.64, 2), "mid", "mid"))      # unchanged
+        self.assertEqual(u("en-US/play/plan.png"), (9.8, "tall", "tall"))                     # unchanged
+        # The slot keeps mid's margins: the same layout parameters as the override's, only the words bigger.
+        duo, mid = self.entry(report, "en-US/duo-outer/plan.png"), self.entry(report, "en-US/duo-mid/plan.png")
+        self.assertEqual(duo["frame"]["box"][0], mid["frame"]["box"][0])
+        self.assertEqual(duo["frame"]["box"][2], mid["frame"]["box"][2])
+        self.assertTrue(duo["caption"]["fits"])
+
 if __name__ == "__main__":
     unittest.main()

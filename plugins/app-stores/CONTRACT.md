@@ -626,8 +626,8 @@ Beside `store-listing.json` usually; paths relative to it. Plain JSON, schema in
   shows it at (never upscaled past 1.0; the check says when it would be).
 - **Targets** are the output screens: each one's id is the `screens` name `store-listing.json` uses, `width`×`height`
   its exact pixels, `store` which store's rules apply, `capture` which capture device feeds it, optional overrides
-  (`frame`, `layout`, `caption`). Output: `<out>/<locale>/<target id>/<shot id>.png` — exactly the folder layout
-  `store-listings` reads.
+  (`frame`, `layout`, `caption`, `captionClass`: §8.3). Output: `<out>/<locale>/<target id>/<shot id>.png` —
+  exactly the folder layout `store-listings` reads.
 - **Shots** are the ordered set: `capture` (the capture screen id), `layout`, `caption` and `kicker`/`proof` (string
   keys), `targets` (null = all), layout options (`tilt`: `left`|`right`, `callout`: rect as fractions of the capture
   and a scale, `pair`: a second capture, `at`: `top`|`bottom` for `fullbleed`).
@@ -642,6 +642,12 @@ Beside `store-listing.json` usually; paths relative to it. Plain JSON, schema in
 
 `--u` is 1% of the slot's width. Aspect classes: `tall` (< 0.6 w/h), `mid` (0.6–0.85), `square` (0.85–1.2), `wide`
 (> 1.2); each layout's CSS has rules per class (`[data-aspect="tall"]` etc.), so one design renders every size.
+The caption's factor on `sizePct`/`floorPct` (tall 1, mid 0.64, square 0.84, wide 0.48) goes by the slot's caption
+class (`[data-caption-class]`, the job's `slot.captionClass`). That's its aspect class, except that an App Store
+target sized as an iPhone display type (`rules/apple.json`'s `phone` slots), in portrait, is `tall` whatever its
+shape: search shows it three across. A target's `captionClass` overrides it. `scripts/slots.py` decides it for
+`render.py` and `check.py` alike. The report gives each file's `aspectClass` and `captionClass`, and the drift
+check reports a changed caption class whatever the tolerances.
 
 | Layout | What it is |
 |---|---|
@@ -663,7 +669,8 @@ Beside `store-listing.json` usually; paths relative to it. Plain JSON, schema in
   "version": 1, "renderedAt": "…", "config": "store-screenshots.json", "inputsSha256": "…",
   "files": [
     { "path": "en-US/iphone/plan.png", "locale": "en-US", "target": "iphone", "store": "apple", "shot": "plan",
-      "layout": "hero", "width": 1320, "height": 2868, "captureFallback": false, "stringFallback": false,
+      "layout": "hero", "width": 1320, "height": 2868, "aspectClass": "tall", "captionClass": "tall",
+      "captureFallback": false, "stringFallback": false,
       "caption": { "text": "Plan a week of meals in minutes", "lines": 2, "fontPx": 105.6, "floorPx": 79.2,
                    "atFloor": false, "fits": true, "box": [x, y, w, h], "textShare": 0.11,
                    "missingGlyphs": [] },
