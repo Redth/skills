@@ -38,7 +38,9 @@ driver allows 600 s for it; later sessions are quick. Appium 2 and 3 serve at th
   the driver already sets `"appium:isHeadless": true`: the capture comes from `simctl io`, so no Simulator window
   is needed, and since Xcode 27 the XCUITest driver can't open Simulator.app where it looks ("The file
   /Applications/Xcode.app/Contents/Developer/Applications/Simulator.app does not exist"). `false` here turns it off.
-  `"appium:wdaLaunchTimeout": 600000` gives a first WebDriverAgent build the time it needs.
+  `"appium:wdaLaunchTimeout": 600000` gives a first WebDriverAgent build the time it needs. On a simulator the
+  driver also gives the device its own `appium:wdaLocalPort` and `appium:mjpegServerPort`
+  ([below](#beside-other-appium-servers)); a port set here is kept as it is.
 - **The device has a host**, as for the in-app agents: `simctl` for Apple simulators, `adb` for Android, none for
   Mac and Windows apps (`target.host` overrides). The host creates or finds the dedicated device, boots it,
   installs the app, sets the device's locale, appearance and clean status bar, and resets them after; so the
@@ -60,10 +62,38 @@ after that. Without `--keep-going` the run stops at the first one anyway.
 
 | Platform | Capabilities |
 |---|---|
-| iOS (tvOS: `platformName: tvOS`) | `platformName: iOS`, `appium:automationName: XCUITest`, `appium:udid`, `appium:bundleId` or `appium:app`, `appium:language: de`, `appium:locale: de_DE`, `appium:processArguments: { args: [...], env: {...} }` |
+| iOS (tvOS: `platformName: tvOS`) | `platformName: iOS`, `appium:automationName: XCUITest`, `appium:udid`, `appium:bundleId` or `appium:app`, `appium:language: de`, `appium:locale: de_DE`, `appium:processArguments: { args: [...], env: {...} }`; on a simulator `appium:isHeadless: true`, `appium:wdaLocalPort` (8130-8199) and `appium:mjpegServerPort` (9130-9199) |
 | Android | `UiAutomator2`, `appium:udid` (the serial), `appium:appPackage` + `appium:appActivity` (or `appium:app`), `appium:language: de` with `appium:locale: DE` (a locale needs its language), `appium:optionalIntentArguments` (`am start` style: `--es Key "value"`), `appium:autoGrantPermissions` |
 | Mac | `platformName: mac`, `Mac2`, `appium:bundleId` or `appium:appPath`, `appium:arguments` (an array), `appium:environment`, `appium:appLocale: { locale: "fr_FR", language: "fr" }` |
 | Windows | `platformName: Windows`, `appium:automationName: Windows`, `appium:app`, `appium:appArguments` |
+
+## Beside other Appium servers
+
+XCUITest's driver starts WebDriverAgent (the agent inside the simulator that does the taps) on port 8100 of this
+machine unless told otherwise, and Appium talks to whatever answers there. In a real trial another project's
+Appium server had a session on 8100 for its own simulator: our session's `POST /session` went to that
+WebDriverAgent, the next command failed with "invalid session id: Session does not exist", and the app launch
+and terminate commands landed on the other simulator, which is someone else's (rule 1).
+
+So on a simulator every session asks for this device's own ports:
+
+- `appium:wdaLocalPort`, from 8130-8199, and `appium:mjpegServerPort` (XCUITest's screenshot stream, default
+  9100), from 9130-9199: the same offset in both, derived from the plan's device id (a CRC-32, so the same on every
+  run and machine), never 8100 or 9100. Two devices can map to the same port; a run takes devices one at a time.
+- Before the first session the driver checks whether something already listens on 127.0.0.1 there. For the WDA
+  port it asks `GET /status`: a WebDriverAgent whose reply names this device's simulator (its UDID) is ours and
+  kept; another simulator's, one that doesn't say which simulator it serves (WebDriverAgent's own reply doesn't),
+  or any other program is passed over for the next free port in the range, and the log and the report's device
+  `warnings` say which and why. The MJPEG port is passed over when anything listens on it.
+- The ports are chosen once a run and kept for every locale's session, so our own WebDriverAgent from the last
+  session isn't mistaken for someone else's. `--dry-run` prints them (without checking); the report's `devices`
+  entry has them as `source.wdaPort` and `source.mjpegPort`.
+- A port the plan sets in `target.capabilities` is used as it is, never checked; with `appium:webDriverAgentUrl`
+  (a WebDriverAgent the plan runs itself) the driver sets no WDA port.
+
+**Simulator windows close.** When a session starts, XCUITest's driver closes Simulator.app's windows, headless or
+not: the user's own simulators stay booted, but the windows they had open go. Say so to the user before the first
+Appium run on iOS (they can reopen them from Simulator.app's File > Open Simulator).
 
 ## What the driver sends
 

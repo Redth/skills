@@ -1037,6 +1037,15 @@ entry in landscape: it covers the app) is closed with back, only while it's up; 
 way. A CoreSimulator hiccup ("server died") in `simctl` boot, install, launch or capture is
 tried once more.
 
+**Appium's WebDriverAgent port**: an XCUITest session on a simulator asks for the device's own
+`appium:wdaLocalPort` (8130-8199) and `appium:mjpegServerPort` (9130-9199), the same offset in both, derived from
+the plan's device id (CRC-32), never WebDriverAgent's default 8100; chosen once a run, before the first session.
+A port something already listens on (`base.LISTENING`, 127.0.0.1) is passed over for the next in the range, logged
+and kept in the device's warnings, unless it's a WebDriverAgent whose `GET /status` names the device's own
+simulator; one that names another, or none, is passed over. A port `target.capabilities` sets is kept unchecked;
+with `appium:webDriverAgentUrl` no WDA port is set. The report's `devices` entry carries them as `source.wdaPort`
+and `source.mjpegPort`; `--dry-run` prints them.
+
 **Network**: drivers talk only to the local machine (simulators, emulators, devices over adb, a local Appium
 server, the in-app agents on loopback ports). Nothing reaches the internet.
 
@@ -1060,7 +1069,8 @@ device's size — and `<out>/capture-report.json`:
 
 `app` is the app this run captured (git's, of `appSource.repo`; `builds` from an iOS-family `.app`'s `Info.plist`),
 left out when the app isn't in a git checkout; each taken shot's `appRevision` is the commit it was taken at, so a
-partial run's kept entries keep theirs. A run warns when the app moved since the shots the report keeps.
+partial run's kept entries keep theirs. `devices` lists each device's `id`, `driver`, `source` (an Appium
+simulator's with `wdaPort` and `mjpegPort`) and `warnings`. A run warns when the app moved since the shots the report keeps.
 
 Adapters write into a temp folder and move files into place at the end. A run keeps the report's earlier entries
 for plan items it didn't run (filters) and drops those the plan no longer has (removed or omitted), naming them in
