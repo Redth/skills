@@ -837,6 +837,123 @@ class AppiumTests(Case):
         self.assertEqual(caps["appium:arguments"], ["-ScreenshotSeed", "demo"])
         self.assertTrue(caps["appium:skipAppKill"])
 
+    # WebDriverAgent's port: each device its own, never 8100 (another Appium server's session may hold it).
+
+    OTHER_SIM = "00000000-0000-0000-0000-0000000000B2"
+
+    def wda_status(self, port, udid=None):
+        """A WebDriverAgent answering ``GET /status`` on ``port`` (WDA's own reply names no simulator; ``udid`` adds
+        one, as a WDA that says would)."""
+        value = {"ready": True, "message": "WebDriverAgent is ready to accept commands", "state": "success",
+                 "os": {"name": "iOS", "version": "27.2"}, "device": "iphone",
+                 "build": {"productBundleIdentifier": "com.example.WebDriverAgentRunner"}}
+        if udid:
+            value["device"] = {"name": "iPhone 17 Pro", "udid": udid}
+        self.hooks.listening.add(port)
+        self.transport.on("GET", r"^/status$", port=port,
+                          body=json.dumps({"value": value, "sessionId": "5a1d2c3b-0000-4000-8000-0000000000ff"}))
+
+    def own_ports(self, device_id="dev-1", step=0):
+        """The WDA and MJPEG ports ``device_id`` maps to, ``step`` ports on (wrapping in each range)."""
+        out = []
+        for first, last in (appium.WDA_PORTS, appium.MJPEG_PORTS):
+            size = last - first + 1
+            out.append(first + (appium.derived_port(device_id, (first, last)) - first + step) % size)
+        return tuple(out)
+
+    def test_the_derived_port_is_stable_per_device_and_never_wdas_default(self):
+        self.assertEqual(appium.derived_port("dev-1", appium.WDA_PORTS), 8180)   # a CRC-32: every run, every machine
+        self.assertEqual(appium.derived_port("dev-1", appium.MJPEG_PORTS), 9180)
+        self.assertNotEqual(appium.derived_port("apple-tv", appium.WDA_PORTS), 8180)
+        for i in range(500):
+            port = appium.derived_port("device-%d" % i, appium.WDA_PORTS)
+            self.assertTrue(8130 <= port <= 8199, port)
+            self.assertNotEqual(appium.derived_port("device-%d" % i, appium.MJPEG_PORTS), 9100)
+
+    def test_a_simulator_session_gets_this_devices_own_ports(self):
+        self.sim_host()
+        d, dev = self.start("ios", "en-US", host=None)
+        caps = self.session_caps()
+        self.assertEqual((caps["appium:wdaLocalPort"], caps["appium:mjpegServerPort"]), (8180, 9180))
+        self.assertEqual(self.transport.find("GET", r":8180/status$"), [], "nothing listens there: nothing to ask")
+        self.assertEqual(d.warnings, [])
+        source = d.source(dev)
+        self.assertEqual((source["wdaPort"], source["mjpegPort"]), (8180, 9180))
+        self.assertTrue(any("WebDriverAgent 8180, MJPEG 9180" in l for l in self.hooks.log), self.hooks.log)
+
+    def test_a_port_the_plan_sets_is_kept_and_not_checked(self):
+        self.sim_host()
+        self.hooks.listening.add(8100)
+        d, dev = self.start("ios", "en-US", host=None, capabilities={"appium:wdaLocalPort": 8100})
+        caps = self.session_caps()
+        self.assertEqual(caps["appium:wdaLocalPort"], 8100)
+        self.assertEqual(caps["appium:mjpegServerPort"], 9180)
+        self.assertEqual(self.transport.find("GET", r"/status$")[1:], [], "only the Appium server's own /status")
+        self.assertEqual(d.source(dev)["wdaPort"], 8100)
+
+    def test_a_plans_webdriveragent_url_keeps_wda_s_port_its_own(self):
+        self.sim_host()
+        self.start("ios", "en-US", host=None, capabilities={"appium:webDriverAgentUrl": "http://127.0.0.1:8100"})
+        self.assertNotIn("appium:wdaLocalPort", self.session_caps())
+
+    def test_a_port_another_simulators_webdriveragent_holds_is_passed_over(self):
+        self.sim_host()
+        self.wda_status(8180, udid=self.OTHER_SIM)
+        d, dev = self.start("ios", "en-US", host=None)
+        caps = self.session_caps()
+        self.assertEqual(caps["appium:wdaLocalPort"], self.own_ports(step=1)[0])
+        self.assertEqual(caps["appium:mjpegServerPort"], 9180)
+        self.assertEqual(len(self.transport.find("GET", r"127\.0\.0\.1:8180/status$")), 1)
+        warning, = d.warnings
+        self.assertIn("port 8180 is taken", warning)
+        self.assertIn(self.OTHER_SIM, warning)
+        self.assertIn("using %d" % self.own_ports(step=1)[0], warning)
+        self.assertTrue(any("port 8180 is taken" in l for l in self.hooks.log))
+
+    def test_a_webdriveragent_that_cant_say_whose_it_is_is_passed_over_too(self):
+        self.sim_host()
+        self.wda_status(8180)
+        self.wda_status(self.own_ports(step=1)[0])
+        self.hooks.listening.add(9180)
+        d, dev = self.start("ios", "en-US", host=None)
+        caps = self.session_caps()
+        self.assertEqual(caps["appium:wdaLocalPort"], self.own_ports(step=2)[0])
+        self.assertEqual(caps["appium:mjpegServerPort"], self.own_ports(step=1)[1])
+        self.assertIn("doesn't say which simulator", " ".join(d.warnings))
+        self.assertIn("ports 8180, %d are taken" % self.own_ports(step=1)[0], " ".join(d.warnings))
+        self.assertIn("the MJPEG stream's port 9180 is taken", " ".join(d.warnings))
+
+    def test_our_own_simulators_webdriveragent_is_kept(self):
+        self.sim_host()
+        self.wda_status(8180, udid="00000000-0000-0000-0000-0000000000a1")   # FakeHost's UDID, any case
+        d, dev = self.start("ios", "en-US", host=None)
+        self.assertEqual(self.session_caps()["appium:wdaLocalPort"], 8180)
+        self.assertEqual(d.warnings, [])
+
+    def test_the_ports_are_chosen_once_a_run(self):
+        self.sim_host()
+        d, dev = self.start("ios", "en-US", host=None)
+        self.wda_status(8180)   # our own WDA, still up from the last locale's session
+        d.apply_locale(dev, "de-DE", base.Shot())
+        first, second = [c[2]["capabilities"]["alwaysMatch"] for c in self.transport.find("POST", r"/session$")]
+        self.assertEqual(first["appium:wdaLocalPort"], second["appium:wdaLocalPort"])
+        self.assertEqual(self.transport.find("GET", r":8180/status$"), [])
+
+    def test_no_ports_off_a_simulator(self):
+        self.start("ios", "en-US")   # the fake host: not simctl
+        self.assertNotIn("appium:wdaLocalPort", self.session_caps())
+        self.transport.calls = []
+        self.start("android", "en-US", udid="emulator-5554")
+        self.assertNotIn("appium:wdaLocalPort", self.session_caps())
+
+    def test_invalid_session_id_on_ios_says_what_it_may_be(self):
+        d, dev = self.start("ios", "en-US")
+        self.transport.on("POST", r"/execute/sync$", status=404, body='{"value": {"error": "invalid session id", '
+                          '"message": "Session does not exist"}}')
+        with self.assertRaises(base.DriverError) as cm:
+            d.step_launch(self.ctx(dev), {})
+        self.assertIn("another simulator's WebDriverAgent", str(cm.exception))
+
     def test_a_remote_server_is_refused(self):
         d = self.driver()
         with self.assertRaises(base.NotLocal):

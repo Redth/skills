@@ -937,6 +937,115 @@ class AdbTests(AdbCase):
         self.assertEqual(adb_driver.demo_clock("2026-06-01T09:41:00"), "0941")
 
 
+IMAGE = "system-images;android-36;google_apis;arm64-v8a"
+
+
+class AdbSdkTests(AdbCase):
+    """The SDK the system image is looked for in, and the emulator's ANDROID_SDK_ROOT (from a real trial: a shell's
+    ANDROID_HOME named a command-line-tools-only SDK, the image was in another, and avdmanager said only "Package
+    path is not valid. Valid system image paths are: null" for every screen)."""
+
+    def setUp(self):
+        AdbCase.setUp(self)
+        saved = adb_driver.SDK_DEFAULTS
+        self.addCleanup(setattr, adb_driver, "SDK_DEFAULTS", saved)
+        self.tools_sdk = os.path.join(self.tmp, "tools-sdk")       # platform-tools, emulator, no system images
+        self.full_sdk = os.path.join(self.tmp, "full-sdk")         # the image is here
+        os.makedirs(os.path.join(self.tools_sdk, "platform-tools"))
+        self.image(self.full_sdk)
+        adb_driver.SDK_DEFAULTS = {sys.platform: (self.full_sdk, os.path.join(self.tmp, "not-there"))}
+
+    def image(self, sdk, name="system.img"):
+        folder = os.path.join(sdk, "system-images", "android-36", "google_apis", "arm64-v8a")
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, name), "w") as f:
+            f.write("x")
+        return folder
+
+    def own_avd(self):
+        return self.device(target={"systemImage": IMAGE, "profile": "medium_phone"})
+
+    def test_an_image_missing_from_the_sdk_in_use_names_the_sdk_that_has_it(self):
+        self.answers()
+        os.environ["ANDROID_HOME"] = self.tools_sdk
+        drv = adb_driver.AdbDriver(self.options)
+        with self.assertRaises(base.DriverError) as cm:
+            drv.prepare(self.own_avd(), {})
+        message = str(cm.exception)
+        self.assertIn("isn't installed in the Android SDK in use, %s ($ANDROID_HOME)" % self.tools_sdk, message)
+        self.assertIn("it's installed in %s" % self.full_sdk, message)
+        self.assertIn("ANDROID_HOME=%s ANDROID_SDK_ROOT=%s" % (self.full_sdk, self.full_sdk), message)
+        self.assertIn('sdkmanager --sdk_root=%s "%s"' % (self.tools_sdk, IMAGE), message)
+        self.assertEqual(self.run_.matching(r"avdmanager"), [])
+        self.assertEqual(self.hooks.spawned, [])
+
+    def test_an_image_no_sdk_has_says_how_to_install_it(self):
+        self.answers()
+        os.environ["ANDROID_HOME"] = self.tools_sdk
+        adb_driver.SDK_DEFAULTS = {}
+        drv = adb_driver.AdbDriver(self.options)
+        with self.assertRaises(base.DriverError) as cm:
+            drv.prepare(self.own_avd(), {})
+        self.assertIn("no other SDK folder looked in has it", str(cm.exception))
+        self.assertIn('sdkmanager --sdk_root=%s "%s"' % (self.tools_sdk, IMAGE), str(cm.exception))
+
+    def test_the_dry_run_checks_the_image_too(self):
+        os.environ["ANDROID_HOME"] = self.tools_sdk
+        base.DRY_RUN = True
+        drv = adb_driver.AdbDriver(self.options)
+        with self.assertRaises(base.DriverError) as cm:
+            drv.prepare(self.own_avd(), {})
+        self.assertIn(self.full_sdk, str(cm.exception))
+
+    def test_an_installed_image_creates_the_avd_and_the_emulator_gets_android_sdk_root(self):
+        self.answers()
+        os.environ["ANDROID_HOME"] = self.full_sdk
+        drv = adb_driver.AdbDriver(self.options)
+        drv.prepare(self.own_avd(), {})
+        self.assertTrue(self.run_.matching(r"^avdmanager create avd -n appstores-android-phone -k "))
+        self.assertEqual(self.hooks.spawned_env, [{"ANDROID_SDK_ROOT": self.full_sdk}])
+        self.assertTrue(any(l.startswith("  $ ANDROID_SDK_ROOT=%s emulator -avd" % self.full_sdk)
+                            for l in self.hooks.log), self.hooks.log)
+
+    def test_an_image_folder_with_source_properties_counts_as_installed(self):
+        self.answers()
+        sdk = os.path.join(self.tmp, "props-sdk")
+        self.image(sdk, "source.properties")
+        os.environ["ANDROID_HOME"] = sdk
+        drv = adb_driver.AdbDriver(self.options)
+        drv.prepare(self.own_avd(), {})
+        self.assertTrue(self.run_.matching(r"^avdmanager create avd"))
+
+    def test_android_sdk_root_already_set_is_left_alone(self):
+        self.answers()
+        os.environ["ANDROID_SDK_ROOT"] = self.full_sdk
+        drv = adb_driver.AdbDriver(self.options)
+        drv.prepare(self.own_avd(), {})
+        self.assertEqual(self.hooks.spawned_env, [None])
+
+    def test_without_a_variable_avdmanagers_own_complaint_is_explained(self):
+        self.answers()
+        self.run_.on(r"^avdmanager create avd", code=1,
+                     err="Warning: package.xml is corrupted\nError: Package path is not valid. Valid system image "
+                         "paths are:\nnull\n")
+        drv = adb_driver.AdbDriver(self.options)
+        with self.assertRaises(base.DriverError) as cm:
+            drv.prepare(self.own_avd(), {})
+        message = str(cm.exception)
+        self.assertIn("avdmanager couldn't find the system image %s" % IMAGE, message)
+        self.assertIn("ANDROID_HOME=%s" % self.full_sdk, message)
+        self.assertIn('sdkmanager "%s"' % IMAGE, message)
+        self.assertEqual(self.hooks.spawned, [])
+
+    def test_the_image_folder_from_its_package_id(self):
+        self.assertEqual(adb_driver.image_dir("/sdk", IMAGE),
+                         os.path.join("/sdk", "system-images", "android-36", "google_apis", "arm64-v8a"))
+        self.assertIsNone(adb_driver.image_dir("/sdk", "platforms;android-36"))
+        os.environ["ANDROID_HOME"] = self.full_sdk
+        os.environ["ANDROID_SDK_ROOT"] = self.full_sdk + os.sep
+        self.assertEqual(adb_driver.sdk_folders(), [self.full_sdk + os.sep])   # the same folder, listed once
+
+
 class UiAutomatorTests(AdbCase):
     def test_it_changes_nothing_on_the_device(self):
         self.answers(connected="R5EXAMPLE01\tdevice\n")

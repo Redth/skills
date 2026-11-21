@@ -461,6 +461,18 @@ class DryRunTests(CaptureCase):
         self.assertIn("  reset", out)
         self.assertFalse(base.DRY_RUN)
 
+    def test_dry_run_shows_an_appium_simulators_own_webdriveragent_ports(self):
+        devices = [{"id": "iphone-6.9", "platform": "ios", "driver": "appium", "width": 1320, "height": 2868,
+                    "target": {"deviceType": "iPhone 17 Pro Max"}}]
+        screens = [{"id": "plan", "steps": [{"launch": {"args": {"ScreenshotScreen": "plan"}}}]}]
+        path = self.plan(devices, screens)
+        self.hooks.listening.add(8195)   # a dry run checks nothing: still its own port
+        self.assertEqual(self.main("--plan", path, "--dry-run"), 0)
+        self.assertEqual(self.hooks.runner.calls, [])
+        self.assertIn("this device's own ports (from its id, never WebDriverAgent's 8100): WebDriverAgent 8195, "
+                      "MJPEG 9195 (a real run first checks nothing else listens on them)", self.stdout)
+        self.assertIn("> POST http://127.0.0.1:4723/session", self.stdout)
+
 
 @unittest.skipUnless(CHROME, "Chrome isn't installed")
 class RealFlattenTests(CaptureCase):

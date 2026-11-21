@@ -1377,6 +1377,10 @@
     root.dir = job.dir || "ltr";
     var body = document.body;
     body.dataset.aspect = cls;
+    // The caption's factor goes by how the stores show the slot (render.py: an Apple phone slot in portrait is
+    // shown three across in search, like a tall one, whatever its shape); the layout's margins go by its shape.
+    var capCls = job.slot.captionClass || cls;
+    body.dataset.captionClass = capCls;
     var pal = job.theme.palette || {};
     var base = parseColour(pal.background, "#101418");
     body.dataset.tone = luminance(base) < 0.35 ? "dark" : "light";
@@ -1393,7 +1397,8 @@
     rs.setProperty("--band", css(pal.band ? parseColour(pal.band) : base, 1));
     rs.setProperty("--band-ink", css(parseColour(pal.bandInk || pal.ink, "#ffffff"), 1));
     rs.setProperty("--font-caption", (job.theme.captionFont ? '"' + job.theme.captionFont + '", ' : "") + SYSTEM_STACK);
-    report.slot = { index: index, count: count, width: W, height: H, aspect: round(aspect, 4), aspectClass: cls };
+    report.slot = { index: index, count: count, width: W, height: H, aspect: round(aspect, 4), aspectClass: cls,
+                    captionClass: capCls };
     report.lang = root.lang;
     report.dir = root.dir;
 

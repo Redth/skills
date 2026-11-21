@@ -1,12 +1,14 @@
-"""Tests for video.py: the encode plan and command, the checks against the rules' ``video`` rules, and the
-recording commands (through a fake ``RUNNER``); then, where ffmpeg and ffprobe are installed, a real encode of a
-short ``testsrc`` clip made in a temp folder, checked with ffprobe. Those skip without ffmpeg.
+"""Tests for video.py: the encode plan and command, the checks against the rules' ``video`` rules, the recording
+commands and ``frames`` (its size, the two-process pipe, the count, the rotation note) through a fake ``RUNNER``;
+then, where ffmpeg and ffprobe are installed, a real encode of a short ``testsrc`` clip made in a temp folder,
+checked with ffprobe, and real frames of a variable-rate rotated clip. Those skip without ffmpeg.
 """
 
 from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import shutil
 import sys
@@ -224,6 +226,192 @@ class RecordTests(unittest.TestCase):
             "file '/t/c'\\''d.png'", "duration 3.0000", "file '/t/c'\\''d.png'"])
 
 
+def rotated(degrees):
+    """ffprobe's answer for a stream's display rotation (``None``: no side data at all)."""
+    stream = {"index": 0, "tags": {}}
+    if degrees is not None:
+        stream["side_data_list"] = [{"side_data_type": "Display Matrix", "rotation": degrees}]
+    return json.dumps({"streams": [stream]})
+
+
+class FramesPlanTests(unittest.TestCase):
+
+    def test_the_size_is_kept_or_scaled_by_width(self):
+        plan = video.plan_frames(info(1320, 2868))
+        self.assertEqual((plan["width"], plan["height"], plan["warnings"]), (1320, 2868, []))
+        plan = video.plan_frames(info(1320, 2868), width=660)
+        self.assertEqual((plan["width"], plan["height"]), (660, 1434))
+
+    def test_a_quarter_turn_writes_the_picture_upright_and_says_so(self):
+        plan = video.plan_frames(info(2006, 2852), rotate=-90)
+        self.assertEqual((plan["width"], plan["height"]), (2852, 2006))
+        self.assertEqual(plan["display"], [2852, 2006])
+        (note,) = plan["warnings"]
+        self.assertIn("2006x2852 with a -90° display rotation", note)
+        self.assertIn("--size WxH (landscape)", note)
+        half = video.plan_frames(info(2006, 2852), rotate=-90, width=1426)
+        self.assertEqual((half["width"], half["height"]), (1426, 1003))
+        flipped = video.plan_frames(info(2006, 2852), rotate=180)
+        self.assertEqual((flipped["width"], flipped["height"]), (2006, 2852))
+
+    def test_size_forces_the_shape_and_warns_against_the_picture(self):
+        plan = video.plan_frames(info(2006, 2852), rotate=-90, size=(2853, 2007))
+        self.assertEqual((plan["width"], plan["height"], plan["warnings"]), (2853, 2007, []))
+        squeezed = video.plan_frames(info(2006, 2852), rotate=-90, size=(2006, 2852))
+        (note,) = squeezed["warnings"]
+        self.assertIn("--size 2006x2852 is portrait but the picture is landscape", note)
+        self.assertIn("after its -90° rotation", note)
+        stretched = video.plan_frames(info(1320, 2868), size=(1000, 1600))
+        self.assertIn("stretches", stretched["warnings"][0])
+
+    def test_usage(self):
+        for kw in ({"fmt": "gif"}, {"fmt": "png", "quality": 3}, {"quality": 40}, {"width": 0}, {"size": (0, 10)}):
+            with self.assertRaises(video.VideoError) as cm:
+                video.plan_frames(info(), **kw)
+            self.assertEqual(cm.exception.code, 3, kw)
+
+    def test_the_pipe_passes_every_frame_through_and_numbers_them_afresh(self):
+        plan = video.plan_frames(info(1320, 2868), width=660, quality=3)
+        decode, encode = video.frames_commands("ffmpeg", "raw.mov", "frames", plan)
+        self.assertEqual(base.quote(decode),
+                         "ffmpeg -nostdin -hide_banner -loglevel error -i raw.mov -map 0:v:0 -an -fps_mode passthrough "
+                         "-vf scale=660:1434:flags=lanczos,setsar=1 -f rawvideo -pix_fmt rgb24 -")
+        self.assertEqual(base.quote(encode),
+                         "ffmpeg -hide_banner -loglevel error -y -f rawvideo -pix_fmt rgb24 -s 660x1434 -r 30 -i - "
+                         "-qmin 1 -q:v 3 frames/frame-%05d.jpg")
+        png = video.plan_frames(info(1320, 2868), fmt="png")
+        _, encode = video.frames_commands("ffmpeg", "raw.mov", "frames", png)
+        self.assertEqual(encode[-3:], ["-i", "-", "frames/frame-%05d.png"])
+        for cmd in (decode, encode):
+            self.assertNotIn("-ss", cmd)
+            self.assertFalse(any("fps=" in c or "setpts" in c for c in cmd), cmd)
+
+    def test_the_script_pipes_one_into_the_other_and_fails_with_either(self):
+        decode, encode = video.frames_commands("ffmpeg", "my raw.mov", "out", video.plan_frames(info()))
+        cmd = video.frames_script(decode, encode)
+        self.assertEqual(cmd[:2], ["/bin/sh", "-c"])
+        self.assertIn("{ %s; echo $? >\"$st\"; } | %s" % (base.quote(decode), base.quote(encode)), cmd[2])
+        self.assertIn("'my raw.mov'", cmd[2])
+        self.assertIn("writing the frames failed", cmd[2])
+        self.assertIn("decoding the recording failed", cmd[2])
+
+
+class FramesRunTests(unittest.TestCase):
+    """``frames`` and ``main(["frames", …])`` through the fake runner, with ffmpeg and ffprobe stand-ins."""
+
+    def setUp(self):
+        self.hooks = kit.Hooks()
+        self.tmp = tempfile.mkdtemp(prefix="appstores-video-test-")
+        self.saved = {k: os.environ.get(k) for k in ("FFMPEG", "FFPROBE")}
+        for name in ("ffmpeg", "ffprobe"):
+            path = os.path.join(self.tmp, name)
+            with open(path, "w") as f:
+                f.write("")
+            os.environ[name.upper()] = path
+        self.src = os.path.join(self.tmp, "raw.mov")
+        with open(self.src, "wb") as f:
+            f.write(b"\0" * 16)
+        self.out = os.path.join(self.tmp, "frames")
+
+    def tearDown(self):
+        self.hooks.restore()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        for k, v in self.saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def answer(self, probe, degrees=None, written=154):
+        runner = self.hooks.runner
+        runner.on(r"format=duration", out=json.dumps(probe))
+        runner.on(r"stream_side_data=rotation", out=rotated(degrees))
+
+        def write(cmd):
+            os.makedirs(self.out, exist_ok=True)
+            for i in range(1, written + 1):
+                open(os.path.join(self.out, "frame-%05d.jpg" % i), "w").close()
+        runner.on(r"^/bin/sh -c ", then=write)
+
+    def test_writes_and_counts_every_frame(self):
+        p = info(1320, 2868, audio=False)
+        p["streams"][0]["nb_frames"] = "154"
+        self.answer(p)
+        res = video.frames(self.src, self.out, width=660)
+        self.assertEqual(res["count"], 154)
+        self.assertEqual((res["files"][0], res["files"][-1]), ("frame-00001.jpg", "frame-00154.jpg"))
+        self.assertEqual(res["plan"]["warnings"], [])
+        (script,) = [l for l in self.hooks.runner.lines if l.startswith("/bin/sh -c ")]
+        self.assertIn("-fps_mode passthrough", script)
+        self.assertIn("-s 660x1434 -r 30 -i -", script)
+
+    def test_a_count_that_differs_from_the_streams_is_noted(self):
+        p = info(1320, 2868, audio=False)
+        p["streams"][0]["nb_frames"] = "160"
+        self.answer(p, written=154)
+        res = video.frames(self.src, self.out)
+        self.assertIn("the stream lists 160 frames and 154 were written", res["plan"]["warnings"])
+
+    def test_the_command_line_prints_the_count_size_and_rotation_note(self):
+        self.answer(info(2006, 2852, audio=False), degrees=-90, written=12)
+        so = io.StringIO()
+        with contextlib.redirect_stdout(so):
+            code = video.main(["frames", self.src, self.out, "--width", "1426"])
+        self.assertEqual(code, 0)
+        text = so.getvalue()
+        self.assertIn("note: the stream is 2006x2852 with a -90° display rotation", text)
+        self.assertIn("wrote 12 frames (1426x1003 jpg)", text)
+        self.assertIn("frame-00001.jpg to frame-00012.jpg", text)
+
+    def test_size_on_the_command_line(self):
+        self.answer(info(2006, 2852, audio=False), degrees=-90, written=3)
+        so = io.StringIO()
+        with contextlib.redirect_stdout(so):
+            code = video.main(["frames", self.src, self.out, "--size", "2853x2007", "--json"])
+        self.assertEqual(code, 0)
+        data = json.loads(so.getvalue())
+        self.assertEqual((data["frames"], data["width"], data["height"], data["rotation"]), (3, 2853, 2007, -90))
+        self.assertEqual(data["warnings"], [])
+        self.assertIn("-s 2853x2007", " ".join(data["commands"][1]))
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                video.main(["frames", self.src, self.out, "--size", "10x10", "--width", "5"])
+
+    def test_an_old_rotate_tag_counts_and_a_failed_rotation_probe_is_none(self):
+        self.hooks.runner.on(r"stream_side_data", out=json.dumps({"streams": [{"tags": {"rotate": "90"}}]}))
+        self.assertEqual(video.rotation(self.src), 90)
+        self.hooks.runner.on(r"stream_side_data", code=1, err="Invalid section")
+        self.assertEqual(video.rotation(self.src), 0)
+        self.hooks.runner.on(r"stream_side_data", out=rotated(None))
+        self.assertEqual(video.rotation(self.src), 0)
+
+    def test_old_frames_in_the_folder_are_refused(self):
+        self.answer(info(1320, 2868))
+        os.makedirs(self.out)
+        open(os.path.join(self.out, "frame-00001.jpg"), "w").close()
+        with self.assertRaises(video.VideoError) as cm:
+            video.frames(self.src, self.out)
+        self.assertEqual(cm.exception.code, 3)
+        self.assertFalse(any(l.startswith("/bin/sh") for l in self.hooks.runner.lines))
+
+    def test_no_frames_or_a_failed_pipe_is_an_error(self):
+        self.answer(info(1320, 2868), written=0)
+        with self.assertRaises(video.VideoError) as cm:
+            video.frames(self.src, self.out)
+        self.assertIn("wrote no frames", str(cm.exception))
+        self.hooks.runner.on(r"^/bin/sh -c ", code=1, err="writing the frames failed (exit 1)")
+        with self.assertRaises(video.VideoError) as cm:
+            video.frames(self.src, os.path.join(self.tmp, "other"))
+        self.assertIn("writing the frames failed", str(cm.exception))
+
+    def test_dry_run_runs_no_pipe(self):
+        self.answer(info(1320, 2868))
+        res = video.frames(self.src, self.out, dry_run=True)
+        self.assertEqual(res["count"], 0)
+        self.assertFalse(any(l.startswith("/bin/sh") for l in self.hooks.runner.lines))
+        self.assertFalse(os.path.exists(self.out))
+
+
 class ToolTests(unittest.TestCase):
 
     def test_missing_ffmpeg_is_exit_3_with_the_hint(self):
@@ -309,6 +497,25 @@ class RealEncodeTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(video.main(["check", out, "--slot", "APP_IPHONE_47"]), 0)
             self.assertEqual(video.main(["check", self.raw]), 1)
+
+    def test_frames_of_a_variable_rate_recording_with_a_rotation(self):
+        # A variable rate (20 frames in 0.2 s, then one every 0.3 s) stored on its side with a -90° display matrix,
+        # as a two-screen simulator's inner display records: every frame comes out, upright.
+        ffmpeg = video.find_tool("ffmpeg")
+        vfr = os.path.join(self.tmp, "vfr.mp4")
+        rot = os.path.join(self.tmp, "rot.mp4")
+        base.run([ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                  "testsrc2=size=240x320:rate=30", "-frames:v", "26", "-vf",
+                  "setpts='if(lt(N,20),N*0.01/TB,0.2/TB+(N-20)*0.3/TB)'", "-fps_mode", "passthrough", "-c:v",
+                  "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", vfr], timeout=300, quiet=True)
+        base.run([ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-display_rotation", "-90", "-i",
+                  vfr, "-c", "copy", rot], timeout=300, quiet=True)
+        out = os.path.join(self.tmp, "frames")
+        res = video.frames(rot, out, width=160)
+        self.assertEqual(res["count"], 26)
+        self.assertEqual((res["plan"]["width"], res["plan"]["height"], res["plan"]["rotation"]), (160, 120, -90))
+        first = video.streams(video.probe(os.path.join(out, "frame-00001.jpg")), "video")[0]
+        self.assertEqual((first["width"], first["height"]), (160, 120))
 
     def test_too_long_is_refused_before_encoding(self):
         out = os.path.join(self.tmp, "short.mp4")

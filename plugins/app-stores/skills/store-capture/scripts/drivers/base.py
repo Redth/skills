@@ -21,6 +21,7 @@ Rules for driver authors (CONTRACT.md 10.3, 10.5):
   ``--dry-run`` sets ``DRY_RUN``: ``run()`` then prints the command and returns ``dry_output`` without running it.
 - **HTTP only to this machine** through ``http()``/``http_json()`` (``localhost``, ``127.0.0.1``, ``::1``); any
   other host raises ``NotLocal``. It goes through ``appstores_lib.web.request``, whose ``TRANSPORT`` tests fake.
+  Whether something already listens on a local port is the ``LISTENING`` hook's to say (tests fake it too).
 - **Waiting** through ``sleep()`` and ``poll()`` (the ``SLEEP`` and ``CLOCK`` hooks), so tests never wait.
 - **Never resize.** A driver captures at the device's size or reports what it got; ``capture.py`` checks.
 - **Reset in ``reset()``** whatever was changed (status bar, demo mode, ``wm size``, locale, appearance,
@@ -42,6 +43,8 @@ import os
 import re
 import shlex
 import shutil
+import signal
+import socket
 import subprocess
 import sys
 import time
@@ -137,11 +140,21 @@ def _stderr_log(line):
     print(line, file=sys.stderr)
 
 
+def tcp_listening(port, host="127.0.0.1", timeout=0.5):
+    """The real ``LISTENING``: True when something on this machine accepts a TCP connection on ``port``."""
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 RUNNER = subprocess_runner      # callable(cmd, input, timeout, env, cwd) -> (code, stdout bytes, stderr bytes)
 SPAWNER = subprocess_spawner    # callable(cmd, log_path, env, cwd) -> a process (poll(), terminate(), wait())
 SLEEP = time.sleep              # callable(seconds)
 CLOCK = time.monotonic          # callable() -> seconds
 LOG = _stderr_log               # callable(line): where commands and notes are logged
+LISTENING = tcp_listening        # callable(port) -> bool: does something listen on 127.0.0.1:port
 DRY_RUN = False                 # set by capture.py --dry-run: print commands, run nothing
 SECRETS = []                    # values never written to a log or a report (a demo account's password): mask()
 
@@ -248,6 +261,8 @@ class Shot(object):
     - ``tree``: with ``capture.py --inspect``, the file the screen's UI tree was saved to (or ``None``).
     - ``panes``: what each scroll's ``in`` scrolled, where it wasn't the element named (its nearest scrolling
       ancestor, or the element itself when nothing around it scrolls), in a few words each.
+    - ``recording``: with ``capture.py --record``, the screen's steps recorded (``Driver.end_recording``): ``{"file"
+      (in the workdir), "seconds", "by", "from" (the step it started at), "display", "flush"}``; else ``None``.
     """
 
     def __init__(self, status="taken", path=None, reason=None, source=None, status_bar="none", fixes=None,
@@ -269,6 +284,7 @@ class Shot(object):
         self.state_check = state_check
         self.tree = None
         self.panes = []
+        self.recording = None
         self.scrolled_in = {}   # a scroll's in (a query) -> the element it scrolled, for this screen's later steps
 
     def __repr__(self):
@@ -367,10 +383,11 @@ def run(cmd, timeout=120, check=True, input=None, env=None, cwd=None, binary=Fal
 
 def spawn(cmd, log_path=None, env=None, cwd=None):
     """Start a long-running command (an emulator, a server) in the background and return its process (or
-    ``None`` under ``--dry-run``). Logged like ``run()``; a missing program raises ``ToolMissing``. Stop it with
-    ``stop()``."""
+    ``None`` under ``--dry-run``). Logged like ``run()`` (``env``'s variables first); a missing program raises
+    ``ToolMissing``. Stop it with ``stop()``."""
     cmd = [str(c) for c in cmd]
-    note("  $ %s &" % quote(cmd))
+    prefix = "".join("%s=%s " % (k, shlex.quote(str(v))) for k, v in sorted((env or {}).items()))
+    note("  $ %s%s &" % (prefix, quote(cmd)))
     if DRY_RUN:
         return None
     try:
@@ -396,6 +413,23 @@ def stop(proc, grace=10):
             proc.wait(timeout=grace)
     except (OSError, AttributeError):
         pass
+
+
+def interrupt(proc, grace=30):
+    """Stop a process ``spawn()`` started the way a recorder needs: SIGINT (``simctl io recordVideo`` finishes its
+    file on it), wait ``grace`` seconds for it to exit, then ``stop()``. ``None`` (a dry run) is fine."""
+    if proc is None:
+        return
+    try:
+        if proc.poll() is not None:
+            return
+        proc.send_signal(signal.SIGINT)
+        try:
+            proc.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            stop(proc)
+    except (OSError, AttributeError):
+        stop(proc)
 
 
 def which(name):
@@ -1332,6 +1366,7 @@ class Driver(object):
         self.changed = {}
         self.status_bar = "none"
         self.warnings = []
+        self._recording = None
 
     # The four calls capture.py makes (CONTRACT.md 10.3).
 
@@ -1363,12 +1398,18 @@ class Driver(object):
             shot.reason = why
             return shot
         ctx = StepContext(device, screen, locale, shot, 0, None)
+        record_at = self.record_from(screen) if self.recording_wanted() else None
         try:
             self.enter_screen(device, screen, locale, shot)
             shot.source = self.source(device)   # what entering changed (a posture) is in the report too
+            if self.recording_wanted() and not record_at:
+                ctx.warn("nothing recorded: the screen has no steps")
             for i, step in enumerate(screen.get("steps") or [], 1):
                 ctx = StepContext(device, screen, locale, shot, i, step)
+                if i == record_at:
+                    self.begin_recording(ctx)
                 self.do_step(ctx)
+            self.end_recording(ctx)
             self.check_state(ctx, screen, shot)
             self.save_tree(ctx, shot)
             path = self.shot_path(device, screen, locale)
@@ -1384,6 +1425,8 @@ class Driver(object):
             shot.reason = mask(str(e))
             self.save_tree(ctx, shot)
             return shot
+        finally:
+            self.abandon_recording(device)
         shot.path = path
         shot.status_bar = self.status_bar
         return shot
@@ -1501,6 +1544,108 @@ class Driver(object):
         ``self.changed`` and ``self.state`` rather than assuming. Return a list of warnings (what couldn't be put
         back); don't raise for one failed restore: try the rest."""
         return []
+
+    # Recording a screen's steps (capture.py --record).
+
+    RECORD_TAIL = 1.0       # seconds recorded after the last step, so its settled frames are in
+
+    def recording_wanted(self):
+        """True under ``capture.py --record``."""
+        return bool(self.options.extra.get("record"))
+
+    def record_support(self, device):
+        """Why this driver can't record ``device``'s screen (a reason), or ``None`` when it can. Recording is the
+        device's: a simulator (``simctl``, and the drivers it hosts) or an Android device (``adb``, and those it
+        hosts)."""
+        return "the %s driver can't record a screen: --record records a simulator (simctl, or appium, xcuitest, " \
+               "devflow, ailoha or maestro on one) or an Android device (adb, uiautomator, or a driver adb hosts)" \
+               % self.NAME
+
+    def recording_ext(self, device):
+        """The recording's file extension (``.mov`` from a simulator, ``.mp4`` from Android)."""
+        return ".mp4"
+
+    def start_recording(self, device, path):
+        """Start recording the device's screen into ``path``; return what ``stop_recording`` needs (a dict).
+        Raise ``DriverError`` when it can't."""
+        raise StepSkipped(self.record_support(device))
+
+    def stop_recording(self, device, rec, shot):
+        """Stop the recording ``start_recording`` began, with its file finished at ``rec["file"]``; return the
+        report's words for it: ``{"file", "seconds", "by", "display", "flush"}``. Raise ``DriverError`` when there's
+        no file."""
+        raise StepSkipped(self.record_support(device))
+
+    def discard_recording(self, device, rec):
+        """Stop a recording a failed step left running (nothing is kept)."""
+
+    def record_from(self, screen):
+        """The step a recording starts at (1-based): the screen's first ``launch``, after any seed and the reboot a
+        locale change needs; with no launch, its first step; ``None`` with no steps."""
+        steps = screen.get("steps") or []
+        for i, step in enumerate(steps, 1):
+            try:
+                if step_of(step)[0] == "launch":
+                    return i
+            except ValueError:
+                continue
+        return 1 if steps else None
+
+    def begin_recording(self, ctx):
+        """Start recording before ``ctx``'s step, into the workdir beside the screen's picture."""
+        if not self.recording_wanted() or self._recording is not None:
+            return
+        path = os.path.splitext(self.shot_path(ctx.device, ctx.screen, ctx.locale))[0] + \
+            self.recording_ext(ctx.device)
+        note("  record from step %d (%s)" % (ctx.index, describe_step(ctx.step) if ctx.step else "the run"))
+        rec = self.start_recording(ctx.device, path)
+        rec.setdefault("file", path)
+        rec["from"] = "step %d (%s)" % (ctx.index, describe_step(ctx.step)) if ctx.step else "the run"
+        self._recording = rec
+
+    def end_recording(self, ctx):
+        """After the last step (before ``verify``, the screenshot and ``reset``): stop the recording and put what
+        it made in ``ctx.shot.recording``."""
+        rec = self._recording
+        if rec is None:
+            return
+        self._recording = None
+        info = self.stop_recording(ctx.device, rec, ctx.shot)
+        info.setdefault("file", rec["file"])
+        info["from"] = rec["from"]
+        ctx.shot.recording = info
+        if not DRY_RUN:
+            note("  recorded %.1f s%s" % (info.get("seconds") or 0, (" (trim at %.2f s: the flush)" % info["flush"][
+                "at"]) if info.get("flush") else ""))
+
+    def abandon_recording(self, device):
+        """A recording still running when a screen stopped early: stop it, keep nothing."""
+        rec = self._recording
+        if rec is None:
+            return
+        self._recording = None
+        try:
+            self.discard_recording(device, rec)
+        except Exception:  # noqa: BLE001 - the screen's own error is the one to report
+            pass
+
+    def recorded(self, ctx, run, cached=False):
+        """``run()`` (a tool that does a screen's steps at once: a UI test, a flow) recorded under ``--record``;
+        ``cached``: it ran already for another screen, so there's nothing new to record (a warning says so)."""
+        if not self.recording_wanted():
+            return run()
+        if cached:
+            ctx.warn("nothing recorded: %s ran once for several screens, recorded with the first" % (
+                describe_step(ctx.step) if ctx.step else "the run"))
+            return run()
+        self.begin_recording(ctx)
+        try:
+            result = run()
+        except BaseException:
+            self.abandon_recording(ctx.device)
+            raise
+        self.end_recording(ctx)
+        return result
 
     # What subclasses implement.
 

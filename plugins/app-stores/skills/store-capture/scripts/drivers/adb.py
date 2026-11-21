@@ -10,7 +10,11 @@ Which device (``target``):
 - ``systemImage`` (and ``profile``, a device definition such as ``medium_phone``): an AVD of our own,
   ``appstores-<device id>``, created with ``avdmanager`` if it isn't there and deleted with ``--cleanup``. With
   ``avd`` too, named ``appstores-…``, that AVD is created when it isn't there (two postures of one foldable can
-  share one).
+  share one). Before ``avdmanager`` runs (and in ``--dry-run``), the image is looked for in the SDK in use
+  (``$ANDROID_HOME``, else ``$ANDROID_SDK_ROOT``): ``<sdk>/system-images/android-36/google_apis/arm64-v8a/`` with a
+  ``system.img`` (or ``source.properties``). When it isn't there the device fails once, naming the SDK and the
+  other SDK folders that have it (``$ANDROID_SDK_ROOT``, ``$ANDROID_HOME``, ``SDK_DEFAULTS``), instead of
+  avdmanager's "Package path is not valid. Valid system image paths are: null".
 
 What it does (CONTRACT.md 10.3, 10.5):
 
@@ -21,7 +25,9 @@ What it does (CONTRACT.md 10.3, 10.5):
   about), and grant the plan's ``staging.permissions`` (``pm grant``; revoked in ``reset``).
 - tools: ``target.adb``, ``target.emulator`` and ``target.avdmanager`` name them; else ``$ANDROID_HOME`` (or
   ``$ANDROID_SDK_ROOT``)'s ``platform-tools``, ``emulator`` and ``cmdline-tools/latest/bin`` (or the newest
-  ``cmdline-tools/<version>/bin``, then ``tools/bin``), else ``PATH``.
+  ``cmdline-tools/<version>/bin``, then ``tools/bin``), else ``PATH``. The emulator is started with
+  ``ANDROID_SDK_ROOT`` set to ``$ANDROID_HOME`` when only that is set (it fails "Cannot find AVD system path.
+  Please define ANDROID_SDK_ROOT" otherwise).
 - per screen, when it changes: the app's language (``cmd locale set-app-locales <package> --locales <locale>``,
   Android 13 and later; ``target.deviceLocale: true`` sets the device's too: ``cmd locale set-device-locale``,
   or ``setprop persist.sys.locale`` and a SystemUI restart on older emulators), dark mode (``cmd uimode night
@@ -40,14 +46,20 @@ What it does (CONTRACT.md 10.3, 10.5):
   step): the emulator's console (``adb emu fold``, ``emu unfold``, ``emu posture 2`` with ``emu sensor set
   hinge-angle0 <target.hingeAngle>``), a real device's ``cmd device_state state <id>`` (``state reset`` after),
   checked with ``cmd device_state print-state``. A posture change locks the screen and moves the app to another
-  physical display, so after one the screen is woken and unlocked (``input keyevent KEYCODE_WAKEUP``, ``wm
-  dismiss-keyguard``), the display in use is found again, ``wm size``/``wm density`` are set again on it (each
-  physical display keeps its own override, and each is put back), and demo mode is applied again.
+  physical display, so after one (once ``sys.boot_completed`` is 1) the screen is woken and unlocked (``input
+  keyevent KEYCODE_WAKEUP``, ``wm dismiss-keyguard``, then ``input keyevent 82`` too), tried again with a longer
+  wait each time (``KEYGUARD_WAITS``: right after a cold boot the first try can come too early), the display in
+  use is found again, ``wm size``/``wm density`` are set again on it (each physical display keeps its own
+  override, and each is put back), and demo mode is applied again.
 - the keyboard: ``hideKeyboard`` presses back only while ``dumpsys input_method`` says the keyboard is up
   (``mInputShown``); ``verify``'s keyboard check reads the same.
 - screenshot: ``adb exec-out screencap -p`` with ``-d <display>``: ``target.display`` (SurfaceFlinger's long id,
   ``dumpsys SurfaceFlinger --display-id``), or on a device with more than one physical display the one in use
   (``dumpsys display``'s active viewport for display 0). Text a screencap prints before the PNG is dropped.
+- recording (``capture.py --record``): ``screenrecord --bit-rate 20000000 --time-limit 180 [--display-id …]`` on the
+  device (the display the screenshots take) from the screen's first ``launch`` until a second after its last step,
+  stopped with ``pkill -INT screenrecord`` before ``verify``, the screenshot and ``reset``, then pulled and deleted
+  from the device. It stops by itself at 180 s (a warning says so); no flush is needed.
 - ``reset``: leave demo mode, put back the display size and density (on each display it changed), the posture,
   dark mode, language and animation scales, stop the app, stop an emulator it started, and with ``--cleanup``
   delete its own AVD.
@@ -58,6 +70,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import sys
 import zipfile
 
 from . import base
@@ -82,8 +95,80 @@ CONSOLE_POSTURES = {"folded": ("fold",), "open": ("unfold",), "half-open": ("pos
 DRY_STATES = {"CLOSED": 0, "HALF_OPENED": 1, "OPENED": 2}
 HOLD_MOVES = 5                # MOVE events a held swipe goes through on its way (input motionevent)
 NO_MOTIONEVENT = re.compile(r"(?i)unknown command|usage: input")   # an input without motionevent (older Android)
+# Where an Android SDK usually is when no variable names it (Android Studio's default; on a Mac also the Homebrew
+# android-commandlinetools cask's), by sys.platform prefix: only to say where a system image missing from the SDK in
+# use *is*. ~ and %VARIABLES% are expanded.
+SDK_DEFAULTS = {
+    "darwin": ("~/Library/Android/sdk", "/opt/homebrew/share/android-commandlinetools",
+               "/usr/local/share/android-commandlinetools"),
+    "linux": ("~/Android/Sdk",),
+    "win32": ("%LOCALAPPDATA%\\Android\\Sdk",),
+}
+# A system image's folder holds one of these once it's installed (an interrupted download leaves neither).
+IMAGE_FILES = ("system.img", "source.properties")
 STATUS_ICONS = ("bluetooth", "volume", "alarm", "location", "sync", "mute", "speakerphone", "zen", "eri", "tty",
                 "cast", "hotspot")
+
+
+def sdk_in_use():
+    """The Android SDK the driver takes its tools from (and avdmanager and the emulator read), as ``(folder,
+    variable)``: ``$ANDROID_HOME``, else ``$ANDROID_SDK_ROOT``; ``(None, None)`` when neither is set (the tools on
+    ``PATH`` then find their own SDK)."""
+    for var in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
+        if os.environ.get(var):
+            return os.environ[var], var
+    return None, None
+
+
+def image_dir(sdk, package):
+    """A system image's folder in an SDK: ``system-images;android-36;google_apis;arm64-v8a`` ->
+    ``<sdk>/system-images/android-36/google_apis/arm64-v8a``; ``None`` for a package id that isn't a system image."""
+    parts = [p for p in (package or "").split(";") if p]
+    if len(parts) < 2 or parts[0] != "system-images":
+        return None
+    return os.path.join(sdk, *parts)
+
+
+def image_installed(sdk, package):
+    """True when the SDK folder ``sdk`` has the system image ``package`` installed (``IMAGE_FILES`` in its folder)."""
+    folder = image_dir(sdk, package)
+    return bool(folder) and any(os.path.isfile(os.path.join(folder, f)) for f in IMAGE_FILES)
+
+
+def sdk_folders():
+    """The SDK folders worth looking in, each once: ``$ANDROID_SDK_ROOT``, ``$ANDROID_HOME``, then this system's
+    ``SDK_DEFAULTS``; only those that exist."""
+    paths = [os.environ.get("ANDROID_SDK_ROOT"), os.environ.get("ANDROID_HOME")]
+    for prefix, defaults in SDK_DEFAULTS.items():
+        if sys.platform.startswith(prefix):
+            paths += [os.path.expanduser(os.path.expandvars(p)) for p in defaults]
+    out, seen = [], set()
+    for p in paths:
+        if not p or not os.path.isdir(p):
+            continue
+        real = os.path.realpath(p)
+        if real not in seen:
+            seen.add(real)
+            out.append(p)
+    return out
+
+
+def sdks_with_image(package, besides=None):
+    """The SDK folders (``sdk_folders``) other than ``besides`` that have the system image ``package``."""
+    skip = os.path.realpath(besides) if besides else None
+    return [p for p in sdk_folders() if os.path.realpath(p) != skip and image_installed(p, package)]
+
+
+def image_advice(package, sdk):
+    """What to do about a system image missing from the SDK ``sdk`` (``None``: the one the tools on PATH use): the
+    other SDK folders that have it, and how to install it."""
+    others = sdks_with_image(package, sdk)
+    install = "sdkmanager %s\"%s\"" % ("--sdk_root=%s " % shlex.quote(sdk) if sdk else "", package)
+    if others:
+        return ("it's installed in %s: run with ANDROID_HOME=%s ANDROID_SDK_ROOT=%s, or install it in this SDK: %s"
+                % (" and ".join(others), shlex.quote(others[0]), shlex.quote(others[0]), install))
+    return ("no other SDK folder looked in has it (%s): install it (%s), or point ANDROID_HOME and ANDROID_SDK_ROOT "
+            "at an SDK that has it" % (", ".join(sdk_folders()) or "none found", install))
 
 
 def demo_commands(clock, mobile=False):
@@ -242,7 +327,7 @@ class AdbDriver(base.Driver):
     MANAGES_DEVICE = True     # the uiautomator driver leaves size, locale, appearance and status bar alone
     BOOT_TIMEOUT = 600
     POSTURE_TIMEOUT = 20     # seconds a posture change has to show in cmd device_state print-state
-    KEYGUARD_TIMEOUT = 10    # seconds the lock screen has to go after one
+    KEYGUARD_WAITS = (2, 3, 5, 8)   # seconds each wake-and-unlock try waits for the lock screen to go after one
 
     def __init__(self, options=None):
         """Set up; nothing runs until ``prepare``."""
@@ -412,11 +497,42 @@ class AdbDriver(base.Driver):
         if name in have:
             return
         avdmanager = self.avdmanager(t)
+        self.check_image(t["systemImage"])
         cmd = [avdmanager, "create", "avd", "-n", name, "-k", t["systemImage"]]
         if t.get("profile"):
             cmd += ["-d", t["profile"]]
-        base.run(cmd, input="no\n", timeout=300)
+        try:
+            base.run(cmd, input="no\n", timeout=300)
+        except base.CommandError as e:
+            if "Package path is not valid" not in "%s %s" % (e.out or "", e.err or ""):
+                raise
+            raise base.DriverError("avdmanager couldn't find the system image %s in its SDK (\"Package path is not "
+                                   "valid\"): %s" % (t["systemImage"], image_advice(t["systemImage"], sdk_in_use()[0])))
         self.avd_created = name
+
+    def check_image(self, package):
+        """Fail once, before ``avdmanager``, when the system image ``package`` isn't installed in the SDK in use
+        (``sdk_in_use``), naming that SDK and the others that have it; skipped when no variable names an SDK or the
+        package id isn't a system image's (avdmanager then says what it says)."""
+        sdk, var = sdk_in_use()
+        folder = image_dir(sdk, package) if sdk else None
+        if not folder:
+            return
+        if image_installed(sdk, package):
+            if base.DRY_RUN:
+                base.note("  (the system image is installed: %s)" % folder)
+            return
+        raise base.DriverError("the system image %s isn't installed in the Android SDK in use, %s ($%s): %s has no %s; "
+                               "%s" % (package, sdk, var, folder, " or ".join(IMAGE_FILES),
+                                       image_advice(package, sdk)))
+
+    def emulator_env(self):
+        """``ANDROID_SDK_ROOT`` for the emulator when only ``$ANDROID_HOME`` names the SDK (an emulator that reads
+        only ANDROID_SDK_ROOT fails "Cannot find AVD system path" otherwise); ``None`` when there's nothing to add."""
+        home = os.environ.get("ANDROID_HOME")
+        if home and not os.environ.get("ANDROID_SDK_ROOT"):
+            return {"ANDROID_SDK_ROOT": home}
+        return None
 
     def running_avd(self, avd):
         """The serial of an emulator already running this AVD, or ``None``."""
@@ -442,11 +558,11 @@ class AdbDriver(base.Driver):
             cmd.append("-read-only")
         cmd += [str(a) for a in t.get("emulatorArgs") or []]
         self.log_path = os.path.join(self.options.workdir, "emulator-%s.log" % avd) if not base.DRY_RUN else None
-        self.proc = base.spawn(cmd, log_path=self.log_path)
+        self.proc = base.spawn(cmd, log_path=self.log_path, env=self.emulator_env())
         self.started = True
         return "emulator-%d" % int(port)
 
-    def wait_for_boot(self):
+    def wait_for_boot(self, start_server=True):
         """Poll until the device answers and ``sys.boot_completed`` is 1 (a dropped adb server or a device still
         coming up is just "not yet"); an emulator this driver started that exits fails with its log's last lines."""
 
@@ -456,7 +572,8 @@ class AdbDriver(base.Driver):
             res = self.shell("getprop", "sys.boot_completed", check=False, quiet=True, dry_output="1", timeout=30)
             return res.ok and res.out.strip() == "1"
 
-        base.run(self.adb + ["start-server"], check=False, quiet=True, timeout=60)
+        if start_server:
+            base.run(self.adb + ["start-server"], check=False, quiet=True, timeout=60)
         base.poll(booted, self.BOOT_TIMEOUT, interval=2, what="%s to finish booting" % self.serial)
 
     def _log_tail(self, lines=8):
@@ -546,22 +663,34 @@ class AdbDriver(base.Driver):
 
     def unlock(self, device, shot):
         """Wake the screen and dismiss the lock screen a fold brings up (an emulator's has no PIN; a person's
-        device with one stays locked: a warning)."""
-        self.shell("input", "keyevent", "KEYCODE_WAKEUP", check=False)
-        self.shell("wm", "dismiss-keyguard", check=False)
-        if base.DRY_RUN:
+        device with one stays locked: a warning). Waits for ``sys.boot_completed`` first, then tries ``input
+        keyevent KEYCODE_WAKEUP`` and ``wm dismiss-keyguard`` (and from the second try ``input keyevent 82``, which
+        lifts a swipe lock screen) once per ``KEYGUARD_WAITS``, each waiting longer for ``isKeyguardShowing=false``:
+        right after a cold boot a fold's lock screen can come back over the first dismiss."""
+        if not base.DRY_RUN:
+            self.wait_for_boot(start_server=False)
+        tries = len(self.KEYGUARD_WAITS)
+        for n, wait in enumerate(self.KEYGUARD_WAITS):
+            self.shell("input", "keyevent", "KEYCODE_WAKEUP", check=False)
+            self.shell("wm", "dismiss-keyguard", check=False)
+            if n:
+                self.shell("input", "keyevent", "82", check=False)
+            if base.DRY_RUN:
+                return
+            try:
+                base.poll(lambda: not self.keyguard_showing(), wait, interval=0.5, what="the lock screen to go")
+            except base.StepFailed:
+                continue
+            if n:
+                base.note("  the lock screen went on try %d of %d" % (n + 1, tries))
             return
-        try:
-            base.poll(lambda: not self.keyguard_showing(), self.KEYGUARD_TIMEOUT, interval=0.5,
-                      what="the lock screen to go")
-        except base.StepFailed:
-            message = ("the lock screen is still up after the posture change (a PIN?): the next launch lands behind "
-                       "it; unlock %s by hand" % self.serial)
-            if shot is not None:
-                shot.warnings.append(message)
-            else:
-                self.warnings.append(message)
-            base.note("  warning: %s" % message)
+        message = ("the lock screen is still up after the posture change (%d tries to wake and unlock it; a PIN?): "
+                   "the next launch lands behind it; unlock %s by hand" % (tries, self.serial))
+        if shot is not None:
+            shot.warnings.append(message)
+        else:
+            self.warnings.append(message)
+        base.note("  warning: %s" % message)
 
     def apply_posture(self, device, posture, shot):
         """Put the foldable in ``posture``, then make right what that undid: wake and unlock it, find the display
@@ -1158,14 +1287,80 @@ class AdbDriver(base.Driver):
         self.shell("input", "swipe", x1, y1, x1, y1, hold)
         self.shell("input", "swipe", x1, y1, x2, y2, ms)
 
+    # -- recording (capture.py --record) ---------------------------------------------------------------------
+
+    RECORD_LIMIT = 180                              # seconds: screenrecord's longest on most Android versions
+    RECORD_REMOTE = "/sdcard/appstores-recording.mp4"
+
+    def record_support(self, device):
+        """Every Android device records (``screenrecord``)."""
+        return None
+
+    def capture_display(self, device):
+        """The physical display the screenshots (and recordings) take: ``target.display``, else the one in use."""
+        display = (device.get("target") or {}).get("display")
+        if display in (None, "", "auto"):
+            display = self.display
+        return display
+
+    def start_recording(self, device, path):
+        """``adb shell screenrecord --bit-rate 20000000 --time-limit 180 [--display-id …] /sdcard/…`` in the
+        background; it takes a moment to start."""
+        display = self.capture_display(device)
+        args = ["screenrecord", "--bit-rate", "20000000", "--time-limit", str(self.RECORD_LIMIT)]
+        if display is not None:
+            args += ["--display-id", str(display)]
+        args.append(self.RECORD_REMOTE)
+        line = " ".join(shlex.quote(str(a)) for a in args)
+        if not base.DRY_RUN:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+        log = path + ".log"
+        proc = base.spawn(self.adb + ["-s", self.serial, "shell", line], log_path=log)
+        started = base.CLOCK()
+        base.sleep(1)
+        if proc is not None and proc.poll() is not None:
+            raise base.DriverError("screenrecord stopped as it started: %s" % (_read(log).strip()[-300:]
+                                                                               or "it said nothing"))
+        return {"proc": proc, "file": path, "log": log, "display": display, "started": started}
+
+    def stop_recording(self, device, rec, shot):
+        """A second for the last step's settled frames, then ``pkill -INT screenrecord`` (it finishes the file),
+        pull it and delete it from the device. Raises ``DriverError`` without a file."""
+        base.sleep(self.RECORD_TAIL)
+        seconds = base.CLOCK() - rec["started"]
+        if seconds > self.RECORD_LIMIT:
+            shot.warnings.append("screenrecord stops at %d s and the steps took %.0f s: the recording ends before "
+                                 "the last of them (shorten the steps' waits)" % (self.RECORD_LIMIT, seconds))
+            seconds = float(self.RECORD_LIMIT)
+        self.shell("pkill", "-INT", "screenrecord", check=False)
+        proc = rec.get("proc")
+        if proc is not None:
+            try:
+                proc.wait(timeout=30)
+            except Exception:  # noqa: BLE001 - still running: stop the local adb; the file may be cut short
+                base.stop(proc)
+        try:
+            self.adb_run("pull", self.RECORD_REMOTE, rec["file"], timeout=600)
+        finally:
+            self.shell("rm", "-f", self.RECORD_REMOTE, check=False)
+        if not base.DRY_RUN and not (os.path.isfile(rec["file"]) and os.path.getsize(rec["file"]) > 0):
+            raise base.DriverError("screenrecord left no video: %s" % (_read(rec["log"]).strip()[-300:]
+                                                                      or "it said nothing"))
+        return {"file": rec["file"], "seconds": round(seconds, 1), "by": "adb screenrecord",
+                "display": None if rec.get("display") is None else str(rec["display"]), "flush": None}
+
+    def discard_recording(self, device, rec):
+        """Stop it on the device and delete its file there."""
+        self.shell("pkill", "-INT", "screenrecord", check=False)
+        base.stop(rec.get("proc"))
+        self.shell("rm", "-f", self.RECORD_REMOTE, check=False)
+
     def screenshot(self, device, path):
         """``adb exec-out screencap -p [-d <display>]`` written to ``path``: ``target.display``, or the display in
         use on a device with more than one (``resolve_display``). A warning screencap prints before the PNG (a
         device with several displays and none named) is dropped."""
         args = ["exec-out", "screencap", "-p"]
-        display = (device.get("target") or {}).get("display")
-        if display in (None, "", "auto"):
-            display = self.display
+        display = self.capture_display(device)
         if display is not None:
             args += ["-d", str(display)]
         res = self.adb_run(*args, binary=True, timeout=60)
@@ -1180,6 +1375,15 @@ class AdbDriver(base.Driver):
                       .strip().splitlines()[0][:160])
         with open(path, "wb") as f:
             f.write(data[start:])
+
+
+def _read(path):
+    """A log file's text (empty when it isn't there)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return ""
 
 
 DRIVER = AdbDriver

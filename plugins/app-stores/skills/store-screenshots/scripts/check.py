@@ -18,13 +18,14 @@ the PNGs themselves, then decides what a script can:
 - seams of a panorama, captures shown larger than they are, and what fell back to the primary locale.
 
 - the set's own consistency: the device in the same place on every non-hero shot of a target (0.2u) and the
-  caption's top too (0.5u); shots 1-3's captions big enough for search (9.5u on a tall slot);
+  caption's top too (0.5u); shots 1-3's captions big enough for search (9.5u on a tall slot or an Apple phone
+  slot, whatever its shape: ``slots.caption_class``, as render.py sizes them);
 - with a style: its copy rules (words, lines, case), its roles; with a locked style, a config theme that
   contradicts it (an error) and layouts outside its roles;
 - with an approved baseline (``design/baseline``, used by itself when it's there): the locked style unchanged (an
   error otherwise), and each file's drift from its baseline counterpart (caption size, top, height and lines, the
-  device's box and frame, tilt, text share, ink, accent, background, layout) past the style's ``drift``
-  tolerances (warnings: the user decides).
+  caption class, the device's box and frame, tilt, text share, ink, accent, background, layout) past the style's
+  ``drift`` tolerances (warnings: the user decides; a changed caption class always).
 
 - frames: a drawn frame's corners cutting the capture (they shrink by themselves; what's left is a warning), a
   maker's art drawn larger than its pixels, cut to fit a capture of another shape, or hiding content in its
@@ -55,6 +56,7 @@ from appstores_lib import png  # noqa: E402
 from appstores_lib import rules  # noqa: E402
 from appstores_lib import text as textlib  # noqa: E402
 import frames  # noqa: E402
+import slots  # noqa: E402
 import styles  # noqa: E402
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -71,16 +73,17 @@ STORE_NAMES = {"apple": "App Store", "google": "Google Play", "design": "The set
                "amazon": "Amazon Appstore", "steam": "Steam", "itch": "itch.io"}
 GOOGLE_SCREEN_SLOTS = ("phone", "tablet7", "tablet10", "tv", "wear")
 
-# The search row on an iPhone (derived, not measured: a 402-pt-wide screen, 16-pt margins and 8-pt gaps, three
-# portrait shots, so each is about 118 pt wide; one landscape shot spans the row). iOS's smallest text is 11 pt.
-SEARCH_SCREEN_PT = 402.0
-SEARCH_MARGIN_PT = 16.0
-SEARCH_GAP_PT = 8.0
-SEARCH_SHOTS = 3
+# The search row on an iPhone (slots.py: derived, not measured; each portrait shot about 118 pt wide, one landscape
+# shot spans the row). iOS's smallest text is 11 pt.
+SEARCH_SCREEN_PT = slots.SEARCH_SCREEN_PT
+SEARCH_MARGIN_PT = slots.SEARCH_MARGIN_PT
+SEARCH_GAP_PT = slots.SEARCH_GAP_PT
+SEARCH_SHOTS = slots.SEARCH_SHOTS
 MIN_TEXT_PT = 11.0
 
-# Shots 1-3's caption in u (1% of the width) by aspect class: at about 118 pt in Apple's search row, 9.5u on a tall
-# shot is 11 pt (screenshot-craft research; mid and wide from the iPad and landscape sets). Square: none.
+# Shots 1-3's caption in u (1% of the width) by caption class (slots.caption_class: the aspect class, but tall on an
+# Apple phone slot in portrait, as render.py sizes it): at about 118 pt in Apple's search row, 9.5u on a tall shot
+# is 11 pt (screenshot-craft research; mid and wide from the iPad and landscape sets). Square: none.
 FIRST_SHOTS_MIN_U = {"tall": 9.5, "mid": 6.0, "wide": 4.0}
 # Inside one set: the device box (x, y, width) and the caption's top across non-hero shots of a layout (u).
 SET_DEVICE_TOLERANCE_U = 0.2
@@ -112,13 +115,7 @@ class UsageError(Exception):
     """A usage or environment problem: exit 3 with this message."""
 
 
-def search_shot_points(width, height):
-    """How wide (in points) one shot of this pixel size is drawn in the App Store's search row on an iPhone:
-    three portrait shots share the row; a landscape one fills it."""
-    row = SEARCH_SCREEN_PT - 2 * SEARCH_MARGIN_PT
-    if width > height:
-        return row
-    return (row - (SEARCH_SHOTS - 1) * SEARCH_GAP_PT) / SEARCH_SHOTS
+search_shot_points = slots.search_shot_points
 
 
 def points_at(font_px, width_px, shown_pt):
@@ -215,21 +212,7 @@ def _size_text(size):
     return "%dx%d" % (size[0], size[1])
 
 
-def fits(size, sizes, orientation=None):
-    """True if ``size`` is one of ``sizes`` (either orientation unless ``orientation`` says otherwise)."""
-    w, h = size
-    for sw, sh in sizes:
-        if orientation == "asListed":
-            ok = (w, h) == (sw, sh)
-        elif orientation == "portrait":
-            ok = (w, h) == (min(sw, sh), max(sw, sh))
-        elif orientation == "landscape":
-            ok = (w, h) == (max(sw, sh), min(sw, sh))
-        else:
-            ok = (w, h) in ((sw, sh), (sh, sw))
-        if ok:
-            return True
-    return False
+fits = slots.fits
 
 
 def in_range(size, rng):
@@ -483,10 +466,14 @@ class Inputs:
         rs = self.rulesets.get("apple")
         if rs is None or size is None:
             return None
-        for key, slot in rs.slots.items():
-            if fits(size, slot.get("sizes") or [], slot.get("orientation")):
-                return key
-        return None
+        return slots.apple_display_type(size, rs.slots)
+
+    def caption_class(self, store, target_id, size):
+        """The class whose caption factor render.py gave this target's captions (slots.caption_class): its aspect
+        class, tall on an Apple phone slot in portrait, or the target's ``captionClass``."""
+        kind = self.slot_kind("apple", self.apple_slot(size)) if store == "apple" else None
+        override = (self.targets.get(target_id) or {}).get("captionClass")
+        return slots.caption_class(store, size[0], size[1], kind, override)[0]
 
     def google_slot(self, target_id):
         """``(slot, how)``: the Play slot a target fills and how that was decided (``store-listing.json``, the
@@ -1068,7 +1055,7 @@ class Check:
                 self.report.measure(f.get("path"), "searchPt", round(pt, 1))
             order = self.inputs.shots_for(f.get("target"))
             first = f.get("shot") in order[:(1 if apple_phone and size[0] > size[1] else SEARCH_SHOTS)]
-            need = FIRST_SHOTS_MIN_U.get(aspect_class(size[0], size[1]))
+            need = FIRST_SHOTS_MIN_U.get(self.inputs.caption_class(store, f.get("target"), size))
             if first and need is not None and (u < need - 1e-6 or (pt is not None and pt < MIN_TEXT_PT)):
                 key = (store, f.get("locale"), f.get("target"))
                 entry = self.search_small.setdefault(key, {"shots": [], "need": need, "width": size[0],
@@ -1737,16 +1724,7 @@ class Check:
                 r.look(store, rule.id, rule.get("item"), rule.source, rule.status)
 
 
-def aspect_class(width, height):
-    """The aspect class of a slot: tall (w/h under 0.6), mid (0.6-0.85), square (0.85-1.2) or wide."""
-    a = width / float(height)
-    if a < 0.6:
-        return "tall"
-    if a < 0.85:
-        return "mid"
-    if a <= 1.2:
-        return "square"
-    return "wide"
+aspect_class = slots.aspect_class
 
 
 def _plain(text):
@@ -1879,6 +1857,16 @@ def drift_messages(cur, base, tol):
     if bool(c) != bool(b):
         out.append("has a caption; the baseline's had none" if c else "has no caption; the baseline's had one")
     if c and b:
+        # The class whose caption factor sized the words (a baseline from before render.py reported it sized them
+        # by the aspect class): an Apple phone slot of a mid shape now takes the tall factor.
+        cc = cur.get("captionClass") or cur.get("aspectClass")
+        bc = base.get("captionClass") or base.get("aspectClass")
+        if cc and bc and cc != bc:
+            why = ""
+            if cc == "tall" and cur.get("store") == "apple":
+                why = (": Apple's search shows an iPhone slot three across whatever its shape; the target's "
+                       "\"captionClass\": \"%s\" keeps the baseline's size" % bc)
+            out.append("captions sized as a %s slot's, the baseline's as a %s slot's%s" % (cc, bc, why))
         if c.get("fontPx") and b.get("fontPx"):
             cu, bu = u(c["fontPx"], w), u(b["fontPx"], bw)
             change = (cu - bu) / bu if bu else 0
