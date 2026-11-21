@@ -109,6 +109,14 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - `store-capture`: `fill` warns when a field it typed that the screen's `verify` names is out of sight once
   `scrollTo` has scrolled the form back (a `verify` sees only what's on screen); config.md and staging.md say to
   verify only what the shot shows.
+- `store-capture`: `video.py frames <video> <out-dir> [--width W | --size WxH] [--format jpg|png] [--quality N]`:
+  every recorded frame, in order, numbered afresh, for an edit by frame index. A simulator recording's timestamps
+  don't follow the wall clock and some clash, so seeking, `fps=` or `setpts` landed on the wrong frames and the
+  image muxers dropped some in a real trial; `frames` decodes once to raw RGB with the timestamps passed through
+  and pipes it into a second ffmpeg that numbers the frames. It prints the count and size, notes a stream frame
+  count that differs, and notes a display-matrix rotation (written upright; `--size` forces the display's shape
+  when the picture comes out squeezed, as a two-screen simulator's inner display did). video.md (editing by frame
+  index, the rotated recording), SKILL.md (the video step, a failure-mode row) and CONTRACT say so.
 
 - `store-screenshots` 0.1.0 (#12): designed store screenshots from an app's real captures, one design for every
   store, size and locale. A brief and a storyboard agreed with the user before rendering; `store-screenshots.json`
