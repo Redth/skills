@@ -16,6 +16,8 @@ own). Always `-s <serial>`: with two devices attached, a bare `adb` fails or pic
 
 - `systemImage` (and `profile`, a device definition such as `medium_phone`): an AVD of the skill's own,
   `appstores-<device id>`, created with `avdmanager` when it isn't there and deleted with `capture.py --cleanup`.
+  The image has to be installed in the SDK the driver uses ([The SDK](#the-sdk)); it's checked before `avdmanager`
+  runs.
 - `avd`: an emulator by AVD name: one already running is used as it is, otherwise it's started headless and stopped
   after (`readOnly: true` adds `-read-only`, so the AVD's disk is never written). A person's own AVD only when the
   plan names it.
@@ -43,6 +45,29 @@ own). Always `-s <serial>`: with two devices attached, a bare `adb` fails or pic
   the newest versioned `cmdline-tools/<version>/bin/avdmanager` (an SDK Manager install often has no `latest`), then
   `tools/bin`, then `PATH`.
 
+## The SDK
+
+The driver uses one Android SDK: `$ANDROID_HOME`, else `$ANDROID_SDK_ROOT`, for its tools, the AVD's system image
+and the emulator. A Mac can easily have two: Homebrew's `android-commandlinetools` (platform-tools, emulator,
+cmdline-tools, often no `system-images/`) and Android Studio's `~/Library/Android/sdk`, with `ANDROID_HOME` naming
+the first and the images in the second.
+
+- **The image check.** Before `avdmanager create avd` (and in `--dry-run`), the driver looks for the image in that
+  SDK: `system-images;android-36;google_apis;arm64-v8a` is
+  `<sdk>/system-images/android-36/google_apis/arm64-v8a/`, with a `system.img` (or `source.properties`) in it. When
+  it isn't there, the device fails once (each of its screens `missed` with the one message), naming the SDK in use
+  and the other SDK folders that have the image: `$ANDROID_SDK_ROOT`, `$ANDROID_HOME`, and the usual places
+  (Android Studio's `~/Library/Android/sdk` on a Mac, `~/Android/Sdk` on Linux, `%LOCALAPPDATA%\Android\Sdk` on
+  Windows; Homebrew's `/opt/homebrew/share/android-commandlinetools` and `/usr/local/share/android-commandlinetools`).
+  Fix it with `ANDROID_HOME=<that sdk> ANDROID_SDK_ROOT=<that sdk> python3 scripts/capture.py …`, or install the
+  image where the driver looks: `sdkmanager --sdk_root=<sdk> "system-images;android-36;google_apis;arm64-v8a"`.
+  Without either variable the tools on `PATH` pick their own SDK and the check is skipped; avdmanager's "Package
+  path is not valid. Valid system image paths are: null" is then explained the same way (its "corrupted
+  package.xml" warnings beside it are unrelated).
+- **The emulator's variable.** The emulator is started with `ANDROID_SDK_ROOT` set to `$ANDROID_HOME` when only
+  `ANDROID_HOME` is set: an emulator that reads only `ANDROID_SDK_ROOT` fails "Cannot find AVD system path. Please
+  define ANDROID_SDK_ROOT" otherwise. The dry run shows it (`$ ANDROID_SDK_ROOT=… emulator -avd …`).
+
 `script` steps get the device as `ANDROID_SERIAL` (which adb honours, so a script's bare `adb` reaches only this
 device) and `APPSTORES_SERIAL`, with `APPSTORES_DEVICE`, `APPSTORES_PLATFORM`, `APPSTORES_APP_ID`,
 `APPSTORES_LOCALE` and `APPSTORES_SCREEN`.
@@ -60,6 +85,7 @@ device) and `APPSTORES_SERIAL`, with `APPSTORES_DEVICE`, `APPSTORES_PLATFORM`, `
 | Launch with extras | `adb -s <serial> shell am start -W -S -n com.example.samplerecipes/.MainActivity --es ScreenshotScreen plan --es ScreenshotSeed demo` (`-S` stops it first; the driver types each value: `--es` strings, `--ez` booleans, `--ei` integers, `--ef` floats) |
 | Deep link | `adb -s <serial> shell am start -W -a android.intent.action.VIEW -d 'samplerecipes://recipe/demo' com.example.samplerecipes` |
 | Tap, type, swipe, back | `input tap <x> <y>`, `input text 'pasta'` (spaces as `%s`), `input swipe x1 y1 x2 y2 300`, `input keyevent KEYCODE_BACK` |
+| A held drag (`swipe`'s `hold`: a slider, a handle) | `adb -s <serial> shell 'input motionevent DOWN 180 1240; sleep 0.4; input motionevent MOVE 324 1240; sleep 0.2; …; input motionevent MOVE 900 1240; input motionevent UP 900 1240'`: `input swipe` can't hold before it moves. An older `input` without `motionevent` answers "Unknown command"; the driver then long-presses (`input swipe x1 y1 x1 y1 400`) and swipes, the finger lifted between, and warns |
 | Find an element | `uiautomator dump /sdcard/ui.xml` then `adb exec-out cat /sdcard/ui.xml`: match `resource-id`, `text` or `content-desc` (text: exact, then ignoring case, then contained), or an xpath with `contains()`, `not()`, `and`/`or` ([config.md](config.md#steps)); tap the centre of its `bounds` |
 | D-pad (TV) | `input keyevent KEYCODE_DPAD_RIGHT`, `KEYCODE_DPAD_CENTER` |
 
@@ -170,9 +196,15 @@ can share one AVD (`"avd": "appstores-fold"` with the `systemImage`: created whe
 What a fold undoes, and what the driver does about it (each seen on an API 36 Pixel 9 Pro Fold image, 2026-11-19):
 
 - **It locks the screen.** Folding (and unfolding again) brings up the keyguard, and the next launch lands behind it
-  ("didn't appear within 60 s"; `--inspect` shows `keyguard_root_view`). The driver wakes and unlocks it (`input
-  keyevent KEYCODE_WAKEUP`, `wm dismiss-keyguard`) and waits for `isKeyguardShowing=false` in `dumpsys window`; a
-  device with a PIN stays locked, with a warning.
+  ("didn't appear within 60 s"; `--inspect` shows `keyguard_root_view`). The driver waits for `sys.boot_completed`
+  to be 1, wakes and unlocks it (`input keyevent KEYCODE_WAKEUP`, `wm dismiss-keyguard`) and waits for
+  `isKeyguardShowing=false` in `dumpsys window`; when it's still up it tries again, adding `input keyevent 82` (menu,
+  which lifts a swipe lock screen), four tries in all, each waiting longer (2, 3, 5 and 8 s). A device with a PIN
+  stays locked, with one warning ("the lock screen is still up after the posture change").
+- **Right after a cold boot the first unlock can come too early.** An emulator the driver booted fresh and unfolded
+  at once (an `open` device on a Pixel 9 Pro Fold image) kept its lock screen over the first dismiss, and the app
+  launched behind it, twice in a row, in a real trial; a dismiss a few seconds after the boot worked. That's what
+  the later tries are for: a log line "the lock screen went on try 2 of 4" is this, not a problem.
 - **`wm size` and `wm density` are kept per physical display.** A size set while open stays on the inner display
   and never reaches the cover one; folding back finds the cover display at its own size (1080×2424). The driver sets
   them again on the display in use after every posture change, and in `reset` puts each display's back in the

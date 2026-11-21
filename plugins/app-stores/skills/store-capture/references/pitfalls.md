@@ -27,6 +27,10 @@ happen to any app.
 - **Folding locks the screen** (an Android emulator), and the next launch lands behind the keyguard. The `adb`
   driver wakes and unlocks it after every posture change; a script that folds by itself has to as well (`input
   keyevent KEYCODE_WAKEUP`, `wm dismiss-keyguard`).
+- **A fold right after a cold boot** kept the lock screen over the first dismiss (a fresh Pixel 9 Pro Fold emulator
+  unfolded at once): the launch landed behind it and the screen was missed, twice. The driver waits for
+  `sys.boot_completed` and tries the unlock again with a longer wait each time (and `input keyevent 82`); a script
+  that folds has to retry too.
 - **`wm size` is per physical display.** Set while open, it never reaches the cover display; the fold then
   captures the cover display at its own 1080×2424 and the shot fails. The driver sets it again after each posture
   change and puts each display's back.
@@ -181,6 +185,13 @@ happen to any app.
 - **CoreSimulator hiccups.** "Mach error -308 - (ipc/mig) server died" failed an install once and every screen
   of that device was reported missed; a retry a few seconds later worked. The `simctl` driver tries such a command
   once more by itself.
+- **Two Android SDKs.** A shell's `ANDROID_HOME` named Homebrew's command-line-tools SDK (platform-tools, emulator,
+  cmdline-tools, no `system-images/`) while the plan's image was in the Android Studio SDK in the home folder:
+  avdmanager said only "Package path is not valid. Valid system image paths are: null" (beside unrelated "corrupted
+  package.xml" warnings) and every screen of every Android device was missed; the emulator then failed "Cannot find
+  AVD system path. Please define ANDROID_SDK_ROOT". The `adb` driver now checks the image in the SDK in use before
+  avdmanager and names the SDK folders that have it, and passes `ANDROID_SDK_ROOT` to the emulator
+  ([adb.md](adb.md#the-sdk)).
 - **SDK tools in versioned folders.** An SDK Manager install may have `cmdline-tools/19.0/`, `23.0/` and no
   `latest/`: the driver takes the newest; `target.avdmanager` names one.
 - **Permissions for the tools.** macOS needs Screen Recording for `screencapture` (without it, only the wallpaper is
@@ -212,6 +223,16 @@ happen to any app.
   through the CLI, retry a command another client turned away, and say so when one holds the lease.
 - **A .NET Debug APK that won't start.** Fast Deployment leaves the assemblies out of the APK; `adb install` then
   gives an app that crashes on start. Build with `-p:EmbedAssembliesIntoApk=true`.
+- **Another Appium server's WebDriverAgent answered our session.** XCUITest's driver puts every session's
+  WebDriverAgent on port 8100 unless told otherwise. In a real trial another project's Appium server held 8100 for
+  its own simulator: our `POST /session` went to that WebDriverAgent, the next `mobile: terminateApp` failed with
+  "invalid session id: Session does not exist", and our app commands were sent into someone else's simulator. The
+  driver now gives each simulator device its own `appium:wdaLocalPort` (8130-8199) and `appium:mjpegServerPort`
+  (9130-9199) from its id, and passes over a port another WebDriverAgent or program holds
+  ([appium.md](appium.md#beside-other-appium-servers)). Setting them by hand in `target.capabilities` works too.
+- **Appium closes the Simulator windows.** Starting an XCUITest session closes Simulator.app's windows, even with
+  `appium:isHeadless`: the user's own simulators stay booted, but their windows close. Tell the user before the
+  first Appium run on iOS; it isn't something to fix by touching their simulators.
 - **Simulator.app moved** (Xcode 27): Appium's XCUITest driver failed to open it; `appium:isHeadless` (the default
   on simulators now) avoids it. A failed session also left the simulator shut down, and the next screens failed
   with "device is not booted": the driver now boots it again and reports the session's own error.

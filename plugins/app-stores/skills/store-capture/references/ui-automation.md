@@ -111,7 +111,8 @@ appId: com.example.samplerecipes
   optional `extendedWaitUntil` on an id that's never there. A `fill` becomes, per field, `scrollUntilVisible` (down
   only), `tapOn` and `inputText` (with `hideKeyboard` between fields on Android, and after the last), and
   `hideKeyboard` is Maestro's own; `scroll {"to": "top"}` is five swipes; a scroll or fill `in` a pane can't be
-  written as a flow (the screen is `skipped`: use adb, Appium or the agent for that device). Docs:
+  written as a flow (the screen is `skipped`: use adb, Appium or the agent for that device); a swipe's `hold` is
+  left out with a warning (Maestro's `swipe` can't press before it moves: use adb or Appium for a slider). Docs:
   https://docs.maestro.dev.
 - `launchApp.arguments` arrive as launch arguments on iOS and intent extras on Android; React Native and Flutter
   read them through a launch-arguments package ([screenshot-mode.md](screenshot-mode.md)).

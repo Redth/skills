@@ -212,6 +212,13 @@ class PlanTests(CaptureCase):
         self.assertEqual([x["id"] for x in capture.screens_for(plan, droid)], ["plan", "android-only"])
         self.assertEqual(capture.screens_for(plan, droid)[0]["steps"], [{"launch": {}}])
 
+    def test_a_swipe_may_hold_before_it_moves(self):
+        swipe = {"from": [180, 1240], "to": [900, 1240], "hold": 400, "ms": 1000}
+        plan = capture.load_plan(self.plan(screens=[{"id": "plan", "steps": [{"swipe": swipe}]}]))
+        self.assertEqual(plan["screens"][0]["steps"][0]["swipe"]["hold"], 400)
+        with self.assertRaises(capture.UsageError):
+            capture.load_plan(self.plan(screens=[{"id": "plan", "steps": [{"swipe": dict(swipe, hold=-1)}]}]))
+
     def test_the_schema_uses_only_what_the_validator_checks(self):
         from appstores_lib import schema
         self.assertEqual(schema.unsupported(capture.load_schema()), [])
@@ -453,6 +460,18 @@ class DryRunTests(CaptureCase):
         self.assertIn("-> would save en-US/android-phone/search.png", out)
         self.assertIn("  reset", out)
         self.assertFalse(base.DRY_RUN)
+
+    def test_dry_run_shows_an_appium_simulators_own_webdriveragent_ports(self):
+        devices = [{"id": "iphone-6.9", "platform": "ios", "driver": "appium", "width": 1320, "height": 2868,
+                    "target": {"deviceType": "iPhone 17 Pro Max"}}]
+        screens = [{"id": "plan", "steps": [{"launch": {"args": {"ScreenshotScreen": "plan"}}}]}]
+        path = self.plan(devices, screens)
+        self.hooks.listening.add(8195)   # a dry run checks nothing: still its own port
+        self.assertEqual(self.main("--plan", path, "--dry-run"), 0)
+        self.assertEqual(self.hooks.runner.calls, [])
+        self.assertIn("this device's own ports (from its id, never WebDriverAgent's 8100): WebDriverAgent 8195, "
+                      "MJPEG 9195 (a real run first checks nothing else listens on them)", self.stdout)
+        self.assertIn("> POST http://127.0.0.1:4723/session", self.stdout)
 
 
 @unittest.skipUnless(CHROME, "Chrome isn't installed")

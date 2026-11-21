@@ -28,6 +28,11 @@ What it does, in order (CONTRACT.md 10.3, 10.5):
 - screenshot: ``simctl io … screenshot --type=png --mask=ignored`` with ``--display``: ``target.display``, else on a
   simulator with more than one built-in screen (``simctl io <udid> enumerate``) the active one after a posture
   change, or the one whose pixel size is the device's ``width`` x ``height`` (either way round).
+- recording (``capture.py --record``): ``simctl io <udid> recordVideo --codec=h264 --mask=ignored [--display=…]
+  --force <file>`` from the screen's first ``launch`` (after the reboot a locale change needs) until after its last
+  step, stopped with SIGINT before ``verify``, the screenshot and ``reset``. simctl writes a frame only when the
+  screen changes and holds the last back until the next change, so a second after the last step the status bar's
+  battery is set to 99 % for a second (the flush; its time is in the report: trim there), then back to 100 %.
 - a CoreSimulator hiccup (``server died``, ``Mach error -308``, an interrupted connection) while booting,
   installing, launching or capturing is tried once more after a few seconds.
 - ``reset``: clear the status bar, put the appearance back, stop the app, shut down a simulator it booted, and
@@ -620,6 +625,90 @@ class SimctlDriver(base.Driver):
                                "enumerate)" % (self.udid, len(screens), ", ".join(
                                    "%s %dx%d" % s for s in screens), size[0], size[1], self.udid))
 
+    # -- recording (capture.py --record) ---------------------------------------------------------------------
+
+    RECORD_START_TIMEOUT = 30   # seconds for recordVideo's "Recording started"
+    FLUSH_HOLD = 1.0            # seconds the flush's frame is held before the recording stops
+
+    def record_support(self, device):
+        """Every simulator records (``simctl io recordVideo``)."""
+        return None
+
+    def recording_ext(self, device):
+        """simctl writes a QuickTime movie."""
+        return ".mov"
+
+    def start_recording(self, device, path):
+        """``simctl io <udid> recordVideo --codec=h264 --mask=ignored [--display=…] --force <path>`` in the
+        background, the display the screenshots take (``screen_for``: the iPhone Duo's cover or inner one); waits
+        for its "Recording started" (its first frame is in)."""
+        display = self.screen_for(device)
+        cmd = SIMCTL + ["io", self.udid, "recordVideo", "--codec=h264", "--mask=ignored"]
+        if display:
+            cmd.append("--display=%s" % display)
+        cmd += ["--force", path]
+        log = path + ".log"
+        if not base.DRY_RUN:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+        proc = base.spawn(cmd, log_path=log)
+        rec = {"proc": proc, "file": path, "log": log, "display": display}
+        if base.DRY_RUN:
+            rec["started"] = base.CLOCK()
+            return rec
+
+        def started():
+            text = _read(log)
+            if "Recording started" in text:
+                return True
+            if proc.poll() is not None:
+                raise base.DriverError("simctl recordVideo stopped before it started: %s" % (
+                    text.strip()[-300:] or "it said nothing"))
+            return False
+
+        try:
+            base.poll(started, self.RECORD_START_TIMEOUT, interval=0.2, what="simctl recordVideo's first frame")
+        except base.DriverError:
+            base.interrupt(proc)
+            raise
+        rec["started"] = base.CLOCK()
+        return rec
+
+    def stop_recording(self, device, rec, shot):
+        """A second for the last step's settled frames, then the flush (the status bar's battery at 99 % for a
+        second: simctl holds the last frame back until the screen changes again), SIGINT, and the battery back
+        (100 %, or the status bar cleared when it wasn't overridden). Raises ``DriverError`` without a file."""
+        base.sleep(self.RECORD_TAIL)
+        flush = None
+        if device.get("platform") in STATUS_BAR_PLATFORMS:
+            at = base.CLOCK() - rec["started"]
+            res = self.simctl("status_bar", self.udid, "override", "--batteryLevel", "99", check=False)
+            if res.ok:
+                flush = {"by": "status bar battery 99%", "at": round(at, 2)}
+            else:
+                shot.warnings.append("the flush (a status bar change) failed, so the recording may lack its last "
+                                     "moment: %s" % (res.err or res.out).strip()[:200])
+            base.sleep(self.FLUSH_HOLD)
+        else:
+            shot.warnings.append("%s has no status bar to change, so nothing flushed the recording's last frames: "
+                                 "it may end on the frame before the last change" % device.get("platform"))
+        seconds = base.CLOCK() - rec["started"]
+        base.note("  stop the recording (SIGINT)")
+        base.interrupt(rec["proc"])
+        if flush:
+            if self.changed.get("statusBar"):
+                self.simctl("status_bar", self.udid, "override", "--batteryLevel", "100", check=False)
+            else:
+                self.simctl("status_bar", self.udid, "clear", check=False)
+        if not base.DRY_RUN and not (os.path.isfile(rec["file"]) and os.path.getsize(rec["file"]) > 0):
+            raise base.DriverError("simctl recordVideo left no movie: %s" % (
+                _read(rec["log"]).strip()[-300:] or "it said nothing"))
+        return {"file": rec["file"], "seconds": round(seconds, 1), "by": "simctl recordVideo",
+                "display": rec.get("display"), "flush": flush}
+
+    def discard_recording(self, device, rec):
+        """Stop it (SIGINT); the workdir goes with the run."""
+        base.interrupt(rec.get("proc"))
+
     def screenshot(self, device, path):
         """``simctl io <udid> screenshot --type=png --mask=ignored [--display=…] <path>``."""
         args = ["io", self.udid, "screenshot", "--type=png", "--mask=ignored"]
@@ -627,6 +716,15 @@ class SimctlDriver(base.Driver):
         if display:
             args.append("--display=%s" % display)
         self.simctl_again(*(args + [path]), timeout=60)
+
+
+def _read(path):
+    """A log file's text (empty when it isn't there yet)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return ""
 
 
 def _first_json(text):

@@ -71,6 +71,7 @@ class AilohaDriver(AgentCliDriver):
         if isinstance(value, str):
             value = {"direction": value}
         value = value or {}
+        self.swipe_hold(ctx, value, can=False)
         if value.get("from") and value.get("to"):
             args = ["ui", "swipe"] + ["%d" % round(v) for v in list(value["from"]) + list(value["to"])]
             if value.get("ms"):

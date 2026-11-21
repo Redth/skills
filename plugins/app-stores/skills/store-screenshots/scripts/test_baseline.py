@@ -459,6 +459,19 @@ class Drift(unittest.TestCase):
         self.assertIn("background colours", self.drift(background={"colours": ["#1E4FD6"]})[0])
         self.assertIn("layout is tilt", self.drift(layout="tilt")[0])
 
+    def test_a_changed_caption_class_is_drift_whatever_the_tolerance(self):
+        # A baseline rendered before the caption class was reported: its aspect class is what sized its words.
+        old = entry(store="apple", aspectClass="mid", caption={"fontPx": 62.7})
+        new = entry(store="apple", aspectClass="mid", captionClass="tall", caption={"fontPx": 98.0})
+        found = check.drift_messages(new, old, self.tol)
+        self.assertTrue(any(m.startswith("captions sized as a tall slot's, the baseline's as a mid slot's")
+                            and "\"captionClass\": \"mid\"" in m for m in found), found)
+        self.assertTrue(any(m.startswith("caption size 9.8u, the baseline's 6.3u") for m in found), found)
+        loose = styles.drift_tolerances({"drift": {"captionSize": 1.0}})
+        self.assertEqual(len(check.drift_messages(new, old, loose)), 1)       # the class is still said
+        same = entry(store="apple", aspectClass="mid", captionClass="mid")
+        self.assertEqual(check.drift_messages(same, entry(store="apple", aspectClass="mid"), self.tol), [])
+
     def test_the_styles_tolerances_are_used(self):
         loose = styles.drift_tolerances({"drift": {"captionSize": 0.2}})
         self.assertEqual(check.drift_messages(entry(caption={"fontPx": 85.0}), entry(), loose), [])
@@ -514,6 +527,30 @@ class CheckWithBaseline(Case):
                         report.to_text())
         self.assertTrue(all(f.severity == "warning" for f in drift))
         self.assertIn("design.style.copy.lines", self.ids(report))
+
+    def test_an_apple_phone_slot_whose_class_changed_drifts_against_its_baseline(self):
+        duo = {"store": "apple", "width": 1398, "height": 2034, "capture": "duo-outer"}
+        p = Project(os.path.join(self.tmp, "p"), targets=dict(tk.TARGETS, **{"duo-outer": duo}))
+
+        def before(e):   # the approved render: the mid factor, no caption class reported
+            e["aspectClass"] = render.aspect_class(e["width"], e["height"])
+            if e["target"] == "duo-outer":
+                e["caption"]["fontPx"] = round(1398 * 0.0627, 1)
+        p.fake_render(before)
+        self.quiet(baseline.approve, p.config_path, "ok")
+        p.load_style()
+
+        def after(e):    # rendered again: the tall factor
+            e["aspectClass"] = render.aspect_class(e["width"], e["height"])
+            e["captionClass"] = render.caption_class(p.config["targets"][e["target"]])[0]
+        p.fake_render(after)
+        report = check.run_check(p.config_path)
+        drift = [f for _, f in report.findings if f.rule_id == "design.baseline.drift"]
+        where = set(f.where for f in drift)
+        self.assertEqual(where, {"en-US/duo-outer/plan.png", "en-US/duo-outer/recipe.png",
+                                 "en-US/duo-outer/shop.png"}, report.to_text())
+        self.assertTrue(any("captions sized as a tall slot's" in f.message for f in drift))
+        self.assertTrue(any("caption size 10.0u, the baseline's 6.3u" in f.message for f in drift))
 
     def test_a_changed_locked_style_is_an_error(self):
         p = self.approved()

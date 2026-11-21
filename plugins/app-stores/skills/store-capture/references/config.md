@@ -101,7 +101,7 @@ Extra fields are passed to the driver (an agent's app name, for example).
 | `chrome` | `scale` (device scale factor, default 1; the page is `width/scale` × `height/scale` CSS px), or `viewport` (`[w, h]` CSS px, which sets the scale); `mobile`; `reducedMotion` |
 | `macos` | `scale` (the display's backing scale, default 2: the window is sized to `width/scale` × `height/scale` points), `position` (default `[0, 40]`) |
 | `devflow`, `ailoha` | the host's fields (as `simctl` or `adb`), plus `agentPort` (by hand, checked), `agentPlatform`, `appName`, `agentTimeout`, `cli`, `host`, `screenshot`: [devflow.md](devflow.md), [ailoha.md](ailoha.md) |
-| `appium` | the host's fields, plus `server` (default `http://127.0.0.1:4723`, this machine only), `capabilities` (on a simulator `appium:isHeadless` is already `true`) and `pointScale`: [appium.md](appium.md) |
+| `appium` | the host's fields, plus `server` (default `http://127.0.0.1:4723`, this machine only), `capabilities` (on a simulator `appium:isHeadless` is already `true`, and `appium:wdaLocalPort` and `appium:mjpegServerPort` are the device's own unless set here: [appium.md](appium.md#beside-other-appium-servers)) and `pointScale`: [appium.md](appium.md) |
 | `xcuitest` | `scheme` (required), `project` or `workspace`, `testPlan`, `configuration`, `xctestrun`, `destination`, `testTimeout`, plus the host's: [ui-automation.md](ui-automation.md) |
 | `maestro` | `maestro` (the command), `env`, `flowTimeout`, plus the host's: [ui-automation.md](ui-automation.md) |
 
@@ -229,7 +229,7 @@ One kind a step: `{ "<kind>": <value> }`.
 | `wait` | a number (ms), `{ "ms": … }`, or an element (with `contains`, optionally) | an element waits for it to appear (and, with `contains`, to show that text), up to its `timeout` (seconds, default 10). A driver that can't see elements waits and warns |
 | `scroll` | `{ "to": <element> \| "top" \| "bottom" }` or `{ "direction": "up"\|"down"\|"left"\|"right", "times": n }`, either with `"in": <element>` | `to` an element looks `direction` first (default down) until it's in view or the content stops moving, then the other way; `"top"`/`"bottom"` scroll until the content stops moving; `in` scrolls within that element (a pane, a list) rather than at the screen's middle (on a two-pane layout, the other pane): the scroll view itself or anything inside it (the pane's content, one of its fields), whose nearest scrolling ancestor is what's scrolled ([below](#scrolling-in-a-pane)). On iOS through Appium each scroll is a quick swipe ([appium.md](appium.md#scrolling-on-ios)). Wait for scroll bars to fade after (`settle`) |
 | `back` | `true` | the system back (Android), the agent's or Appium's back |
-| `swipe` | `{ "from": [x, y], "to": [x, y], "ms": … }` or `{ "direction": … }` | |
+| `swipe` | `{ "from": [x, y], "to": [x, y], "ms": …, "hold": … }` or `{ "direction": … }` | `ms` is how long the move takes; `hold` (ms, default 0) keeps the finger down at `from` before it moves, for a slider, a drag handle, a reorder or a custom pan gesture ([below](#dragging-a-slider-or-a-handle)) |
 | `flow` | a string (a Maestro flow's path, a UI test's name) or the flow driver's own object | run by the driver that understands it |
 | `script` | a string (split like a shell would, not run by one), an argument list, or `{ "run": …, "timeout": s }` | a command the user provides, run as is from the plan's folder, with the variables below |
 | `appFile` | `{ "file": "seed/app.db", "into": "Library/Caches/app.db" }` (`into` may be `{ "ios": …, "android": … }`) | copies a file into the app's own data, the app stopped first and the old file (and a database's `-wal`/`-shm`) removed: the simulator's data container, Android's `/data/data/<package>` through `run-as` (debug builds). Done by the `simctl` and `adb` drivers, and through them by the agents and Appium |
@@ -397,6 +397,25 @@ the top of the form, once the fill's reached the bottom).
 On iOS through Appium a `tap` on an element below the visible part scrolls it into view first (XCUITest does), so
 a `scroll {"to": <element>}` before a `tap` of the same element isn't needed; on Android and the agents it is.
 
+### Dragging a slider or a handle
+
+A `swipe` from one point to another touches down and moves straight away: a scroll view takes that for a scroll or a
+flick, and a control inside one that drags (a slider, a drag handle, a list's reorder grip, a custom control with
+its own pan gesture) may not move at all, though the step succeeded. Give it a `hold`, the ms the finger stays down at
+`from` before it moves, and a slower move (`ms`):
+
+```json
+{ "swipe": { "from": [180, 1240], "to": [900, 1240], "hold": 400, "ms": 1000 }, "name": "set-servings" }
+```
+
+400 ms is usually enough to read as a press; a control that waits for a long press (a reorder) may want its
+platform's long-press time (about 500 ms). `hold` goes with `from` and `to`; with a `direction` it's left out with a
+warning. How each driver holds: Appium, a W3C `pause` after `pointerDown` (iOS and Android); `adb` and
+`uiautomator`, `input motionevent` DOWN, a `sleep`, a few MOVEs along the way and UP in one shell line, or on an
+older Android whose `input` has no `motionevent`, a long press and then the swipe with the finger lifted between
+(a warning: drive that device with Appium). Maestro, DevFlow and Ailoha can't hold before a swipe: they leave it
+out and warn. Check the picture: a slider that didn't move is still a shot taken.
+
 ### `verify` and the keyboard
 
 `verify` holds elements and, optionally, `{ "keyboard": "hidden" | "shown" | "any" }`. **A screen whose steps type
@@ -434,6 +453,7 @@ Written to `<out>/capture-report.json` after every run.
 | `warnings` | what a person should look at (a screen that didn't settle, a wait that couldn't see elements, a field `fill` typed that's out of sight for its `verify`) |
 | `panes` | what each scroll's `in` scrolled where it wasn't the element named: its nearest scrolling ancestor, or the element itself when nothing around it scrolls ([scrolling in a pane](#scrolling-in-a-pane)); left out when there's nothing to say |
 | `source` | what produced it (device type and runtime, AVD and API level, browser) |
+| `recording` | with `capture.py --record`, the screen's steps recorded: `path` (`<locale>/<device>/<screen>.mov` from a simulator, `.mp4` from Android, beside the picture), `seconds` (from its start to the stop), `by` (`simctl recordVideo`, `adb screenrecord`), `from` (the step it started at: the first `launch`), `display` (when the device has more than one), `flush` (`{"by": "status bar battery 99%", "at": 21.4}`: the moment's change that flushed a simulator's last frames, that many seconds in: `video.py encode … --end 21.4`; `null` on Android, or where there's no status bar). Left out without `--record`, and when the shot isn't taken |
 | `appRevision` | the app's commit when this shot was taken (a taken shot, when the app is in a git checkout): what `--changes` starts from |
 
 Each PNG is exactly its device's `width`×`height`, 8-bit RGB (no alpha, no `tRNS`), sRGB, not interlaced. Files are
@@ -441,7 +461,8 @@ written to a temporary folder and moved into place at the end, so a failed run n
 
 The report also has `app`, the app this run captured: git's `revision`, `describe`, `committed`, `dirty` (the
 screens' paths had changes not committed), `repo`, and `builds` (an iOS-family `.app`'s version and build number
-from its `Info.plist`); `devices` (each device's source and warnings) and `notes` (said once a run, like the count of
+from its `Info.plist`); `devices` (each device's source and warnings; an Appium simulator's source also has the
+`wdaPort` and `mjpegPort` its sessions used) and `notes` (said once a run, like the count of
 quietly flattened pictures). A run keeps earlier entries for what it didn't run this time (`--screens`,
 `--devices`, `--locales`), and drops those the plan no longer has (a screen, device or locale removed, or omitted
 on a device), naming them in `notes`.
@@ -452,6 +473,14 @@ on a device), naming them in `notes`.
   run. It never deletes one the plan names by UDID, serial or AVD name.
 - `capture.py --inspect`: also save each screen's UI tree (after its steps, or where they stopped) to
   `<out>/.inspect/<locale>/<device>/<screen>.txt`, for writing steps and `verify`.
+- `capture.py --record`: also record each screen's steps, for a preview video: from just before its first `launch`
+  (after the device is prepared, any seed, and any reboot a locale change needs) until a second after its last
+  step, stopped before its `verify`, the screenshot and the reset, to `<out>/<locale>/<device>/<screen>.mov`
+  (simulators: `simctl io recordVideo` on the display the screenshots take, its last frames flushed by a moment's
+  status bar change) or `.mp4` (Android: `screenrecord`, pulled after; 180 s at most). Devices whose driver has no
+  simulator or Android device under it (`chrome`, `macos`, a Mac or Windows app, `target.host: "none"`) are refused
+  before anything runs (exit 3). The report's `recording` says where, how long and where to trim
+  ([video.md](video.md#recording-a-screens-steps-capturepy---record)).
 - `capture.py --write-staging`: write `staging.md` from the plan, and stop.
 - `capture.py --changes [revision]`: what changed in the app since the last capture (the oldest `appRevision` the
   report keeps, or `revision`: a commit, tag or branch), in `appSource.paths` and the screens' `sources`

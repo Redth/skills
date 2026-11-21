@@ -193,7 +193,7 @@ class XcuitestDriver(HostedDriver):
             self.enter_screen(device, screen, locale, shot)
             ctx = base.StepContext(device, screen, locale, shot, 1, screen["steps"][0])
             base.LOG("  step 1: test %s (attachment %s)" % (test, name))
-            result = self.run_test(ctx, test)
+            result = self.recorded(ctx, lambda: self.run_test(ctx, test), cached=(locale, test) in self.runs)
         except base.ToolMissing:
             raise
         except base.DriverError as e:

@@ -6,28 +6,38 @@ ffprobe are found at run time (`FFMPEG` and `FFPROBE`, then `PATH`); they're nev
 `video.py` exits 3 with how to install them.
 
 ```sh
-# record: simctl io recordVideo, adb shell screenrecord, or Chrome's screencast
-python3 scripts/video.py record --from simctl --device <udid> --out raw.mov --seconds 30 \
-  --during "python3 scripts/capture.py --devices iphone-6.9 --screens tour"   # the moments to show
+# record a screen's steps (the moments to show) on the plan's device: captures/<locale>/<device>/<screen>.mov|.mp4
+python3 scripts/capture.py --record --devices iphone-6.9 --screens tour
+# or record by time: simctl io recordVideo, adb shell screenrecord, or Chrome's screencast
+python3 scripts/video.py record --from simctl --device <udid> --out raw.mov --seconds 30
 python3 scripts/video.py record --from adb --device <serial> --out raw.mp4 --seconds 30
 python3 scripts/video.py record --from chrome --url "http://localhost:8080/?screenshot=tour" \
   --width 440 --height 956 --scale 3 --out raw.mp4
 
-# encode: to a slot's preview sizes (from the rules), or an explicit size
-python3 scripts/video.py encode raw.mov --slot APP_IPHONE_67 --start 2 --end 27 --out preview-iphone.mp4
+# encode: to a slot's preview sizes (from the rules), or an explicit size; --end at the report's flush.at
+python3 scripts/video.py encode captures/en-US/iphone-6.9/tour.mov --slot APP_IPHONE_67 --end 21.4 \
+  --out preview-iphone.mp4
 python3 scripts/video.py encode raw-tv.mov --size 1920x1080 --out preview-tv.mp4
 
 # check: ffprobe against the rules' video rules
 python3 scripts/video.py check preview-iphone.mp4 --slot APP_IPHONE_67
+
+# frames: every recorded frame, in order, numbered, for an edit by frame index
+python3 scripts/video.py frames raw.mov frames/ --width 1320
 ```
 
-- `record`: `--during` runs a command while recording (the steps that show the moments) and `--tail` keeps
-  recording a second after it; `--display` picks a simulator's display; `--size` is `screenrecord`'s; `--dry-run`
+- `capture.py --record`: records each screen's steps as it captures it (next section).
+- `record`: `--during` runs a command while recording and `--tail` keeps recording a second after it (not
+  `capture.py`: see below); `--display` picks a simulator's display; `--size` is `screenrecord`'s; `--dry-run`
   prints the commands.
 - `encode`: the size comes from the slot's preview sizes in the rules (or `--size`); the picture is scaled and
   centre-cropped only when its aspect is within 2 % of the target's (further off, choose `--fit crop` or
   `--fit pad`), and never scaled up without `--allow-upscale` (don't, unless the user accepts a softer preview).
   `--fps` (30), `--bitrate` (11M), `--codec h264|prores`, `--json`.
+- `frames`: every frame of the recording, in the order recorded, as `frame-00001.jpg` on in an empty folder,
+  with the count and size printed; `--width` scales keeping the aspect, `--size WxH` forces a size, `--format
+  jpg|png`, `--quality` (jpg: ffmpeg's `-q:v`, 1 best to 31; default 2), `--json`, `--dry-run`. Why, and the
+  edit that follows: [Editing a simulator recording by frame index](#editing-a-simulator-recording-by-frame-index).
 - Exit codes: 0; 1 a check error, or an encode that can't meet the spec; 3 usage, or ffmpeg/ffprobe missing.
 
 ## What the stores take
@@ -62,6 +72,46 @@ as YouTube likes (H.264, AAC, the capture's size, constant frame rate); the uplo
 | Mac | `screencapture -v -V 30 -R x,y,w,h raw.mov` | Screen Recording permission; record a 16:9 window for the Mac's 1920×1080 preview |
 | Game engines | Godot's `--write-movie … --fixed-fps 30`, Unity Recorder, Unreal's Movie Render Queue | deterministic, the best quality ([engines.md](engines.md)) |
 
+## Recording a screen's steps: `capture.py --record`
+
+The moments a preview shows are a screen's steps: the plan already launches the app staged, taps, types and
+scrolls to them. `capture.py --record` (with `--devices` and `--screens` as usual) records each screen it captures,
+from just before its first `launch` (after the device is prepared, any seed has run, and any reboot a locale change
+needs is over) until a second after its last step, then stops before the `verify`, the screenshot and the reset. The
+recording goes beside the picture, `<out>/<locale>/<device>/<screen>.mov` from a simulator or `.mp4` from Android,
+and the report's `recording` says its `path`, `seconds`, `by`, `from` (the step it started at), `display` and
+`flush`. A shot that isn't taken drops its recording.
+
+- **Simulators** (`simctl`, and `appium`, `xcuitest`, `devflow`, `ailoha` or `maestro` on one): `xcrun simctl io
+  <udid> recordVideo --codec=h264 --mask=ignored [--display=N] --force <file>`, on the display the screenshots
+  take (the iPhone Duo's cover or inner one: `target.display`, the one a posture made active, or the one of the
+  device's size), started when "Recording started" says its first frame is in, stopped with SIGINT.
+- **Android** (`adb`, `uiautomator`, and the drivers `adb` hosts): `screenrecord --bit-rate 20000000 --time-limit
+  180 [--display-id N]` on the device, stopped with `pkill -INT screenrecord`, pulled, and deleted from the device.
+  It stops by itself at 180 s; steps that take longer get a warning, and the recording ends there.
+- Anything else (`chrome`, `macos`, an agent or Appium on a Mac or Windows app, a device with `target.host:
+  "none"`) is refused before anything runs (exit 3): record a web page with `video.py record --from chrome`, a Mac
+  window with `screencapture -v`.
+
+**Why not `video.py record --during "capture.py …"`.** The recorder starts first, then `capture.py` prepares the
+device: on its own simulator it writes the language and reboots it (shutdown, boot), which ends the recording (and
+an Appium session); and at the end its reset shuts the simulator down, which ends any recording too. What's left is
+the boot, or nothing. `--record` starts after the reboot and stops before the reset.
+
+**The flush, and trimming it.** simctl writes a frame only when the screen changes, and holds the last one back
+until the next change: a recording stopped while the screen stands still loses its settled final frames (the
+moment the steps worked to reach). So a second after the last step `--record` changes the status bar for a moment
+(`simctl status_bar <udid> override --batteryLevel 99`), waits a second, stops, and puts the battery back (100 %,
+or the status bar cleared when it wasn't overridden; the reset clears it too). That change forces the held frames
+out, and is itself the recording's last second: trim it with `video.py encode … --end <flush.at>` (the report's
+`recording.flush.at`, also in the log line). A tvOS, watchOS or visionOS simulator has no status bar to change: no
+flush, and a warning that the last frame may be missing. Android's `screenrecord` needs none (`flush` is `null`).
+
+**The steps' `wait`s set the pacing.** A recording runs as fast as the steps do: a launch, a tap, the next tap. Give
+each moment the time a viewer needs to read it with a `wait` step (`{"wait": {"ms": 1500}}`) after it, in the
+screen's steps or a `stepsPatch` for the device that's recorded; a `settle` waits only until the screen is still.
+A preview is 15 to 30 s: count the waits, and trim with `--start`/`--end`.
+
 Record each Apple size natively (an iPhone recording for the iPhone preview, an iPad one for the iPad) rather
 than cropping one master: the layouts differ. The status bar override and demo mode apply to recordings too; set
 them first, as for screenshots.
@@ -73,6 +123,50 @@ by time in the file, and check each one happened.
 **Type at a person's pace.** A `type` or `fill` puts its value in at once, which reads as a jump on video: give the
 take's typing steps a `rate` (keys a second; 4 to 6 reads naturally) so each key lands on camera
 ([config.md](config.md#typing-at-a-persons-pace)). Screenshots don't need it.
+
+## Editing a simulator recording by frame index
+
+A preview is rarely one take: a settled screen held for a beat, then the motion that matters at full speed.
+Cutting a simulator recording by time lands on the wrong moments, because **its timestamps don't follow the wall
+clock**. `simctl io recordVideo` writes a frame only when the screen changes, and in a real trial (iOS 27
+simulators, ffmpeg 7 and 8) idle stretches came out compressed and some frames shared a timestamp, out of order in
+`showinfo`. So:
+
+- seeking with `-ss`, converting with `fps=30` or retiming with `setpts` picked the wrong frames: a 5-second hold
+  collapsed into 0.3 s, and 154 recorded frames became 382 or 16;
+- writing images straight from the recording dropped frames: the `image2`/`image2pipe` muxers and the mjpeg
+  encoder reject the clashing timestamps ("non monotonically increasing dts", "Invalid pts").
+
+`frames` sidesteps the timestamps. It decodes the recording once to raw RGB with every frame passed through as it
+is (`-f rawvideo -pix_fmt rgb24 -fps_mode passthrough`) and pipes that into a second ffmpeg that reads it as a
+plain sequence (`-f rawvideo -s WxH -r 30 -i -`) and writes numbered images: every frame, in order, numbered
+afresh. It prints how many; when the stream's own frame count differs, it says so.
+
+Then edit by index, not by time: look at the frames, pick the ones each beat needs, hold a settled frame for as
+long as the beat lasts (seconds × 30 copies of it) and play motion frames one each, at 30 fps:
+
+```sh
+python3 scripts/video.py frames raw.mov frames/ --width 1320
+mkdir -p edit; i=0
+put() { i=$((i+1)); ln -f "frames/frame-$(printf %05d "$1").jpg" "edit/$(printf %05d "$i").jpg"; }
+for n in $(seq 150); do put 12; done          # frame 12 held for 5 s
+for f in $(seq 40 95); do put "$f"; done      # the tap and its animation, as recorded
+for n in $(seq 90); do put 95; done           # the result held for 3 s
+ffmpeg -framerate 30 -i edit/%05d.jpg -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+  -c:v libx264 -crf 12 -pix_fmt yuv420p edit.mp4
+python3 scripts/video.py encode edit.mp4 --slot APP_IPHONE_67 --out preview-iphone.mp4
+```
+
+The edit's length is the frame count over 30; `encode` still checks it's 15–30 s and adds the silent track.
+
+**A rotated recording that comes out squeezed.** A file can store its picture on its side with a rotation for
+the player (a display matrix); ffmpeg turns the picture upright as it decodes. In a real trial a two-screen
+simulator's open inner display (simctl's `--display` of that screen) recorded a 2006×2852 stream with a −90°
+rotation, and the landscape picture came out squeezed into a portrait frame: text upright but narrow. Forcing the
+output back to the display's landscape shape (2853×2007, or a scale of it) fixed it. `frames` writes a rotated
+recording at its turned size and says so when ffprobe reports a rotation; look at a frame, and if the picture is
+still squeezed, force the display's shape with `--size WxH`. A `--size` whose shape (portrait or landscape) isn't
+the picture's is warned about, as is one that stretches it.
 
 ## Encoding
 

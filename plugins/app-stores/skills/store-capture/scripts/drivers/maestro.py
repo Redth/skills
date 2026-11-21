@@ -252,6 +252,9 @@ class MaestroDriver(HostedDriver):
             return [("back", None)]
         if kind == "swipe":
             value = value if isinstance(value, dict) else {"direction": value}
+            if value.get("hold"):
+                base.LOG("  warning: step %d: maestro's swipe can't press and hold before it moves; hold left out, so "
+                         "a slider or drag handle may not move" % index)
             if value.get("from") and value.get("to"):
                 sw = {"start": "%d,%d" % tuple(round(v) for v in value["from"]),
                       "end": "%d,%d" % tuple(round(v) for v in value["to"])}
@@ -303,8 +306,10 @@ class MaestroDriver(HostedDriver):
                 name = spec.get("screenshot") or screen["id"]
                 env.update(dict((k, str(v)) for k, v in (spec.get("env") or {}).items()))
                 base.LOG("  step 1: flow %s (screenshot %s)" % (spec["file"], name))
-                found, code, tail = self.run_flow(device, self.path(spec["file"]), env,
-                                                  cache_key=(locale, spec["file"], json.dumps(spec.get("env"), sort_keys=True)))
+                key = (locale, spec["file"], json.dumps(spec.get("env"), sort_keys=True))
+                ctx = base.StepContext(device, screen, locale, shot, 1, flows[0])
+                found, code, tail = self.recorded(ctx, lambda: self.run_flow(device, self.path(spec["file"]), env,
+                                                                             cache_key=key), cached=key in self.runs)
                 if base.DRY_RUN:
                     shot.path = path
                     return shot
@@ -326,7 +331,8 @@ class MaestroDriver(HostedDriver):
                     os.makedirs(os.path.dirname(flow), exist_ok=True)
                     with open(flow, "w", encoding="utf-8") as f:
                         f.write(text)
-                found, code, tail = self.run_flow(device, flow, env)
+                ctx = base.StepContext(device, screen, locale, shot, 1, steps[0] if steps else None)
+                found, code, tail = self.recorded(ctx, lambda: self.run_flow(device, flow, env))
                 if code and not base.DRY_RUN:
                     raise base.StepFailed("the flow failed (maestro exited %s): %s" % (code, " / ".join(tail)))
                 if use_host:

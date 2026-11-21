@@ -2,7 +2,7 @@
 """capture.py: capture an app's screens at exactly the sizes the stores want, by the plan's drivers.
 
     capture.py [--plan capture-plan.json] [--devices iphone-6.9,android-phone] [--screens plan,recipe]
-               [--locales en-US,de-DE] [--keep-going] [--cleanup] [--dry-run] [--inspect]
+               [--locales en-US,de-DE] [--keep-going] [--cleanup] [--dry-run] [--inspect] [--record]
     capture.py --write-staging [--plan …]       write staging.md (the plan's staging, readable) beside the plan
     capture.py --current [FOLDER]               list the current store screenshots to start the screen list from
     capture.py --changes [REVISION]             what changed in the app since the last capture, and which screens
@@ -38,6 +38,11 @@ plan's ``appSource`` and screens' ``sources`` name, and the screens whose files 
 ``--dry-run`` prints each device's preparation and every step as its driver would run it, and runs nothing.
 ``--inspect`` also saves each screen's UI tree (after its steps, or where they stopped) to
 ``<out>/.inspect/<locale>/<device>/<screen>.txt``, for writing steps.
+``--record`` also records each screen's steps (a preview video's moments) from its first ``launch`` (after the
+device is prepared and any reboot a locale change needs) until a second after its last step, before ``verify``, the
+screenshot and the reset: ``<out>/<locale>/<device>/<screen>.mov`` from a simulator (``simctl io recordVideo`` on the
+display the screenshots take, flushed by a moment's status bar change whose time the report gives: trim there) or
+``.mp4`` from Android (``screenrecord``, pulled after). Other drivers are refused (exit 3).
 ``--cleanup`` deletes the simulators and emulators this skill created (``appstores-<device id>``) when done.
 Without ``--keep-going`` the run stops at the first shot that's missed or failed (the rest are reported as not
 attempted).
@@ -1126,7 +1131,7 @@ class Run(object):
     """One capture run: the plan, the filters and options, and what it found. ``execute()`` does it."""
 
     def __init__(self, plan_path, devices=None, screens=None, locales=None, keep_going=False, cleanup=False,
-                 dry_run=False, inspect=False):
+                 dry_run=False, inspect=False, record=False):
         """Load the plan and check the filters name things it has (``UsageError`` otherwise), and that a staged
         plan has been confirmed with the user before it captures more than one screen."""
         self.plan_path = os.path.abspath(plan_path)
@@ -1137,6 +1142,7 @@ class Run(object):
         self.cleanup = cleanup
         self.dry_run = dry_run
         self.inspect = inspect
+        self.record = record
         self.quiet_alpha = 0
         self.notes = []
         ids = [d["id"] for d in self.plan["devices"]]
@@ -1223,6 +1229,8 @@ class Run(object):
         saved_secrets = list(base.SECRETS)
         try:
             self.check_staging_run()
+            if self.record:
+                self.check_recording()
             if not self.dry_run:
                 self.app = app_revision(self.plan, self.plan_dir)
                 self.check_app_moved()
@@ -1289,6 +1297,24 @@ class Run(object):
         if have != want:
             say("warning: %s is %s: capture.py --write-staging" % (os.path.basename(doc),
                                                                   "missing" if have is None else "out of date"))
+
+    def check_recording(self):
+        """``--record``: every device this run captures can be recorded (a simulator, or an Android device, by
+        the driver or its host); ``UsageError`` naming those that can't, before anything runs."""
+        refused = []
+        for device in self.devices():
+            if not [s for s in screens_for(self.plan, device) if not self.only_screens or s["id"] in self.only_screens]:
+                continue
+            try:
+                cls = drivers.get(device["driver"])
+                why = cls(base.Options(plan_dir=self.plan_dir, workdir=self.out)).record_support(device)
+            except drivers.UnknownDriver:
+                continue   # reported as skipped when the device runs
+            if why:
+                refused.append("%s (%s): %s" % (device["id"], device["driver"], why))
+        if refused:
+            raise UsageError("--record can't record on %s. Leave %s out (--devices), or record it another way "
+                             "(references/video.md)" % ("; ".join(refused), "it" if len(refused) == 1 else "them"))
 
     def check_app_moved(self):
         """Warn when the shots the report keeps were taken at another revision of the app: run ``--changes``
@@ -1381,7 +1407,8 @@ class Run(object):
         work = os.path.join(tmp, "work", device["id"]) if tmp else os.path.join(self.out, ".capture-dry-run")
         if tmp:
             os.makedirs(work, exist_ok=True)
-        driver = cls(base.Options(plan_dir=self.plan_dir, workdir=work, cleanup=self.cleanup, inspect=self.inspect))
+        driver = cls(base.Options(plan_dir=self.plan_dir, workdir=work, cleanup=self.cleanup, inspect=self.inspect,
+                                  record=self.record))
         note = {"id": device["id"], "driver": name, "source": {}, "warnings": []}
         self.device_notes.append(note)
         if driver.PLATFORMS and device["platform"] not in driver.PLATFORMS:
@@ -1447,9 +1474,12 @@ class Run(object):
             traceback.print_exc()
             shot = base.Shot(status="missed", reason="the %s driver failed: %s" % (name, e))
         rel = _rel(locale, device["id"], screen["id"])
+        recording = getattr(shot, "recording", None)
         if self.dry_run:
             print("  -> %s %s" % ("would save" if shot.status == "taken" else shot.status,
                                   rel if shot.status == "taken" else (shot.reason or "")))
+            if recording and shot.status == "taken":
+                print("  -> would record %s" % self.recording_rel(locale, device, screen, recording))
             return
         state_check = getattr(shot, "state_check", "none")
         if screen.get("verify") and state_check == "none" and shot.status == "taken":
@@ -1458,6 +1488,8 @@ class Run(object):
                                  "picture for it" % name)
         panes = getattr(shot, "panes", None) or []
         if shot.status != "taken":
+            if recording:
+                shot.warnings.append("its recording was dropped with it")
             self.not_taken(locale, device, screen["id"], name, shot.status, shot.reason or "not reached",
                            shot.source, shot.warnings, shot.status_bar, screen.get("state"), state_check, panes)
             if shot.status in ("missed", "failed"):
@@ -1467,6 +1499,8 @@ class Run(object):
         status, fixes, reason = verify_picture(shot.path, dest, device["width"], device["height"],
                                                screen.get("flatten") or device.get("flatten") or "#000000")
         if status != "taken":
+            if recording:
+                shot.warnings.append("its recording was dropped with it")
             self.not_taken(locale, device, screen["id"], name, "failed", reason, shot.source, shot.warnings,
                            shot.status_bar, screen.get("state"), state_check, panes)
             self.stop_after(rel)
@@ -1492,9 +1526,33 @@ class Run(object):
             e["stateCheck"] = state_check
         if panes:
             e["panes"] = [base.mask(p) for p in panes]
+        if recording:
+            e["recording"] = self.keep_recording(locale, device, screen, recording)
         self.entries.append(e)
         self.moves.append((dest, os.path.join(self.out, locale, device["id"], screen["id"] + ".png")))
         log("taken   %s%s" % (rel, (" (%s)" % ", ".join(shown)) if shown else ""))
+        if recording:
+            r = e["recording"]
+            log("recorded %s (%.1f s%s)" % (r["path"], r["seconds"], "; trim at %.2f s: video.py encode … --end %.2f"
+                                            % (r["flush"]["at"], r["flush"]["at"]) if r.get("flush") else ""))
+
+    def recording_rel(self, locale, device, screen, recording):
+        """A recording's path in ``<out>``: beside the screen's picture, with the recorder's extension."""
+        ext = os.path.splitext(recording.get("file") or "")[1] or ".mov"
+        return "/".join((locale, device["id"], screen["id"] + ext))
+
+    def keep_recording(self, locale, device, screen, recording):
+        """Move a taken shot's recording into place with its picture; return the report's ``recording``: its
+        ``path``, ``seconds`` (from its start to the stop), ``by``, ``from`` (the step it started at), ``display``
+        (when the device has more than one) and ``flush`` (``{"by", "at"}``: the moment's status bar change that
+        flushed the last frames, at that many seconds in: trim there; ``null`` when none was needed or possible)."""
+        rel = self.recording_rel(locale, device, screen, recording)
+        self.moves.append((recording["file"], os.path.join(self.out, *rel.split("/"))))
+        out = {"path": rel, "seconds": recording.get("seconds"), "by": recording.get("by"),
+               "from": base.mask(recording.get("from")), "flush": recording.get("flush")}
+        if recording.get("display"):
+            out["display"] = str(recording["display"])
+        return out
 
     def stop_after(self, rel):
         """Without ``--keep-going``, the rest of the run isn't attempted after a missed or failed shot."""
@@ -1581,6 +1639,9 @@ def parser():
     p.add_argument("--dry-run", action="store_true", help="print what each driver would run; run nothing")
     p.add_argument("--inspect", action="store_true",
                    help="also save each screen's UI tree to <out>/.inspect/<locale>/<device>/<screen>.txt")
+    p.add_argument("--record", action="store_true",
+                   help="also record each screen's steps, from its first launch to a second after its last step, to "
+                        "<out>/<locale>/<device>/<screen>.mov (a simulator) or .mp4 (Android), for a preview video")
     p.add_argument("--write-staging", action="store_true",
                    help="write staging.md (the plan's staging and screens, readable) beside the plan, and stop")
     p.add_argument("--changes", nargs="?", const="", metavar="REVISION",
@@ -1618,7 +1679,7 @@ def main(argv=None):
             print(write_staging(args.plan))
             return EXIT_OK
         run = Run(args.plan, _csv(args.devices), _csv(args.screens), _csv(args.locales), args.keep_going,
-                  args.cleanup, args.dry_run, args.inspect)
+                  args.cleanup, args.dry_run, args.inspect, args.record)
         report = run.execute()
     except UsageError as e:
         print("error: %s" % e, file=sys.stderr)

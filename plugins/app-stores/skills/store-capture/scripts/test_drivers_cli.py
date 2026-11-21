@@ -784,6 +784,79 @@ class AdbTests(AdbCase):
         drv.prepare(self.device(target={"serial": "emulator-5580"}), {})
         self.assertTrue(any("wm size 1080x1920" in l for l in self.hooks.log))
 
+    HELD = ("adb -s emulator-5580 shell 'input motionevent DOWN 180 1240; sleep 0.4; "
+            "input motionevent MOVE 324 1240; sleep 0.2; input motionevent MOVE 468 1240; sleep 0.2; "
+            "input motionevent MOVE 612 1240; sleep 0.2; input motionevent MOVE 756 1240; sleep 0.2; "
+            "input motionevent MOVE 900 1240; input motionevent UP 900 1240'")
+    SLIDER = {"from": [180, 1240], "to": [900, 1240], "hold": 400, "ms": 1000}
+
+    def swipe(self, drv, device, value):
+        start = len(self.run_.lines)
+        ctx = base.StepContext(device, self.screen([]), "en-US", base.Shot(), 1, {"swipe": value})
+        drv.do_step(ctx)
+        return self.run_.lines[start:], ctx.shot.warnings
+
+    def test_a_held_swipe_is_motion_events_in_one_shell_line(self):
+        # input swipe moves as soon as the finger is down; a slider in a scroll view reads that as a scroll.
+        self.answers()
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        self.assertEqual(self.swipe(drv, device, self.SLIDER), ([self.HELD], []))
+        self.assertEqual(self.swipe(drv, device, {"from": [180, 1240], "to": [900, 1240], "ms": 1000}),
+                         (["adb -s emulator-5580 shell 'input swipe 180 1240 900 1240 1000'"], []))
+
+    def test_a_held_swipe_without_motionevent_long_presses_then_swipes_and_warns(self):
+        self.answers()
+        self.run_.on(r"input motionevent", err="Error: Unknown command: motionevent\nUsage: input [<source>] "
+                                                "<command> [<arg>...]\n", code=1)
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        fallback = ["adb -s emulator-5580 shell 'input swipe 180 1240 180 1240 400'",
+                    "adb -s emulator-5580 shell 'input swipe 180 1240 900 1240 1000'"]
+        lines, warnings = self.swipe(drv, device, self.SLIDER)
+        self.assertEqual(lines, [self.HELD] + fallback)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("no motionevent", warnings[0])
+        # Known now: the next held swipe on this device doesn't try motionevent again.
+        lines, warnings = self.swipe(drv, device, self.SLIDER)
+        self.assertEqual(lines, fallback)
+        self.assertEqual(len(warnings), 1)
+
+    def test_an_old_input_that_answers_its_usage_with_exit_0_is_taken_as_no_motionevent(self):
+        self.answers()
+        self.run_.on(r"input motionevent", out="Error: Unknown command: motionevent\n")
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        lines, warnings = self.swipe(drv, device, self.SLIDER)
+        self.assertEqual(lines[1:], ["adb -s emulator-5580 shell 'input swipe 180 1240 180 1240 400'",
+                                     "adb -s emulator-5580 shell 'input swipe 180 1240 900 1240 1000'"])
+        self.assertEqual(len(warnings), 1)
+
+    def test_a_held_swipe_by_direction_is_a_plain_swipe_with_a_warning(self):
+        self.answers()
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        lines, warnings = self.swipe(drv, device, {"direction": "up", "hold": 400})
+        self.assertEqual(len(lines), 1)
+        self.assertIn("'input swipe ", lines[0])
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("hold goes with from and to", warnings[0])
+
+    def test_the_dry_run_shows_the_held_swipes_motion_events(self):
+        self.answers()
+        base.DRY_RUN = True
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device(target={"serial": "emulator-5580"})
+        drv.prepare(device, {})
+        lines, warnings = self.swipe(drv, device, self.SLIDER)
+        self.assertEqual((lines, warnings), ([], []))
+        self.assertIn("  step 1: swipe {from: [180, 1240], to: [900, 1240], hold: 400, ms: 1000}", self.hooks.log)
+        self.assertIn("  $ " + self.HELD, self.hooks.log)
+
     def test_a_missing_log_folder_isnt_taken_for_a_missing_emulator(self):
         log = os.path.join(self.tmp, "not-yet", "emulator.log")
         proc = base.subprocess_spawner([sys.executable, "-c", "print('booted')"], log_path=log)
@@ -864,6 +937,115 @@ class AdbTests(AdbCase):
         self.assertEqual(adb_driver.demo_clock("2026-06-01T09:41:00"), "0941")
 
 
+IMAGE = "system-images;android-36;google_apis;arm64-v8a"
+
+
+class AdbSdkTests(AdbCase):
+    """The SDK the system image is looked for in, and the emulator's ANDROID_SDK_ROOT (from a real trial: a shell's
+    ANDROID_HOME named a command-line-tools-only SDK, the image was in another, and avdmanager said only "Package
+    path is not valid. Valid system image paths are: null" for every screen)."""
+
+    def setUp(self):
+        AdbCase.setUp(self)
+        saved = adb_driver.SDK_DEFAULTS
+        self.addCleanup(setattr, adb_driver, "SDK_DEFAULTS", saved)
+        self.tools_sdk = os.path.join(self.tmp, "tools-sdk")       # platform-tools, emulator, no system images
+        self.full_sdk = os.path.join(self.tmp, "full-sdk")         # the image is here
+        os.makedirs(os.path.join(self.tools_sdk, "platform-tools"))
+        self.image(self.full_sdk)
+        adb_driver.SDK_DEFAULTS = {sys.platform: (self.full_sdk, os.path.join(self.tmp, "not-there"))}
+
+    def image(self, sdk, name="system.img"):
+        folder = os.path.join(sdk, "system-images", "android-36", "google_apis", "arm64-v8a")
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, name), "w") as f:
+            f.write("x")
+        return folder
+
+    def own_avd(self):
+        return self.device(target={"systemImage": IMAGE, "profile": "medium_phone"})
+
+    def test_an_image_missing_from_the_sdk_in_use_names_the_sdk_that_has_it(self):
+        self.answers()
+        os.environ["ANDROID_HOME"] = self.tools_sdk
+        drv = adb_driver.AdbDriver(self.options)
+        with self.assertRaises(base.DriverError) as cm:
+            drv.prepare(self.own_avd(), {})
+        message = str(cm.exception)
+        self.assertIn("isn't installed in the Android SDK in use, %s ($ANDROID_HOME)" % self.tools_sdk, message)
+        self.assertIn("it's installed in %s" % self.full_sdk, message)
+        self.assertIn("ANDROID_HOME=%s ANDROID_SDK_ROOT=%s" % (self.full_sdk, self.full_sdk), message)
+        self.assertIn('sdkmanager --sdk_root=%s "%s"' % (self.tools_sdk, IMAGE), message)
+        self.assertEqual(self.run_.matching(r"avdmanager"), [])
+        self.assertEqual(self.hooks.spawned, [])
+
+    def test_an_image_no_sdk_has_says_how_to_install_it(self):
+        self.answers()
+        os.environ["ANDROID_HOME"] = self.tools_sdk
+        adb_driver.SDK_DEFAULTS = {}
+        drv = adb_driver.AdbDriver(self.options)
+        with self.assertRaises(base.DriverError) as cm:
+            drv.prepare(self.own_avd(), {})
+        self.assertIn("no other SDK folder looked in has it", str(cm.exception))
+        self.assertIn('sdkmanager --sdk_root=%s "%s"' % (self.tools_sdk, IMAGE), str(cm.exception))
+
+    def test_the_dry_run_checks_the_image_too(self):
+        os.environ["ANDROID_HOME"] = self.tools_sdk
+        base.DRY_RUN = True
+        drv = adb_driver.AdbDriver(self.options)
+        with self.assertRaises(base.DriverError) as cm:
+            drv.prepare(self.own_avd(), {})
+        self.assertIn(self.full_sdk, str(cm.exception))
+
+    def test_an_installed_image_creates_the_avd_and_the_emulator_gets_android_sdk_root(self):
+        self.answers()
+        os.environ["ANDROID_HOME"] = self.full_sdk
+        drv = adb_driver.AdbDriver(self.options)
+        drv.prepare(self.own_avd(), {})
+        self.assertTrue(self.run_.matching(r"^avdmanager create avd -n appstores-android-phone -k "))
+        self.assertEqual(self.hooks.spawned_env, [{"ANDROID_SDK_ROOT": self.full_sdk}])
+        self.assertTrue(any(l.startswith("  $ ANDROID_SDK_ROOT=%s emulator -avd" % self.full_sdk)
+                            for l in self.hooks.log), self.hooks.log)
+
+    def test_an_image_folder_with_source_properties_counts_as_installed(self):
+        self.answers()
+        sdk = os.path.join(self.tmp, "props-sdk")
+        self.image(sdk, "source.properties")
+        os.environ["ANDROID_HOME"] = sdk
+        drv = adb_driver.AdbDriver(self.options)
+        drv.prepare(self.own_avd(), {})
+        self.assertTrue(self.run_.matching(r"^avdmanager create avd"))
+
+    def test_android_sdk_root_already_set_is_left_alone(self):
+        self.answers()
+        os.environ["ANDROID_SDK_ROOT"] = self.full_sdk
+        drv = adb_driver.AdbDriver(self.options)
+        drv.prepare(self.own_avd(), {})
+        self.assertEqual(self.hooks.spawned_env, [None])
+
+    def test_without_a_variable_avdmanagers_own_complaint_is_explained(self):
+        self.answers()
+        self.run_.on(r"^avdmanager create avd", code=1,
+                     err="Warning: package.xml is corrupted\nError: Package path is not valid. Valid system image "
+                         "paths are:\nnull\n")
+        drv = adb_driver.AdbDriver(self.options)
+        with self.assertRaises(base.DriverError) as cm:
+            drv.prepare(self.own_avd(), {})
+        message = str(cm.exception)
+        self.assertIn("avdmanager couldn't find the system image %s" % IMAGE, message)
+        self.assertIn("ANDROID_HOME=%s" % self.full_sdk, message)
+        self.assertIn('sdkmanager "%s"' % IMAGE, message)
+        self.assertEqual(self.hooks.spawned, [])
+
+    def test_the_image_folder_from_its_package_id(self):
+        self.assertEqual(adb_driver.image_dir("/sdk", IMAGE),
+                         os.path.join("/sdk", "system-images", "android-36", "google_apis", "arm64-v8a"))
+        self.assertIsNone(adb_driver.image_dir("/sdk", "platforms;android-36"))
+        os.environ["ANDROID_HOME"] = self.full_sdk
+        os.environ["ANDROID_SDK_ROOT"] = self.full_sdk + os.sep
+        self.assertEqual(adb_driver.sdk_folders(), [self.full_sdk + os.sep])   # the same folder, listed once
+
+
 class UiAutomatorTests(AdbCase):
     def test_it_changes_nothing_on_the_device(self):
         self.answers(connected="R5EXAMPLE01\tdevice\n")
@@ -879,6 +1061,15 @@ class UiAutomatorTests(AdbCase):
         self.assertEqual(self.run_.matching(r"wm |uimode|locale|demo|settings put|install"), [])
         self.assertTrue(self.run_.matching(r"shell 'input tap 970 170'"))
         self.assertTrue(any("leaves the status bar" in w for w in drv.warnings))
+
+    def test_a_held_swipe_is_adbs(self):
+        self.answers(connected="R5EXAMPLE01\tdevice\n")
+        drv = uia_driver.UiAutomatorDriver(self.options)
+        device = self.device(driver="uiautomator", target={"serial": "R5EXAMPLE01"})
+        drv.prepare(device, {})
+        drv.do_step(base.StepContext(device, self.screen([]), "en-US", base.Shot(), 1,
+                                     {"swipe": {"from": [180, 1240], "to": [900, 1240], "hold": 400, "ms": 1000}}))
+        self.assertTrue(self.run_.matching(r"^adb -s R5EXAMPLE01 shell 'input motionevent DOWN 180 1240; sleep 0.4; "))
 
     def test_it_cannot_launch(self):
         drv = uia_driver.UiAutomatorDriver(self.options)
