@@ -271,6 +271,15 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   "3G" while the report said `overridden`), and the first time on a device enters demo mode twice (the first pass
   after a boot drew two Wi-Fi icons); the status bar is `verified` only when its pixels follow demo mode's clock
   (each read steady), else `unverified`. A missing log folder is no longer reported as a missing emulator. iOS: a `status_bar list` without the override is `unverified`, not `overridden`.
+- `store-capture` (Appium): a session on a simulator could be answered by another Appium server's WebDriverAgent on
+  the shared default port 8100, and our app's launch and terminate commands went into that server's simulator
+  ("invalid session id" right after the session started). Each simulator device now gets its own
+  `appium:wdaLocalPort` (8130-8199) and `appium:mjpegServerPort` (9130-9199) from its id, never 8100; a port
+  something already listens on is passed over (a WebDriverAgent is kept only when its `/status` names our
+  simulator) and the log and the device's warnings say so; a port the plan sets is kept. `--dry-run` prints the
+  ports and the report's `devices` entry records them (`source.wdaPort`, `source.mjpegPort`); "invalid session id"
+  on iOS says what it may be. appium.md (running beside other Appium servers) and pitfalls.md also say that
+  XCUITest's driver closes Simulator.app's windows when a session starts, even headless: tell the user.
 - `store-capture` (Appium): `appium:isHeadless` by default on simulators (Xcode 27 moved Simulator.app); a failed
   session reports its own cause, and the simulator it shut down is booted again (and the session retried) instead
   of later screens failing with "device is not booted".

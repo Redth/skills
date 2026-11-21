@@ -133,22 +133,25 @@ class FakeTime(object):
 
 
 class Hooks(object):
-    """Install a ``FakeRunner``, ``FakeTime`` and a quiet log into ``base`` for one test; ``restore()`` puts the
-    real ones back. ``log`` keeps the logged lines."""
+    """Install a ``FakeRunner``, ``FakeTime``, a quiet log and a ``LISTENING`` that finds nothing listening (unless
+    a port is in ``listening``) into ``base`` for one test; ``restore()`` puts the real ones back. ``log`` keeps the
+    logged lines."""
 
     def __init__(self):
         """Swap the hooks."""
         self.runner = FakeRunner()
         self.time = FakeTime()
         self.log = []
-        self.saved = (base.RUNNER, base.SPAWNER, base.SLEEP, base.CLOCK, base.LOG, base.DRY_RUN)
+        self.saved = (base.RUNNER, base.SPAWNER, base.SLEEP, base.CLOCK, base.LOG, base.DRY_RUN, base.LISTENING)
         self.spawned = []
+        self.listening = set()   # the ports something listens on (none, unless a test says)
         base.RUNNER = self.runner
         base.SPAWNER = self.spawn
         base.SLEEP = self.time.sleep
         base.CLOCK = self.time.clock
         base.LOG = self.log.append
         base.DRY_RUN = False
+        base.LISTENING = lambda port: int(port) in self.listening
 
     def spawn(self, cmd, log_path=None, env=None, cwd=None):
         """A fake ``SPAWNER``: records the command and returns a process that's always running."""
@@ -174,7 +177,8 @@ class Hooks(object):
 
     def restore(self):
         """Put the real hooks back."""
-        base.RUNNER, base.SPAWNER, base.SLEEP, base.CLOCK, base.LOG, base.DRY_RUN = self.saved
+        (base.RUNNER, base.SPAWNER, base.SLEEP, base.CLOCK, base.LOG, base.DRY_RUN,
+         base.LISTENING) = self.saved
 
 
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
