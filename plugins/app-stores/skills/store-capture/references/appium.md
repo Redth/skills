@@ -107,7 +107,7 @@ All JSON over HTTP to the local server; `<s>` is the session id.
 | `type` | `POST /session/<s>/element/<e>/value` `{ "text": … }`, or into `GET /session/<s>/element/active` |
 | `wait` | find until it appears |
 | `scroll` | iOS `mobile: swipe` the finger's way (the opposite of the scroll's; `elementId` for `in`), never `mobile: scroll` with a direction ([below](#scrolling-on-ios)); Android `mobile: scrollGesture` (`left`, `top`, `width`, `height` or `elementId`, `direction`, `percent`); a Mac `mobile: scroll`; `to` an element: scroll until it's found, down then up, each way until the page source stops changing |
-| `swipe` | `mobile: swipe` (iOS), `mobile: swipeGesture` (Android), or `POST /session/<s>/actions` (a touch pointer; `DELETE …/actions` after) sized from `GET /session/<s>/window/rect` |
+| `swipe` | `mobile: swipe` (iOS), `mobile: swipeGesture` (Android), or `POST /session/<s>/actions` (a touch pointer; `DELETE …/actions` after) sized from `GET /session/<s>/window/rect`; `from`/`to` are `pointerMove`, `pointerDown`, a `pause` of `hold` ms when there's one, `pointerMove` over `ms`, `pointerUp` |
 | `back` | `POST /session/<s>/back` (on iOS that's navigation: never a way to close the keyboard) |
 | `hideKeyboard` | `mobile: isKeyboardShown`, then `mobile: hideKeyboard` (iOS: `keys` Done, Return, Go, Search, Next: the keyboard's own key), then the plan's `done` or, on iOS, a button named Done, Close, Hide keyboard or Dismiss keyboard (the app's own: a number pad has no key that closes it, so `mobile: hideKeyboard` always fails there), then a `scroll`, then last a `tap` ([config.md](config.md#the-keyboard-focus-and-forms)) |
 | `unfocus` | the host's (adb's Escape on Android); on iOS give it a `tap` (the keyboard closing usually takes the focus with it) |
@@ -143,6 +143,15 @@ with a quick `mobile: swipe` the finger's way (`up` content is a `down` swipe), 
 with no hold: a form's scroll back to the top after typing (`fill`'s `scrollTo`, `scroll {"to": "top"}`) leaves the
 keyboard down. By hand, the same: `mobile: swipe` or a W3C pointer drag with no pause, never a direction-only
 `mobile: scroll` after typing.
+
+## Dragging on iOS
+
+A `from`/`to` swipe with no pause after `pointerDown` reaches XCUITest as a quick drag: inside a scroll view it
+reads as a scroll or a flick, and a drawn slider or a custom pan gesture doesn't move, though `/actions` answers
+200. With `hold` the driver puts a `pause` between `pointerDown` and the move, which XCUITest turns into a press and
+then a drag (as WDA's `pressAndDragWithVelocity` does), and the control moves. Outside tools that drag (`axe swipe`)
+can work too, but running one while `simctl io recordVideo` records has broken the recording in a real trial: keep
+the drag in the driver.
 
 ## Stacks
 

@@ -39,7 +39,7 @@ What it does (CONTRACT.md 10.3, 10.5):
 - steps: ``launch`` (``am start -W -S -n <package>/<activity>`` with ``--es ScreenshotSeed …`` and the screen's
   ``args`` as extras: ``--es``/``--ez``/``--ei``/``--ef``; ``clean`` runs ``pm clear`` first), ``deepLink``
   (``am start -a android.intent.action.VIEW -d <url> <package>``), ``url``, ``tap``/``type``/``swipe``/``back``
-  (``input``), ``wait``/``scroll`` with elements found in ``uiautomator dump`` by ``id`` (resource id), ``text``,
+  (``input``; a swipe's ``hold``: ``input motionevent`` DOWN, MOVE, UP), ``wait``/``scroll`` with elements found in ``uiautomator dump`` by ``id`` (resource id), ``text``,
   ``label`` (content description) or ``xpath``; ``appFile`` (a file pushed into the app's own data folder through
   ``run-as``: debug builds only).
 - foldables (``posture``: ``folded``, ``open``, ``half-open``; the device's setting, a screen's, or a ``posture``
@@ -93,6 +93,8 @@ POSTURE_STATES = {"folded": "CLOSED", "open": "OPENED", "half-open": "HALF_OPENE
 STATE_POSTURES = dict((v, k) for k, v in POSTURE_STATES.items())
 CONSOLE_POSTURES = {"folded": ("fold",), "open": ("unfold",), "half-open": ("posture", "2")}
 DRY_STATES = {"CLOSED": 0, "HALF_OPENED": 1, "OPENED": 2}
+HOLD_MOVES = 5                # MOVE events a held swipe goes through on its way (input motionevent)
+NO_MOTIONEVENT = re.compile(r"(?i)unknown command|usage: input")   # an input without motionevent (older Android)
 # Where an Android SDK usually is when no variable names it (Android Studio's default; on a Mac also the Homebrew
 # android-commandlinetools cask's), by sys.platform prefix: only to say where a system image missing from the SDK in
 # use *is*. ~ and %VARIABLES% are expanded.
@@ -348,6 +350,7 @@ class AdbDriver(base.Driver):
         self.original_posture = None
         self.posture_changed = False
         self.demo_fresh = False      # demo mode to enter twice again (after a posture change)
+        self.no_motionevent = False  # this device's input has no motionevent (a held swipe falls back)
 
     # -- commands -------------------------------------------------------------------------------------------
 
@@ -1245,13 +1248,44 @@ class AdbDriver(base.Driver):
         self.shell("input", "keyevent", "KEYCODE_BACK")
 
     def step_swipe(self, ctx, value):
-        """``input swipe`` from ``from`` to ``to`` (pixels) over ``ms``, or a ``direction``."""
+        """``input swipe`` from ``from`` to ``to`` (pixels) over ``ms``, or a ``direction``; with ``hold``, a held
+        drag (``held_swipe``)."""
         ms = int(value.get("ms") or 300)
+        hold = self.swipe_hold(ctx, value)
         if value.get("from") and value.get("to"):
             coords = tuple(int(v) for v in list(value["from"]) + list(value["to"]))
         else:
             coords = self._swipe_for(ctx, value.get("direction") or "up")
+        if hold:
+            self.held_swipe(ctx, coords, hold, ms)
+            return
         self.shell("input", "swipe", *(coords + (ms,)))
+
+    def held_swipe(self, ctx, coords, hold, ms):
+        """A finger pressed at ``from`` for ``hold`` ms, then moved to ``to`` over ``ms``: ``input swipe`` can't
+        hold, so ``input motionevent DOWN``, ``sleep``, ``HOLD_MOVES`` ``MOVE`` events along the way, ``UP``, in one
+        shell line (the device keeps the time, not adb's round trips; each ``input`` takes a moment of its own, so
+        the move may take a little longer than ``ms``). An ``input`` without ``motionevent`` (older Android: it
+        answers "Unknown command") gets ``input swipe`` from ``from`` to itself over ``hold`` (a long press), then
+        the swipe, with a warning: the finger lifts between them."""
+        x1, y1, x2, y2 = coords
+        if not self.no_motionevent:
+            line = ["input motionevent DOWN %d %d" % (x1, y1), "sleep %g" % (hold / 1000.0)]
+            for i in range(1, HOLD_MOVES + 1):
+                line.append("input motionevent MOVE %d %d" % (int(round(x1 + (x2 - x1) * i / float(HOLD_MOVES))),
+                                                              int(round(y1 + (y2 - y1) * i / float(HOLD_MOVES)))))
+                if i < HOLD_MOVES:
+                    line.append("sleep %g" % (ms / 1000.0 / HOLD_MOVES))
+            line.append("input motionevent UP %d %d" % (x2, y2))
+            res = base.run(self.adb + ["-s", self.serial, "shell", "; ".join(line)], check=False)
+            if res.code == 0 and not NO_MOTIONEVENT.search((res.out or "") + (res.err or "")):
+                return
+            self.no_motionevent = True
+        ctx.warn("step %d: this device's input has no motionevent (older Android), so the swipe's hold was a long "
+                 "press, then the swipe, the finger lifted between: a slider may not move (drive this device with "
+                 "appium)" % ctx.index)
+        self.shell("input", "swipe", x1, y1, x1, y1, hold)
+        self.shell("input", "swipe", x1, y1, x2, y2, ms)
 
     # -- recording (capture.py --record) ---------------------------------------------------------------------
 

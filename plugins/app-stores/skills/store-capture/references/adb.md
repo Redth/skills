@@ -85,6 +85,7 @@ device) and `APPSTORES_SERIAL`, with `APPSTORES_DEVICE`, `APPSTORES_PLATFORM`, `
 | Launch with extras | `adb -s <serial> shell am start -W -S -n com.example.samplerecipes/.MainActivity --es ScreenshotScreen plan --es ScreenshotSeed demo` (`-S` stops it first; the driver types each value: `--es` strings, `--ez` booleans, `--ei` integers, `--ef` floats) |
 | Deep link | `adb -s <serial> shell am start -W -a android.intent.action.VIEW -d 'samplerecipes://recipe/demo' com.example.samplerecipes` |
 | Tap, type, swipe, back | `input tap <x> <y>`, `input text 'pasta'` (spaces as `%s`), `input swipe x1 y1 x2 y2 300`, `input keyevent KEYCODE_BACK` |
+| A held drag (`swipe`'s `hold`: a slider, a handle) | `adb -s <serial> shell 'input motionevent DOWN 180 1240; sleep 0.4; input motionevent MOVE 324 1240; sleep 0.2; …; input motionevent MOVE 900 1240; input motionevent UP 900 1240'`: `input swipe` can't hold before it moves. An older `input` without `motionevent` answers "Unknown command"; the driver then long-presses (`input swipe x1 y1 x1 y1 400`) and swipes, the finger lifted between, and warns |
 | Find an element | `uiautomator dump /sdcard/ui.xml` then `adb exec-out cat /sdcard/ui.xml`: match `resource-id`, `text` or `content-desc` (text: exact, then ignoring case, then contained), or an xpath with `contains()`, `not()`, `and`/`or` ([config.md](config.md#steps)); tap the centre of its `bounds` |
 | D-pad (TV) | `input keyevent KEYCODE_DPAD_RIGHT`, `KEYCODE_DPAD_CENTER` |
 

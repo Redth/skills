@@ -317,7 +317,8 @@
             "from": { "type": "array", "prefixItems": [ { "type": "number" }, { "type": "number" } ], "minItems": 2, "maxItems": 2 },
             "to": { "type": "array", "prefixItems": [ { "type": "number" }, { "type": "number" } ], "minItems": 2, "maxItems": 2 },
             "direction": { "enum": ["up", "down", "left", "right"] },
-            "ms": { "type": "number", "minimum": 0 }
+            "ms": { "type": "number", "minimum": 0 },
+            "hold": { "$comment": "With from and to: ms the finger stays down at from before it moves (a slider, a drag handle, a reorder, a custom pan gesture that reads a quick touch as a scroll). Default 0.", "type": "number", "minimum": 0 }
           } } } },
         { "type": "object", "required": ["flow"], "additionalProperties": false, "properties": {
           "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },

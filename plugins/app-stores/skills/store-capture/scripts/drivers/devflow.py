@@ -111,6 +111,7 @@ class DevFlowDriver(AgentCliDriver):
         direction = value.get("direction")
         if direction not in ("up", "down", "left", "right"):
             raise base.StepFailed("step %d: swipe needs a direction (up, down, left, right)" % ctx.index)
+        self.swipe_hold(ctx, value, can=False)
         args = ["ui", "gesture", "swipe", "--direction", direction]
         query = base.element_query(value)
         if query is not None:

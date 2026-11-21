@@ -1742,6 +1742,24 @@ class Driver(object):
                 ctx.index, describe_step(ctx.step), self.NAME, kind))
         method(ctx, value)
 
+    def swipe_hold(self, ctx, value, can=True):
+        """A ``swipe``'s ``hold``: the ms the finger stays down at ``from`` before it moves (a slider, a drag
+        handle, a custom pan gesture that reads a quick touch as a scroll), 0 when there's none. It goes with
+        ``from``/``to``: with a ``direction``, or on a driver that can't press before it moves (``can`` false), it's
+        left out with a warning."""
+        hold = value.get("hold") if isinstance(value, dict) else None
+        if not hold:
+            return 0
+        if not (value.get("from") and value.get("to")):
+            ctx.warn("step %d: swipe's hold goes with from and to (a drag between two points): left out of a "
+                     "direction swipe" % ctx.index)
+            return 0
+        if not can:
+            ctx.warn("step %d: the %s driver can't press and hold before a swipe: hold left out, so a slider or drag "
+                     "handle may not move (drive this device with appium or adb)" % (ctx.index, self.NAME))
+            return 0
+        return int(hold)
+
     def shot_path(self, device, screen, locale):
         """Where a screen's picture goes in the workdir: ``<workdir>/<locale>/<device id>/<screen id>.png``."""
         folder = os.path.join(self.options.workdir, locale, device["id"])

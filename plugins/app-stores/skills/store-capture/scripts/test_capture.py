@@ -212,6 +212,13 @@ class PlanTests(CaptureCase):
         self.assertEqual([x["id"] for x in capture.screens_for(plan, droid)], ["plan", "android-only"])
         self.assertEqual(capture.screens_for(plan, droid)[0]["steps"], [{"launch": {}}])
 
+    def test_a_swipe_may_hold_before_it_moves(self):
+        swipe = {"from": [180, 1240], "to": [900, 1240], "hold": 400, "ms": 1000}
+        plan = capture.load_plan(self.plan(screens=[{"id": "plan", "steps": [{"swipe": swipe}]}]))
+        self.assertEqual(plan["screens"][0]["steps"][0]["swipe"]["hold"], 400)
+        with self.assertRaises(capture.UsageError):
+            capture.load_plan(self.plan(screens=[{"id": "plan", "steps": [{"swipe": dict(swipe, hold=-1)}]}]))
+
     def test_the_schema_uses_only_what_the_validator_checks(self):
         from appstores_lib import schema
         self.assertEqual(schema.unsupported(capture.load_schema()), [])

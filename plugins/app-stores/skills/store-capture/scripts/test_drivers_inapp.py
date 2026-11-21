@@ -310,6 +310,10 @@ class DevFlowTests(Case):
                                      "--platform maccatalyst"])
         with self.assertRaises(base.StepFailed):
             d.step_swipe(self.ctx(self.device("devflow")), {"from": [10, 10], "to": [200, 10]})
+        ctx = self.ctx(self.device("devflow"))
+        d.step_swipe(ctx, {"direction": "left", "hold": 400})
+        self.assertEqual(len(ctx.shot.warnings), 1)
+        self.assertIn("hold goes with from and to", ctx.shot.warnings[0])
 
     def test_without_a_host_the_agent_takes_the_screenshot_at_native_scale(self):
         self.runner.on(r"ui screenshot", then=write_after("--output"))
@@ -648,6 +652,15 @@ class AilohaTests(Case):
         d.step_swipe(self.ctx(self.device("ailoha")), {"from": [300, 400], "to": [40, 400], "ms": 250})
         self.assertEqual(self.ui(), ["ailoha ui swipe 300 400 40 400 --duration 250 --agent-port 9233 "
                                      "--platform maccatalyst"])
+
+    def test_swipe_hold_is_left_out_with_a_warning(self):
+        d = self.driver()
+        ctx = self.ctx(self.device("ailoha"))
+        d.step_swipe(ctx, {"from": [300, 400], "to": [40, 400], "ms": 250, "hold": 400})
+        self.assertEqual(self.ui(), ["ailoha ui swipe 300 400 40 400 --duration 250 --agent-port 9233 "
+                                     "--platform maccatalyst"])
+        self.assertEqual(len(ctx.shot.warnings), 1)
+        self.assertIn("the ailoha driver can't press and hold before a swipe", ctx.shot.warnings[0])
 
     def test_android_http_needs_a_forward_that_reset_removes(self):
         self.agents((9233, "com.example.samplerecipes", None, 52011, "Android"))
@@ -1098,6 +1111,33 @@ class AppiumTests(Case):
         self.assertEqual([a["type"] for a in acts], ["pointerMove", "pointerDown", "pointerMove", "pointerUp"])
         self.assertEqual((acts[2]["x"], acts[2]["y"], acts[2]["duration"]), (300, 200, 400))
 
+    def test_swipe_with_hold_pauses_after_the_finger_goes_down(self):
+        # A slider or a pan gesture in a scroll view reads a touch that moves at once as a scroll: hold first.
+        self.transport.on("POST", r"/actions$", body='{"value": null}')
+        self.transport.on("DELETE", r"/actions$", body='{"value": null}')
+        for platform in ("ios", "android"):
+            d, dev = self.start(platform)
+            ctx = self.ctx(dev)
+            d.step_swipe(ctx, {"from": [180, 1240], "to": [900, 1240], "hold": 400, "ms": 1400})
+            body = self.transport.find("POST", r"/actions$")[-1][2]
+            acts = body["actions"][0]["actions"]
+            self.assertEqual(acts, [
+                {"type": "pointerMove", "duration": 0, "x": 180, "y": 1240},
+                {"type": "pointerDown", "button": 0},
+                {"type": "pause", "duration": 400},
+                {"type": "pointerMove", "duration": 1400, "x": 900, "y": 1240},
+                {"type": "pointerUp", "button": 0}], platform)
+            self.assertEqual(ctx.shot.warnings, [])
+
+    def test_swipe_hold_with_a_direction_is_left_out_with_a_warning(self):
+        d, dev = self.start()
+        ctx = self.ctx(dev)
+        d.step_swipe(ctx, {"direction": "left", "hold": 400})
+        self.assertEqual(self.transport.find("POST", r"/actions$"), [])
+        self.assertEqual(self.transport.find("POST", r"/execute/sync$")[-1][2]["script"], "mobile: swipe")
+        self.assertEqual(len(ctx.shot.warnings), 1)
+        self.assertIn("hold goes with from and to", ctx.shot.warnings[0])
+
     def test_screenshot_without_a_host_is_the_sessions_base64_png(self):
         png = kit.png_bytes(64, 128)
         self.transport.on("GET", r"/screenshot$", body=json.dumps({"value": base64.b64encode(png).decode("ascii")}))
@@ -1247,6 +1287,14 @@ class MaestroTests(Case):
             "- back",
             '- waitForAnimationToEnd: {"timeout": 2000}',
             '- takeScreenshot: "appstores-search"'])
+
+    def test_a_swipes_hold_is_left_out_of_the_flow_with_a_warning(self):
+        d = self.driver()
+        dev = self.device("maestro", platform="android", target={"host": "fakehost"})
+        text = d.write_flow(dev, self.screen([{"swipe": {"from": [180, 1240], "to": [900, 1240], "hold": 400,
+                                                         "ms": 1000}}]), "en-US")
+        self.assertIn('- swipe: {"start": "180,1240", "end": "900,1240", "duration": 1000}', text.splitlines())
+        self.assertTrue(any("maestro's swipe can't press and hold" in l for l in self.hooks.log), self.hooks.log)
 
     def test_a_generated_flow_runs_then_the_host_takes_the_picture(self):
         d = self.driver()
