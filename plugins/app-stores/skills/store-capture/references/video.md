@@ -21,6 +21,9 @@ python3 scripts/video.py encode raw-tv.mov --size 1920x1080 --out preview-tv.mp4
 
 # check: ffprobe against the rules' video rules
 python3 scripts/video.py check preview-iphone.mp4 --slot APP_IPHONE_67
+
+# frames: every recorded frame, in order, numbered, for an edit by frame index
+python3 scripts/video.py frames raw.mov frames/ --width 1320
 ```
 
 - `capture.py --record`: records each screen's steps as it captures it (next section).
@@ -31,6 +34,10 @@ python3 scripts/video.py check preview-iphone.mp4 --slot APP_IPHONE_67
   centre-cropped only when its aspect is within 2 % of the target's (further off, choose `--fit crop` or
   `--fit pad`), and never scaled up without `--allow-upscale` (don't, unless the user accepts a softer preview).
   `--fps` (30), `--bitrate` (11M), `--codec h264|prores`, `--json`.
+- `frames`: every frame of the recording, in the order recorded, as `frame-00001.jpg` on in an empty folder,
+  with the count and size printed; `--width` scales keeping the aspect, `--size WxH` forces a size, `--format
+  jpg|png`, `--quality` (jpg: ffmpeg's `-q:v`, 1 best to 31; default 2), `--json`, `--dry-run`. Why, and the
+  edit that follows: [Editing a simulator recording by frame index](#editing-a-simulator-recording-by-frame-index).
 - Exit codes: 0; 1 a check error, or an encode that can't meet the spec; 3 usage, or ffmpeg/ffprobe missing.
 
 ## What the stores take
@@ -112,6 +119,50 @@ them first, as for screenshots.
 **Script the moments, then count them.** A preview that depends on staging (a level, a state, a sequence of taps)
 breaks when the app changes. Drive it with the same steps as the screenshots, mark the moments by name rather than
 by time in the file, and check each one happened.
+
+## Editing a simulator recording by frame index
+
+A preview is rarely one take: a settled screen held for a beat, then the motion that matters at full speed.
+Cutting a simulator recording by time lands on the wrong moments, because **its timestamps don't follow the wall
+clock**. `simctl io recordVideo` writes a frame only when the screen changes, and in a real trial (iOS 27
+simulators, ffmpeg 7 and 8) idle stretches came out compressed and some frames shared a timestamp, out of order in
+`showinfo`. So:
+
+- seeking with `-ss`, converting with `fps=30` or retiming with `setpts` picked the wrong frames: a 5-second hold
+  collapsed into 0.3 s, and 154 recorded frames became 382 or 16;
+- writing images straight from the recording dropped frames: the `image2`/`image2pipe` muxers and the mjpeg
+  encoder reject the clashing timestamps ("non monotonically increasing dts", "Invalid pts").
+
+`frames` sidesteps the timestamps. It decodes the recording once to raw RGB with every frame passed through as it
+is (`-f rawvideo -pix_fmt rgb24 -fps_mode passthrough`) and pipes that into a second ffmpeg that reads it as a
+plain sequence (`-f rawvideo -s WxH -r 30 -i -`) and writes numbered images: every frame, in order, numbered
+afresh. It prints how many; when the stream's own frame count differs, it says so.
+
+Then edit by index, not by time: look at the frames, pick the ones each beat needs, hold a settled frame for as
+long as the beat lasts (seconds × 30 copies of it) and play motion frames one each, at 30 fps:
+
+```sh
+python3 scripts/video.py frames raw.mov frames/ --width 1320
+mkdir -p edit; i=0
+put() { i=$((i+1)); ln -f "frames/frame-$(printf %05d "$1").jpg" "edit/$(printf %05d "$i").jpg"; }
+for n in $(seq 150); do put 12; done          # frame 12 held for 5 s
+for f in $(seq 40 95); do put "$f"; done      # the tap and its animation, as recorded
+for n in $(seq 90); do put 95; done           # the result held for 3 s
+ffmpeg -framerate 30 -i edit/%05d.jpg -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+  -c:v libx264 -crf 12 -pix_fmt yuv420p edit.mp4
+python3 scripts/video.py encode edit.mp4 --slot APP_IPHONE_67 --out preview-iphone.mp4
+```
+
+The edit's length is the frame count over 30; `encode` still checks it's 15–30 s and adds the silent track.
+
+**A rotated recording that comes out squeezed.** A file can store its picture on its side with a rotation for
+the player (a display matrix); ffmpeg turns the picture upright as it decodes. In a real trial a two-screen
+simulator's open inner display (simctl's `--display` of that screen) recorded a 2006×2852 stream with a −90°
+rotation, and the landscape picture came out squeezed into a portrait frame: text upright but narrow. Forcing the
+output back to the display's landscape shape (2853×2007, or a scale of it) fixed it. `frames` writes a rotated
+recording at its turned size and says so when ffprobe reports a rotation; look at a frame, and if the picture is
+still squeezed, force the display's shape with `--size WxH`. A `--size` whose shape (portrait or landscape) isn't
+the picture's is warned about, as is one that stretches it.
 
 ## Encoding
 

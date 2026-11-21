@@ -101,7 +101,7 @@ Extra fields are passed to the driver (an agent's app name, for example).
 | `chrome` | `scale` (device scale factor, default 1; the page is `width/scale` × `height/scale` CSS px), or `viewport` (`[w, h]` CSS px, which sets the scale); `mobile`; `reducedMotion` |
 | `macos` | `scale` (the display's backing scale, default 2: the window is sized to `width/scale` × `height/scale` points), `position` (default `[0, 40]`) |
 | `devflow`, `ailoha` | the host's fields (as `simctl` or `adb`), plus `agentPort` (by hand, checked), `agentPlatform`, `appName`, `agentTimeout`, `cli`, `host`, `screenshot`: [devflow.md](devflow.md), [ailoha.md](ailoha.md) |
-| `appium` | the host's fields, plus `server` (default `http://127.0.0.1:4723`, this machine only), `capabilities` (on a simulator `appium:isHeadless` is already `true`) and `pointScale`: [appium.md](appium.md) |
+| `appium` | the host's fields, plus `server` (default `http://127.0.0.1:4723`, this machine only), `capabilities` (on a simulator `appium:isHeadless` is already `true`, and `appium:wdaLocalPort` and `appium:mjpegServerPort` are the device's own unless set here: [appium.md](appium.md#beside-other-appium-servers)) and `pointScale`: [appium.md](appium.md) |
 | `xcuitest` | `scheme` (required), `project` or `workspace`, `testPlan`, `configuration`, `xctestrun`, `destination`, `testTimeout`, plus the host's: [ui-automation.md](ui-automation.md) |
 | `maestro` | `maestro` (the command), `env`, `flowTimeout`, plus the host's: [ui-automation.md](ui-automation.md) |
 
@@ -415,7 +415,8 @@ written to a temporary folder and moved into place at the end, so a failed run n
 
 The report also has `app`, the app this run captured: git's `revision`, `describe`, `committed`, `dirty` (the
 screens' paths had changes not committed), `repo`, and `builds` (an iOS-family `.app`'s version and build number
-from its `Info.plist`); `devices` (each device's source and warnings) and `notes` (said once a run, like the count of
+from its `Info.plist`); `devices` (each device's source and warnings; an Appium simulator's source also has the
+`wdaPort` and `mjpegPort` its sessions used) and `notes` (said once a run, like the count of
 quietly flattened pictures). A run keeps earlier entries for what it didn't run this time (`--screens`,
 `--devices`, `--locales`), and drops those the plan no longer has (a screen, device or locale removed, or omitted
 on a device), naming them in `notes`.

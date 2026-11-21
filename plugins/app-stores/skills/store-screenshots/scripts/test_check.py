@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import check  # noqa: E402
 import check_testkit as tk  # noqa: E402
+import slots  # noqa: E402
 from appstores_lib import jsonio  # noqa: E402
 from appstores_lib import schema  # noqa: E402
 
@@ -613,6 +614,60 @@ class FitAndFold(CheckCase):
         self.assertTrue([n for n in report.notes if "exploration" in n])
         code = Cli.main(self, "--config", path, "--out", "design/explore/a")[0]
         self.assertEqual(code, 0)
+
+
+class PhoneSlotCaptions(CheckCase):
+    """A real trial: an iPhone Duo's outer display (1398x2034, the mid aspect class) is a phone in Apple's search row.
+    check.py judges its first shots by the class render.py sizes its captions in (slots.caption_class): tall."""
+
+    def setUp(self):
+        super().setUp()
+        targets = dict(tk.TARGETS)
+        targets["duo-outer"] = {"store": "apple", "width": 1398, "height": 2034, "capture": "duo-outer"}
+        targets["ipad"] = {"store": "apple", "width": 1488, "height": 2266, "capture": "ipad", "frame": "tablet"}
+        self.set = tk.SetBuilder(self.tmp, tk.base_config(targets=targets))
+
+    def sized(self, target, u):
+        for f in self.set.files:
+            if f["target"] == target:
+                f["caption"]["fontPx"] = round(f["width"] * u / 100.0, 1)
+
+    def search_warnings(self, report):
+        return dict((f.where, f.message) for _, f in report.findings if f.rule_id == "design.caption.search_size")
+
+    def test_captions_at_the_tall_factor_pass_in_search(self):
+        self.sized("duo-outer", 9.8)          # sizePct 9.8 at the tall factor, as render.py now draws it
+        self.sized("ipad", 9.8 * 0.64)        # an iPad keeps the mid factor
+        report = self.run_check()
+        self.assertEqual(self.search_warnings(report), {})
+        measured = dict((m["path"], m) for m in report.to_json()["measured"])
+        self.assertGreaterEqual(measured["en-US/duo-outer/plan.png"]["searchPt"], 11.0)
+        self.assertNotIn("searchPt", measured["en-US/ipad/plan.png"])
+        inputs = check.Inputs(self.set.config_path)
+        self.assertEqual(inputs.caption_class("apple", "duo-outer", (1398, 2034)), "tall")
+        self.assertEqual(inputs.caption_class("apple", "ipad", (1488, 2266)), "mid")
+        self.assertEqual(inputs.caption_class("google", "android-phone", (1080, 1920)), "tall")
+        for tid in ("duo-outer", "ipad", "android-phone"):
+            t = self.set.config["targets"][tid]
+            self.assertEqual(inputs.caption_class(t["store"], tid, (t["width"], t["height"])),
+                             slots.caption_class(t["store"], t["width"], t["height"])[0])
+
+    def test_captions_at_the_mid_factor_are_too_small_there(self):
+        self.sized("duo-outer", 9.8 * 0.64)   # what the trial's render drew: 6.3u, about 7.4 pt in search
+        report = self.run_check()
+        warnings = self.search_warnings(report)
+        self.assertEqual(list(warnings), ["en-US/duo-outer"])
+        self.assertIn("7.4 pt (plan)", warnings["en-US/duo-outer"])
+        self.assertIn("under 9.5u", warnings["en-US/duo-outer"])
+
+    def test_a_targets_caption_class_is_judged_as_set_and_search_still_warns(self):
+        self.set.config["targets"]["duo-outer"]["captionClass"] = "mid"
+        self.sized("duo-outer", 9.8 * 0.64)
+        path = self.set.write()
+        inputs = check.Inputs(path)
+        self.assertEqual(inputs.caption_class("apple", "duo-outer", (1398, 2034)), "mid")
+        warnings = self.search_warnings(check.run_check(path))
+        self.assertIn("under 9.3u", warnings["en-US/duo-outer"])   # iOS's 11 pt in search, whatever the class
 
 
 class Cli(CheckCase):

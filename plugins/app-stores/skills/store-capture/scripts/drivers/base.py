@@ -21,6 +21,7 @@ Rules for driver authors (CONTRACT.md 10.3, 10.5):
   ``--dry-run`` sets ``DRY_RUN``: ``run()`` then prints the command and returns ``dry_output`` without running it.
 - **HTTP only to this machine** through ``http()``/``http_json()`` (``localhost``, ``127.0.0.1``, ``::1``); any
   other host raises ``NotLocal``. It goes through ``appstores_lib.web.request``, whose ``TRANSPORT`` tests fake.
+  Whether something already listens on a local port is the ``LISTENING`` hook's to say (tests fake it too).
 - **Waiting** through ``sleep()`` and ``poll()`` (the ``SLEEP`` and ``CLOCK`` hooks), so tests never wait.
 - **Never resize.** A driver captures at the device's size or reports what it got; ``capture.py`` checks.
 - **Reset in ``reset()``** whatever was changed (status bar, demo mode, ``wm size``, locale, appearance,
@@ -43,6 +44,7 @@ import re
 import shlex
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -138,11 +140,21 @@ def _stderr_log(line):
     print(line, file=sys.stderr)
 
 
+def tcp_listening(port, host="127.0.0.1", timeout=0.5):
+    """The real ``LISTENING``: True when something on this machine accepts a TCP connection on ``port``."""
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 RUNNER = subprocess_runner      # callable(cmd, input, timeout, env, cwd) -> (code, stdout bytes, stderr bytes)
 SPAWNER = subprocess_spawner    # callable(cmd, log_path, env, cwd) -> a process (poll(), terminate(), wait())
 SLEEP = time.sleep              # callable(seconds)
 CLOCK = time.monotonic          # callable() -> seconds
 LOG = _stderr_log               # callable(line): where commands and notes are logged
+LISTENING = tcp_listening        # callable(port) -> bool: does something listen on 127.0.0.1:port
 DRY_RUN = False                 # set by capture.py --dry-run: print commands, run nothing
 SECRETS = []                    # values never written to a log or a report (a demo account's password): mask()
 
@@ -371,10 +383,11 @@ def run(cmd, timeout=120, check=True, input=None, env=None, cwd=None, binary=Fal
 
 def spawn(cmd, log_path=None, env=None, cwd=None):
     """Start a long-running command (an emulator, a server) in the background and return its process (or
-    ``None`` under ``--dry-run``). Logged like ``run()``; a missing program raises ``ToolMissing``. Stop it with
-    ``stop()``."""
+    ``None`` under ``--dry-run``). Logged like ``run()`` (``env``'s variables first); a missing program raises
+    ``ToolMissing``. Stop it with ``stop()``."""
     cmd = [str(c) for c in cmd]
-    note("  $ %s &" % quote(cmd))
+    prefix = "".join("%s=%s " % (k, shlex.quote(str(v))) for k, v in sorted((env or {}).items()))
+    note("  $ %s%s &" % (prefix, quote(cmd)))
     if DRY_RUN:
         return None
     try:

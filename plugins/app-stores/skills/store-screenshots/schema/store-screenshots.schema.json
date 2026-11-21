@@ -232,6 +232,7 @@
         "capture": { "$comment": "The capture device whose captures feed this target.", "$ref": "#/$defs/id" },
         "device": { "$comment": "The device class its drawn frames take (a foldable's outer or inner display, a 16:9 phone...), where the capture's shape doesn't say.", "$ref": "#/$defs/deviceClass" },
         "slot": { "$comment": "Google only: the Play slot this target fills, when store-listing.json doesn't say.", "enum": ["phone", "tablet7", "tablet10", "tv", "wear"] },
+        "captionClass": { "$comment": "Whose caption factor its captions take (tall 1, mid 0.64, square 0.84, wide 0.48 of sizePct), over the default: the slot's aspect class, or tall on an Apple phone slot in portrait (search shows it three across like any iPhone's). Its margins and device sizes still follow its shape.", "enum": ["tall", "mid", "square", "wide"] },
         "hero": { "$comment": "The hero's mark on this target alone, over theme.hero key by key (a tall logo smaller on a landscape slot).", "$ref": "#/$defs/hero" },
         "layout": { "$ref": "#/$defs/layout" },
         "layouts": {

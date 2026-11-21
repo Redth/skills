@@ -10,6 +10,11 @@
   and never scaled up without ``--allow-upscale``.
 - ``check <file>… [--slot …]``: ffprobe against the rules' ``video`` rules (codec, container, frame rate and
   whether it's constant, length, size, bytes, the audio track).
+- ``frames <video> <out-dir> [--width W | --size WxH] [--format jpg|png] [--quality N]``: every recorded frame, in
+  order, as ``frame-00001.jpg`` on, for an edit by frame index: decoded once to raw RGB with the timestamps
+  passed through and piped into a second ffmpeg that numbers them afresh (a simulator's timestamps clash, and
+  seeking, ``fps=`` or the image muxers land on the wrong frames or drop some). ``--size`` forces the frames' size
+  (a rotated recording that comes out squeezed).
 
 ffmpeg and ffprobe are found at run time (``$FFMPEG``/``$FFPROBE``, then ``PATH``) and never bundled; without
 them the command says how to install them and exits 3. Every command goes through ``drivers.base.run``.
@@ -23,6 +28,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -467,6 +473,160 @@ def check_file(path, ruleset, slot=None):
     return check_info(path, probe(path), ruleset, slot, os.path.getsize(path))
 
 
+# -- frames ---------------------------------------------------------------------------------------------
+
+# Decode once to raw RGB with every frame passed through as it is (no timestamps kept), piped into a second
+# ffmpeg that reads them as a plain 30 fps sequence and numbers them afresh: simulator recordings' timestamps
+# clash and run backwards in places, and the image muxers drop frames over them. %(decode)s and %(encode)s are
+# the two shell-quoted commands. A failure of either is the script's exit; the encoder's is reported first (the
+# decoder dies of a broken pipe when the encoder stops).
+FRAMES_SCRIPT = r'''
+st=$(mktemp "${TMPDIR:-/tmp}/appstores-frames.XXXXXX") || exit 70
+{ %(decode)s; echo $? >"$st"; } | %(encode)s
+enc=$?
+dec=$(cat "$st" 2>/dev/null); rm -f "$st"
+if [ "$enc" -ne 0 ]; then echo "writing the frames failed (exit $enc)" >&2; exit "$enc"; fi
+if [ "${dec:-70}" -ne 0 ]; then echo "decoding the recording failed (exit ${dec:-70})" >&2; exit "${dec:-70}"; fi
+exit 0
+'''
+
+FRAME_FORMATS = ("jpg", "png")
+
+
+def rotation(path, ffprobe=None):
+    """The display rotation ffprobe reports for ``path``'s first video stream, in degrees (a display matrix's
+    ``rotation``, else an old ``rotate`` tag); 0 when there's none or ffprobe can't say."""
+    ffprobe = ffprobe or need_tool("ffprobe")
+    try:
+        res = base.run([ffprobe, "-v", "error", "-select_streams", "v:0", "-of", "json", "-show_entries",
+                        "stream_side_data=rotation:stream_tags=rotate", path], timeout=120, check=False, quiet=True)
+        data = json.loads(res.out or "{}") if res.code == 0 else {}
+    except (base.DriverError, ValueError):
+        return 0
+    for s in data.get("streams") or []:
+        for side in s.get("side_data_list") or []:
+            if side.get("rotation") is not None:
+                try:
+                    return int(round(float(side["rotation"])))
+                except (TypeError, ValueError):
+                    pass
+        tag = (s.get("tags") or {}).get("rotate")
+        if tag:
+            try:
+                return int(round(float(tag)))
+            except ValueError:
+                pass
+    return 0
+
+
+def _shape(w, h):
+    return "landscape" if w > h else ("portrait" if h > w else "square")
+
+
+def plan_frames(info, rotate=0, width=None, size=None, fmt="jpg", quality=None):
+    """Decide the frames' size: ``size`` (w, h) forces it; ``width`` keeps the picture's aspect; neither keeps
+    its size. The picture's size is the stream's, turned when ``rotate`` is a quarter turn (ffmpeg rotates the
+    picture upright as it decodes). Returns ``{"width", "height", "stream", "display", "rotation", "streamFrames",
+    "format", "quality", "warnings"}``."""
+    vids = streams(info, "video")
+    if not vids:
+        raise VideoError("the recording has no video stream")
+    v = vids[0]
+    sw, sh = int(v.get("width") or 0), int(v.get("height") or 0)
+    if not sw or not sh:
+        raise VideoError("ffprobe didn't report the recording's size")
+    if fmt not in FRAME_FORMATS:
+        raise VideoError("--format is jpg or png, not %r" % fmt, 3)
+    if quality is not None and (fmt != "jpg" or not 1 <= quality <= 31):
+        raise VideoError("--quality is for jpg: ffmpeg's -q:v, 1 (best) to 31", 3)
+    quarter = (rotate % 180) == 90
+    dw, dh = (sh, sw) if quarter else (sw, sh)
+    warnings = []
+    if size:
+        w, h = int(size[0]), int(size[1])
+        if w <= 0 or h <= 0:
+            raise VideoError("--size must be positive", 3)
+        if _shape(w, h) != _shape(dw, dh) and "square" not in (_shape(w, h), _shape(dw, dh)):
+            warnings.append("--size %dx%d is %s but the picture is %s (%dx%d%s): the frames will be squeezed, "
+                            "unless that's the shape the display really has" % (
+                                w, h, _shape(w, h), _shape(dw, dh), dw, dh,
+                                ", after its %d° rotation" % rotate if rotate else ""))
+        elif crop_fraction(dw, dh, w, h) > CROP_TOLERANCE:
+            warnings.append("--size %dx%d stretches the %dx%d picture %.0f%% out of its aspect" % (
+                w, h, dw, dh, crop_fraction(dw, dh, w, h) * 100))
+    elif width is not None:
+        if width <= 0:
+            raise VideoError("--width must be positive", 3)
+        w, h = int(width), max(1, int(round(width * float(dh) / dw)))
+    else:
+        w, h = dw, dh
+    if rotate and not size:
+        warnings.append("the stream is %dx%d with a %d° display rotation (a display matrix): the frames are written "
+                        "upright, %dx%d. Look at one: if the picture is squeezed, force the display's shape with "
+                        "--size WxH (%s)" % (sw, sh, rotate, w, h, _shape(dw, dh)))
+    try:
+        stream_frames = int(v.get("nb_frames") or 0)
+    except ValueError:
+        stream_frames = 0
+    return {"width": w, "height": h, "stream": [sw, sh], "display": [dw, dh], "rotation": rotate,
+            "streamFrames": stream_frames, "format": fmt, "quality": quality, "warnings": warnings}
+
+
+def frames_commands(ffmpeg, src, out_dir, plan):
+    """The two ffmpeg commands of the pipe: decode ``src`` to raw RGB (every frame as it is, scaled to the plan's
+    size) and number them afresh as images in ``out_dir``."""
+    w, h = plan["width"], plan["height"]
+    decode = [ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", src, "-map", "0:v:0", "-an",
+              "-fps_mode", "passthrough", "-vf", "scale=%d:%d:flags=lanczos,setsar=1" % (w, h),
+              "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
+    encode = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
+              "-s", "%dx%d" % (w, h), "-r", "30", "-i", "-"]
+    if plan["format"] == "jpg":
+        encode += ["-qmin", "1", "-q:v", str(plan["quality"] or 2)]
+    encode.append(os.path.join(out_dir, "frame-%05d." + plan["format"]))
+    return decode, encode
+
+
+def frames_script(decode, encode):
+    """The ``/bin/sh -c`` command that pipes ``decode`` into ``encode`` and fails when either does."""
+    return ["/bin/sh", "-c", FRAMES_SCRIPT % {"decode": base.quote(decode), "encode": base.quote(encode)},
+            "appstores-frames"]
+
+
+def _frame_files(out_dir, fmt):
+    pattern = re.compile(r"^frame-\d{5,}\.%s$" % re.escape(fmt))
+    try:
+        return sorted(n for n in os.listdir(out_dir) if pattern.match(n))
+    except OSError:
+        return []
+
+
+def frames(src, out_dir, width=None, size=None, fmt="jpg", quality=None, dry_run=False):
+    """Write every frame of ``src``, in the order recorded, to ``out_dir`` as ``frame-00001.<fmt>`` on. Returns
+    ``{"out", "plan", "commands", "count", "files"}``."""
+    ffmpeg = need_tool("ffmpeg")
+    if not os.path.isfile(src):
+        raise VideoError("%s doesn't exist" % src, 3)
+    info = probe(src)
+    plan = plan_frames(info, rotation(src), width=width, size=size, fmt=fmt, quality=quality)
+    decode, encode = frames_commands(ffmpeg, src, out_dir, plan)
+    result = {"out": out_dir, "plan": plan, "commands": [decode, encode], "count": 0, "files": []}
+    if dry_run:
+        return result
+    if _frame_files(out_dir, fmt):
+        raise VideoError("%s already has frame-*.%s files: write to an empty folder (old frames would mix in)"
+                         % (out_dir, fmt), 3)
+    os.makedirs(out_dir, exist_ok=True)
+    _run(frames_script(decode, encode), timeout=3600, what="ffmpeg (frames)")
+    files = _frame_files(out_dir, fmt)
+    if not files:
+        raise VideoError("ffmpeg wrote no frames from %s" % src)
+    result["count"], result["files"] = len(files), files
+    if plan["streamFrames"] and plan["streamFrames"] != len(files):
+        plan["warnings"].append("the stream lists %d frames and %d were written" % (plan["streamFrames"], len(files)))
+    return result
+
+
 # -- record ---------------------------------------------------------------------------------------------
 
 # Start simctl's recorder, wait for its "Recording started", run the person's command (if any), wait, then
@@ -673,6 +833,17 @@ def main(argv=None):
     chk.add_argument("--rules-dir", default=RULES_DIR)
     chk.add_argument("--json", action="store_true")
 
+    frm = sub.add_parser("frames", help="every recorded frame, in order, numbered (for an edit by frame index)")
+    frm.add_argument("input")
+    frm.add_argument("out_dir")
+    shape = frm.add_mutually_exclusive_group()
+    shape.add_argument("--width", type=int, help="scale to this width, keeping the aspect")
+    shape.add_argument("--size", type=_size, help="force WIDTHxHEIGHT (a rotated recording that comes out squeezed)")
+    frm.add_argument("--format", dest="fmt", choices=FRAME_FORMATS, default="jpg")
+    frm.add_argument("--quality", type=int, help="jpg: ffmpeg's -q:v, 1 (best) to 31; default 2")
+    frm.add_argument("--dry-run", action="store_true")
+    frm.add_argument("--json", action="store_true")
+
     args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
@@ -720,6 +891,25 @@ def main(argv=None):
                         res["plan"]["fps"], ", silent audio added" if res["plan"]["addSilence"] else ""))
                     _print_findings(res["out"], res["findings"])
             return 1 if errors else 0
+        if args.command == "frames":
+            res = frames(args.input, args.out_dir, width=args.width, size=args.size, fmt=args.fmt,
+                         quality=args.quality, dry_run=args.dry_run)
+            plan = res["plan"]
+            if args.json:
+                print(json.dumps({"out": res["out"], "frames": res["count"], "width": plan["width"],
+                                  "height": plan["height"], "format": plan["format"], "rotation": plan["rotation"],
+                                  "streamFrames": plan["streamFrames"], "files": res["files"],
+                                  "warnings": plan["warnings"], "commands": res["commands"]}, indent=2))
+                return 0
+            for w in plan["warnings"]:
+                print("note: " + w)
+            if args.dry_run:
+                print("would run: %s | %s" % (base.quote(res["commands"][0]), base.quote(res["commands"][1])))
+            else:
+                print("wrote %d frames (%dx%d %s) to %s: %s to %s" % (
+                    res["count"], plan["width"], plan["height"], plan["format"], res["out"], res["files"][0],
+                    res["files"][-1]))
+            return 0
         ruleset = load_rules(args.store, args.rules_dir)
         report = []
         errors = 0

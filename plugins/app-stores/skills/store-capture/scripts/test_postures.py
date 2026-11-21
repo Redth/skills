@@ -42,11 +42,16 @@ class FakeFoldable(object):
     posture, ``wm size``/``wm density`` overrides kept per display (as Android keeps them), a lock screen that
     comes up on every fold, an on-screen keyboard. Install with ``install(runner)``."""
 
-    def __init__(self, serial="emulator-5580", posture="open", foldable=True, unlockable=True):
+    def __init__(self, serial="emulator-5580", posture="open", foldable=True, unlockable=True, stubborn=0,
+                 settling=0):
         self.serial = serial
         self.posture = posture
         self.foldable = foldable
         self.unlockable = unlockable
+        self.stubborn = stubborn      # dismisses the lock screen ignores after each fold (it comes back)
+        self.settling = settling      # sys.boot_completed reads that say 0 after each fold (a cold boot's)
+        self.ignored = 0
+        self.unsettled = 0
         self.sizes = {}
         self.densities = {}
         self.keyguard = False
@@ -80,6 +85,8 @@ class FakeFoldable(object):
         return self.shell(cmd[-1])
 
     def console(self, args):
+        if args[:1] in (["fold"], ["unfold"]):
+            self.ignored, self.unsettled = 0, 0
         if args[:1] == ["fold"]:
             self.posture, self.keyguard = "folded", True
         elif args[:1] == ["unfold"]:
@@ -103,6 +110,9 @@ class FakeFoldable(object):
 
     def shell(self, text):
         if text == "getprop sys.boot_completed":
+            if self.unsettled < self.settling:
+                self.unsettled += 1
+                return "0\n"
             return "1\n"
         if text == "getprop ro.build.version.sdk":
             return "36\n"
@@ -155,7 +165,9 @@ class FakeFoldable(object):
                 self.densities[self.active()] = m.group(1)
             return ""
         if text == "wm dismiss-keyguard":
-            if self.unlockable:
+            if self.ignored < self.stubborn:
+                self.ignored += 1
+            elif self.unlockable:
                 self.keyguard = False
             return ""
         if text == "dumpsys window":
@@ -311,7 +323,38 @@ class AndroidFoldTests(Case):
         FakeFoldable(unlockable=False).install(self.run_)
         drv = adb_driver.AdbDriver(self.options)
         drv.prepare(self.device(posture="folded"), {})
-        self.assertTrue(any("lock screen is still up" in w for w in drv.warnings))
+        tries = len(adb_driver.AdbDriver.KEYGUARD_WAITS)
+        self.assertEqual([w for w in drv.warnings if "lock screen is still up" in w and "%d tries" % tries in w],
+                         drv.warnings)
+        self.assertEqual(len(drv.warnings), 1)
+        # Each try wakes and dismisses; every try after the first presses 82 (menu) too.
+        self.assertEqual(len(self.run_.matching(ADB + r"shell 'wm dismiss-keyguard'$")), tries)
+        self.assertEqual(len(self.run_.matching(ADB + r"shell 'input keyevent KEYCODE_WAKEUP'$")), tries)
+        self.assertEqual(len(self.run_.matching(ADB + r"shell 'input keyevent 82'$")), tries - 1)
+
+    def test_a_lock_screen_that_comes_back_after_a_cold_boot_goes_on_the_next_try(self):
+        # A real trial: a fold emulator booted fresh and unfolded at once kept its lock screen over the first
+        # dismiss, and the launch landed behind it. The next try, a few seconds on, lifts it.
+        fold = FakeFoldable(posture="folded", stubborn=1).install(self.run_)
+        drv = adb_driver.AdbDriver(self.options)
+        drv.prepare(self.device(id="fold", posture="open", target={"avd": "appstores-fold"}), {})
+        self.assertFalse(fold.keyguard)
+        self.assertEqual(drv.warnings, [])
+        self.assertEqual(len(self.run_.matching(ADB + r"shell 'wm dismiss-keyguard'$")), 2)
+        self.assertEqual(len(self.run_.matching(ADB + r"shell 'input keyevent 82'$")), 1)
+        self.assertTrue(any("lock screen went on try 2" in l for l in self.hooks.log), self.hooks.log)
+        self.assertInOrder([ADB + r"emu unfold$", ADB + r"shell 'wm dismiss-keyguard'$", ADB + r"shell 'input keyevent 82'$",
+                            ADB + r"shell 'dumpsys display'$", ADB + r"shell 'wm size 1080x1920'$"])
+
+    def test_the_unlock_waits_for_the_boot_to_complete_first(self):
+        FakeFoldable(posture="open", settling=2).install(self.run_)
+        drv = adb_driver.AdbDriver(self.options)
+        drv.prepare(self.device(posture="folded"), {})
+        fold_at = self.run_.index(ADB + r"emu fold$")
+        wake_at = self.run_.index(ADB + r"shell 'input keyevent KEYCODE_WAKEUP'$")
+        boots = [i for i, l in enumerate(self.run_.lines) if fold_at < i < wake_at and "sys.boot_completed" in l]
+        self.assertEqual(len(boots), 3, self.run_.lines[fold_at:wake_at + 1])   # 0, 0, then 1
+        self.assertEqual(drv.warnings, [])
 
     def test_screencaps_words_before_the_picture_are_dropped(self):
         FakeFoldable().install(self.run_)
@@ -333,6 +376,8 @@ class AndroidFoldTests(Case):
         drv.prepare(self.device(posture="folded", target={"serial": "emulator-5580"}), {})
         self.assertTrue(any("emu fold" in l for l in lines), lines)
         self.assertTrue(any("wm dismiss-keyguard" in l for l in lines), lines)
+        # The dry run shows one try (nothing answers whether the lock screen went).
+        self.assertEqual(len([l for l in lines if "wm dismiss-keyguard" in l]), 1)
 
 
 class KeyboardTests(Case):
