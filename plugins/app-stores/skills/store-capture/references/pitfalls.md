@@ -27,6 +27,10 @@ happen to any app.
 - **Folding locks the screen** (an Android emulator), and the next launch lands behind the keyguard. The `adb`
   driver wakes and unlocks it after every posture change; a script that folds by itself has to as well (`input
   keyevent KEYCODE_WAKEUP`, `wm dismiss-keyguard`).
+- **A fold right after a cold boot** kept the lock screen over the first dismiss (a fresh Pixel 9 Pro Fold emulator
+  unfolded at once): the launch landed behind it and the screen was missed, twice. The driver waits for
+  `sys.boot_completed` and tries the unlock again with a longer wait each time (and `input keyevent 82`); a script
+  that folds has to retry too.
 - **`wm size` is per physical display.** Set while open, it never reaches the cover display; the fold then
   captures the cover display at its own 1080×2424 and the shot fails. The driver sets it again after each posture
   change and puts each display's back.
@@ -181,6 +185,13 @@ happen to any app.
 - **CoreSimulator hiccups.** "Mach error -308 - (ipc/mig) server died" failed an install once and every screen
   of that device was reported missed; a retry a few seconds later worked. The `simctl` driver tries such a command
   once more by itself.
+- **Two Android SDKs.** A shell's `ANDROID_HOME` named Homebrew's command-line-tools SDK (platform-tools, emulator,
+  cmdline-tools, no `system-images/`) while the plan's image was in the Android Studio SDK in the home folder:
+  avdmanager said only "Package path is not valid. Valid system image paths are: null" (beside unrelated "corrupted
+  package.xml" warnings) and every screen of every Android device was missed; the emulator then failed "Cannot find
+  AVD system path. Please define ANDROID_SDK_ROOT". The `adb` driver now checks the image in the SDK in use before
+  avdmanager and names the SDK folders that have it, and passes `ANDROID_SDK_ROOT` to the emulator
+  ([adb.md](adb.md#the-sdk)).
 - **SDK tools in versioned folders.** An SDK Manager install may have `cmdline-tools/19.0/`, `23.0/` and no
   `latest/`: the driver takes the newest; `target.avdmanager` names one.
 - **Permissions for the tools.** macOS needs Screen Recording for `screencapture` (without it, only the wallpaper is

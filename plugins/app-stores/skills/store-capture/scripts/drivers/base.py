@@ -379,10 +379,11 @@ def run(cmd, timeout=120, check=True, input=None, env=None, cwd=None, binary=Fal
 
 def spawn(cmd, log_path=None, env=None, cwd=None):
     """Start a long-running command (an emulator, a server) in the background and return its process (or
-    ``None`` under ``--dry-run``). Logged like ``run()``; a missing program raises ``ToolMissing``. Stop it with
-    ``stop()``."""
+    ``None`` under ``--dry-run``). Logged like ``run()`` (``env``'s variables first); a missing program raises
+    ``ToolMissing``. Stop it with ``stop()``."""
     cmd = [str(c) for c in cmd]
-    note("  $ %s &" % quote(cmd))
+    prefix = "".join("%s=%s " % (k, shlex.quote(str(v))) for k, v in sorted((env or {}).items()))
+    note("  $ %s%s &" % (prefix, quote(cmd)))
     if DRY_RUN:
         return None
     try:
