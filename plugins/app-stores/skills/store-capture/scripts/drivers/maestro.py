@@ -248,6 +248,9 @@ class MaestroDriver(HostedDriver):
             return [("back", None)]
         if kind == "swipe":
             value = value if isinstance(value, dict) else {"direction": value}
+            if value.get("hold"):
+                base.LOG("  warning: step %d: maestro's swipe can't press and hold before it moves; hold left out, so "
+                         "a slider or drag handle may not move" % index)
             if value.get("from") and value.get("to"):
                 sw = {"start": "%d,%d" % tuple(round(v) for v in value["from"]),
                       "end": "%d,%d" % tuple(round(v) for v in value["to"])}

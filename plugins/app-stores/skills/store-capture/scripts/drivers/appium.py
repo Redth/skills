@@ -19,7 +19,8 @@ Steps: ``launch`` (iOS/Mac ``mobile: launchApp`` with ``arguments``/``environmen
 startActivity`` with ``extras``), ``deepLink`` (``mobile: deepLink``), ``tap`` (find, then
 ``/element/<id>/click``), ``type`` (``/element/<id>/value``, or the focused element), ``wait`` (find until it
 appears), ``scroll`` (iOS ``mobile: scroll``; Android ``mobile: scrollGesture``; ``to`` an element: scroll until
-it's found), ``swipe`` (``mobile: swipe`` / ``mobile: swipeGesture``), ``back`` (``/back``), ``hideKeyboard``
+it's found), ``swipe`` (``mobile: swipe`` / ``mobile: swipeGesture``; ``from``/``to`` a W3C pointer drag, ``hold``
+a ``pause`` after ``pointerDown``), ``back`` (``/back``), ``hideKeyboard``
 (``mobile: isKeyboardShown``, then ``mobile: hideKeyboard``: on iOS with the keyboard's Done/Return keys, then a
 Done button above it), ``posture`` (the host's). Finders: ``id`` (``accessibility id``; on Android ``id``, the
 resource id, then ``accessibility id``), ``text`` and ``label`` (an iOS predicate, an Android or Windows XPath),
@@ -470,13 +471,16 @@ class AppiumDriver(HostedDriver):
         ref = self.ref(ctx, value)
         self.wd(ctx.device, "POST", self.sid() + "/element/%s/click" % ref)
 
-    def pointer(self, ctx, points, ms):
-        """A touch through ``/actions``: down at the first point, moved through the rest over ``ms``, up."""
+    def pointer(self, ctx, points, ms, hold=0):
+        """A touch through ``/actions``: down at the first point, held there ``hold`` ms (a ``pause``: a slider or a
+        pan gesture then reads a drag, not a scroll), moved through the rest over ``ms``, up."""
         scale = float((ctx.device.get("target") or {}).get("pointScale") or 1)
         pts = [(int(round(x / scale)), int(round(y / scale))) for x, y in points]
         acts = [{"type": "pointerMove", "duration": 0, "x": pts[0][0], "y": pts[0][1]},
                 {"type": "pointerDown", "button": 0}]
-        if len(pts) == 1:
+        if hold:
+            acts.append({"type": "pause", "duration": int(hold)})
+        elif len(pts) == 1:
             acts.append({"type": "pause", "duration": 80})
         for x, y in pts[1:]:
             acts.append({"type": "pointerMove", "duration": int(ms or 300), "x": x, "y": y})
@@ -581,12 +585,14 @@ class AppiumDriver(HostedDriver):
             return None
 
     def step_swipe(self, ctx, value):
-        """``from``/``to`` points (a W3C pointer drag over ``ms``), or a ``direction`` on the window or an element."""
+        """``from``/``to`` points (a W3C pointer drag over ``ms``, after a ``pause`` of ``hold`` ms with the finger
+        down), or a ``direction`` on the window or an element."""
         if isinstance(value, str):
             value = {"direction": value}
         value = value or {}
+        hold = self.swipe_hold(ctx, value)
         if value.get("from") and value.get("to"):
-            self.pointer(ctx, [value["from"], value["to"]], value.get("ms"))
+            self.pointer(ctx, [value["from"], value["to"]], value.get("ms"), hold)
             return
         if value.get("direction") not in ("up", "down", "left", "right"):
             raise base.StepFailed("step %d: swipe needs a direction (up, down, left, right) or from and to" % ctx.index)

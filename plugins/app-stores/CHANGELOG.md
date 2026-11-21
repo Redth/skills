@@ -109,6 +109,13 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - `store-capture`: `fill` warns when a field it typed that the screen's `verify` names is out of sight once
   `scrollTo` has scrolled the form back (a `verify` sees only what's on screen); config.md and staging.md say to
   verify only what the shot shows.
+- `store-capture`: a `swipe`'s `hold` (ms, default 0): the finger stays down at `from` before it moves, so a slider,
+  a drag handle, a reorder or a custom pan gesture inside a scroll view drags instead of reading the touch as a scroll
+  (in a real trial a `from`/`to` swipe returned 200 and the slider didn't move). Appium puts a W3C `pause` after
+  `pointerDown` (iOS and Android); `adb` and `uiautomator` send `input motionevent` DOWN, a `sleep`, a few MOVEs and
+  UP in one shell line, and on an `input` without `motionevent` long-press and then swipe, with a warning. Maestro,
+  DevFlow and Ailoha leave it out with a warning, as does a `direction` swipe. config.md ("Dragging a slider or a
+  handle"), appium.md, adb.md, a SKILL.md failure row, the schema and CONTRACT 10.2.
 
 - `store-screenshots` 0.1.0 (#12): designed store screenshots from an app's real captures, one design for every
   store, size and locale. A brief and a storyboard agreed with the user before rendering; `store-screenshots.json`

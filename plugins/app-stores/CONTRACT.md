@@ -936,7 +936,10 @@ skills/store-capture/
   is what's scrolled, else the element itself, said in the report's `panes` and kept for the screen's later scrolls
   once the element named is out of sight; on iOS through Appium a quick `mobile: swipe`, never a direction-only `mobile:
   scroll`, whose opening press can land on a field and reopen the keyboard), `back`,
-  `swipe`, `flow` (a Maestro flow or a UI test name, run by the driver that understands it), `script` (a command
+  `swipe` (`from`/`to` over `ms`, or a `direction`; `hold`: ms the finger stays down at `from` before it moves, for a
+  slider, a drag handle or a custom pan gesture: Appium's W3C `pause` after `pointerDown`, adb's `input motionevent`
+  (an older `input` without it: a long press, then the swipe, with a warning); a driver that can't hold, or a
+  `direction` swipe, leaves it out with a warning), `flow` (a Maestro flow or a UI test name, run by the driver that understands it), `script` (a command
   the user provides, run as is, with `APPSTORES_DEVICE`, `APPSTORES_LOCALE`, `APPSTORES_SCREEN`,
   `APPSTORES_PLATFORM`, `APPSTORES_APP_ID` and the host's `APPSTORES_UDID` or `ANDROID_SERIAL`/`APPSTORES_SERIAL`),
   `appFile` (a file copied into the app's own data: the simulator's data container, Android's data folder through

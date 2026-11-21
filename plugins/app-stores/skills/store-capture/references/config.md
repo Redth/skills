@@ -229,7 +229,7 @@ One kind a step: `{ "<kind>": <value> }`.
 | `wait` | a number (ms), `{ "ms": … }`, or an element (with `contains`, optionally) | an element waits for it to appear (and, with `contains`, to show that text), up to its `timeout` (seconds, default 10). A driver that can't see elements waits and warns |
 | `scroll` | `{ "to": <element> \| "top" \| "bottom" }` or `{ "direction": "up"\|"down"\|"left"\|"right", "times": n }`, either with `"in": <element>` | `to` an element looks `direction` first (default down) until it's in view or the content stops moving, then the other way; `"top"`/`"bottom"` scroll until the content stops moving; `in` scrolls within that element (a pane, a list) rather than at the screen's middle (on a two-pane layout, the other pane): the scroll view itself or anything inside it (the pane's content, one of its fields), whose nearest scrolling ancestor is what's scrolled ([below](#scrolling-in-a-pane)). On iOS through Appium each scroll is a quick swipe ([appium.md](appium.md#scrolling-on-ios)). Wait for scroll bars to fade after (`settle`) |
 | `back` | `true` | the system back (Android), the agent's or Appium's back |
-| `swipe` | `{ "from": [x, y], "to": [x, y], "ms": … }` or `{ "direction": … }` | |
+| `swipe` | `{ "from": [x, y], "to": [x, y], "ms": …, "hold": … }` or `{ "direction": … }` | `ms` is how long the move takes; `hold` (ms, default 0) keeps the finger down at `from` before it moves, for a slider, a drag handle, a reorder or a custom pan gesture ([below](#dragging-a-slider-or-a-handle)) |
 | `flow` | a string (a Maestro flow's path, a UI test's name) or the flow driver's own object | run by the driver that understands it |
 | `script` | a string (split like a shell would, not run by one), an argument list, or `{ "run": …, "timeout": s }` | a command the user provides, run as is from the plan's folder, with the variables below |
 | `appFile` | `{ "file": "seed/app.db", "into": "Library/Caches/app.db" }` (`into` may be `{ "ios": …, "android": … }`) | copies a file into the app's own data, the app stopped first and the old file (and a database's `-wal`/`-shm`) removed: the simulator's data container, Android's `/data/data/<package>` through `run-as` (debug builds). Done by the `simctl` and `adb` drivers, and through them by the agents and Appium |
@@ -369,6 +369,25 @@ isn't the element named, the report's `panes` says so ("in id 'servings': scroll
 android.widget.ScrollView [600,200][1080,1920]"); read it when a scroll moved the wrong thing. Once found on a
 screen, the pane serves that screen's later scrolls when the element named has scrolled out of sight (a field at
 the top of the form, once the fill's reached the bottom).
+
+### Dragging a slider or a handle
+
+A `swipe` from one point to another touches down and moves straight away: a scroll view takes that for a scroll or a
+flick, and a control inside one that drags (a slider, a drag handle, a list's reorder grip, a custom control with
+its own pan gesture) may not move at all, though the step succeeded. Give it a `hold`, the ms the finger stays down at
+`from` before it moves, and a slower move (`ms`):
+
+```json
+{ "swipe": { "from": [180, 1240], "to": [900, 1240], "hold": 400, "ms": 1000 }, "name": "set-servings" }
+```
+
+400 ms is usually enough to read as a press; a control that waits for a long press (a reorder) may want its
+platform's long-press time (about 500 ms). `hold` goes with `from` and `to`; with a `direction` it's left out with a
+warning. How each driver holds: Appium, a W3C `pause` after `pointerDown` (iOS and Android); `adb` and
+`uiautomator`, `input motionevent` DOWN, a `sleep`, a few MOVEs along the way and UP in one shell line, or on an
+older Android whose `input` has no `motionevent`, a long press and then the swipe with the finger lifted between
+(a warning: drive that device with Appium). Maestro, DevFlow and Ailoha can't hold before a swipe: they leave it
+out and warn. Check the picture: a slider that didn't move is still a shot taken.
 
 ### `verify` and the keyboard
 

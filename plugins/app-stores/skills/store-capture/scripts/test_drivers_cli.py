@@ -784,6 +784,79 @@ class AdbTests(AdbCase):
         drv.prepare(self.device(target={"serial": "emulator-5580"}), {})
         self.assertTrue(any("wm size 1080x1920" in l for l in self.hooks.log))
 
+    HELD = ("adb -s emulator-5580 shell 'input motionevent DOWN 180 1240; sleep 0.4; "
+            "input motionevent MOVE 324 1240; sleep 0.2; input motionevent MOVE 468 1240; sleep 0.2; "
+            "input motionevent MOVE 612 1240; sleep 0.2; input motionevent MOVE 756 1240; sleep 0.2; "
+            "input motionevent MOVE 900 1240; input motionevent UP 900 1240'")
+    SLIDER = {"from": [180, 1240], "to": [900, 1240], "hold": 400, "ms": 1000}
+
+    def swipe(self, drv, device, value):
+        start = len(self.run_.lines)
+        ctx = base.StepContext(device, self.screen([]), "en-US", base.Shot(), 1, {"swipe": value})
+        drv.do_step(ctx)
+        return self.run_.lines[start:], ctx.shot.warnings
+
+    def test_a_held_swipe_is_motion_events_in_one_shell_line(self):
+        # input swipe moves as soon as the finger is down; a slider in a scroll view reads that as a scroll.
+        self.answers()
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        self.assertEqual(self.swipe(drv, device, self.SLIDER), ([self.HELD], []))
+        self.assertEqual(self.swipe(drv, device, {"from": [180, 1240], "to": [900, 1240], "ms": 1000}),
+                         (["adb -s emulator-5580 shell 'input swipe 180 1240 900 1240 1000'"], []))
+
+    def test_a_held_swipe_without_motionevent_long_presses_then_swipes_and_warns(self):
+        self.answers()
+        self.run_.on(r"input motionevent", err="Error: Unknown command: motionevent\nUsage: input [<source>] "
+                                                "<command> [<arg>...]\n", code=1)
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        fallback = ["adb -s emulator-5580 shell 'input swipe 180 1240 180 1240 400'",
+                    "adb -s emulator-5580 shell 'input swipe 180 1240 900 1240 1000'"]
+        lines, warnings = self.swipe(drv, device, self.SLIDER)
+        self.assertEqual(lines, [self.HELD] + fallback)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("no motionevent", warnings[0])
+        # Known now: the next held swipe on this device doesn't try motionevent again.
+        lines, warnings = self.swipe(drv, device, self.SLIDER)
+        self.assertEqual(lines, fallback)
+        self.assertEqual(len(warnings), 1)
+
+    def test_an_old_input_that_answers_its_usage_with_exit_0_is_taken_as_no_motionevent(self):
+        self.answers()
+        self.run_.on(r"input motionevent", out="Error: Unknown command: motionevent\n")
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        lines, warnings = self.swipe(drv, device, self.SLIDER)
+        self.assertEqual(lines[1:], ["adb -s emulator-5580 shell 'input swipe 180 1240 180 1240 400'",
+                                     "adb -s emulator-5580 shell 'input swipe 180 1240 900 1240 1000'"])
+        self.assertEqual(len(warnings), 1)
+
+    def test_a_held_swipe_by_direction_is_a_plain_swipe_with_a_warning(self):
+        self.answers()
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device()
+        drv.prepare(device, {})
+        lines, warnings = self.swipe(drv, device, {"direction": "up", "hold": 400})
+        self.assertEqual(len(lines), 1)
+        self.assertIn("'input swipe ", lines[0])
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("hold goes with from and to", warnings[0])
+
+    def test_the_dry_run_shows_the_held_swipes_motion_events(self):
+        self.answers()
+        base.DRY_RUN = True
+        drv = adb_driver.AdbDriver(self.options)
+        device = self.device(target={"serial": "emulator-5580"})
+        drv.prepare(device, {})
+        lines, warnings = self.swipe(drv, device, self.SLIDER)
+        self.assertEqual((lines, warnings), ([], []))
+        self.assertIn("  step 1: swipe {from: [180, 1240], to: [900, 1240], hold: 400, ms: 1000}", self.hooks.log)
+        self.assertIn("  $ " + self.HELD, self.hooks.log)
+
     def test_a_missing_log_folder_isnt_taken_for_a_missing_emulator(self):
         log = os.path.join(self.tmp, "not-yet", "emulator.log")
         proc = base.subprocess_spawner([sys.executable, "-c", "print('booted')"], log_path=log)
@@ -879,6 +952,15 @@ class UiAutomatorTests(AdbCase):
         self.assertEqual(self.run_.matching(r"wm |uimode|locale|demo|settings put|install"), [])
         self.assertTrue(self.run_.matching(r"shell 'input tap 970 170'"))
         self.assertTrue(any("leaves the status bar" in w for w in drv.warnings))
+
+    def test_a_held_swipe_is_adbs(self):
+        self.answers(connected="R5EXAMPLE01\tdevice\n")
+        drv = uia_driver.UiAutomatorDriver(self.options)
+        device = self.device(driver="uiautomator", target={"serial": "R5EXAMPLE01"})
+        drv.prepare(device, {})
+        drv.do_step(base.StepContext(device, self.screen([]), "en-US", base.Shot(), 1,
+                                     {"swipe": {"from": [180, 1240], "to": [900, 1240], "hold": 400, "ms": 1000}}))
+        self.assertTrue(self.run_.matching(r"^adb -s R5EXAMPLE01 shell 'input motionevent DOWN 180 1240; sleep 0.4; "))
 
     def test_it_cannot_launch(self):
         drv = uia_driver.UiAutomatorDriver(self.options)
