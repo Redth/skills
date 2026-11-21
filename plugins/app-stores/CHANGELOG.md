@@ -222,6 +222,19 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - `store-screenshots`: `check.py` no longer guesses a Play slot for a target `store-listing.json`'s
   `stores.google.slots` leaves out (it isn't sent, so it's counted in no slot); a render report outside the config's
   `out` resolves its files beside itself.
+- `store-screenshots`: captions on an Apple phone slot are sized as a phone's whatever its shape. An iPhone Duo's
+  outer display (1398x2034) and inner display (2007x2853) and the 3.5-inch iPhone (640x960) are mid-shaped. They
+  took the iPad's caption factor (0.64), so a locked style's 9.8u came out at 6.3u. That is about 7.4 to 8.3 pt in
+  Apple's search row, where `check.py` already judged them as phones (three across) and warned. The new
+  `scripts/slots.py` decides a slot's caption class for both scripts: its aspect class, but `tall` for an App Store
+  target sized as an iPhone display type in portrait. `render.py` passes it to the page (the job's
+  `slot.captionClass`, `body[data-caption-class]`, which now carries `--caption-factor`). The slot keeps its shape's
+  margins and device sizes; only the words take the tall size. `check.py`'s first-shots size goes by the same
+  class. A target's `captionClass` overrides it (schema, config.md), and the report gives each file's
+  `captionClass` beside its `aspectClass`. **Visible change:** such targets render with bigger captions (9.8u
+  where they were 6.3u), and with an approved baseline `check.py` reports the caption size and the class as drift.
+  The class is always reported, whatever the style's tolerances. `"captionClass": "mid"` on the target keeps the
+  old size. iPad, Play and other Apple targets are unchanged.
 
 - `store-capture`: `text` and `label` match the same way on every driver, as config.md promised: exactly, then
   ignoring case and surrounding space, then contained (Appium's iOS and Mac predicates `==[c]` and `CONTAINS[c]`,
