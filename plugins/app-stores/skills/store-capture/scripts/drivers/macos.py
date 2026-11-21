@@ -265,7 +265,8 @@ class MacOSDriver(base.Driver):
             raise base.StepFailed("step %d: couldn't click %s %r" % (ctx.index, query[0], query[1]))
 
     def step_type(self, ctx, value):
-        """Click the named field (if any), then ``keystroke`` the text."""
+        """Click the named field (if any), then ``keystroke`` the text (at once: a ``rate`` is left out)."""
+        self.rate_of(ctx, value)
         query = base.step_element("type", value)
         target = {query[0]: query[1], "timeout": value.get("timeout")} if query else None
         if target:

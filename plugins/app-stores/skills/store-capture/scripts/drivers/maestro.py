@@ -184,6 +184,8 @@ class MaestroDriver(HostedDriver):
             return [("tapOn", selector(query))]
         if kind == "type":
             value = value if isinstance(value, dict) else {"text": value}
+            if value.get("rate") is not None:
+                base.LOG("  warning: step %d: maestro's inputText types at its own pace; rate left out" % index)
             out = []
             target = base.element_query(type_target(value))
             if target:
@@ -209,6 +211,8 @@ class MaestroDriver(HostedDriver):
                 fields = base.fill_fields(opts)
             except ValueError as e:
                 raise base.StepFailed("step %d: %s" % (index, e)) from None
+            if any(r is not None for r in base.fill_rates(opts)):
+                base.LOG("  warning: step %d: maestro's inputText types at its own pace; rate left out" % index)
             out = []
             for n, (query, text) in enumerate(fields, 1):
                 if n > 1 and device.get("platform") == "android":

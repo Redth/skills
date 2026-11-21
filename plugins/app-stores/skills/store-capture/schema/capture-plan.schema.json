@@ -189,8 +189,9 @@
     "keyboardTries": { "$comment": "How to close the keyboard, tried in order until it's down: the driver's own (own: false leaves it out), done (the app's own Done or Close button: an element or {x, y}; Appium on iOS looks for one by name itself; a number pad has no key that closes it), scroll (true, a direction, or {direction, in}), then last tap (something neutral: a title or label, or {x, y}; many apps don't close the keyboard for it). Still up after all: the step fails, naming what was tried.", "type": "object", "additionalProperties": false, "properties": {
       "$comment": { "type": "string" }, "own": { "type": "boolean" }, "done": { "$ref": "#/$defs/tapTarget" }, "tap": { "$ref": "#/$defs/tapTarget" },
       "scroll": { "anyOf": [ { "type": "boolean" }, { "enum": ["up", "down", "left", "right"] }, { "type": "object", "additionalProperties": false, "properties": { "direction": { "enum": ["up", "down", "left", "right"] }, "in": { "$ref": "#/$defs/element" } } } ] } } },
-    "fillField": { "$comment": "One field and what's typed into it: field is an element, or a string (its id).", "type": "object", "required": ["field", "text"], "additionalProperties": false, "properties": {
-      "$comment": { "type": "string" }, "field": { "anyOf": [ { "type": "string", "minLength": 1 }, { "$ref": "#/$defs/element" } ] }, "text": { "type": "string" } } },
+    "typingRate": { "$comment": "Keys a second: type key by key at this pace, so a recording shows each key land and the value appear a character at a time (a preview video). Left out, the value goes in at once.", "type": "number", "exclusiveMinimum": 0, "maximum": 50 },
+    "fillField": { "$comment": "One field and what's typed into it: field is an element, or a string (its id); rate, this field's typing pace (else the fill's).", "type": "object", "required": ["field", "text"], "additionalProperties": false, "properties": {
+      "$comment": { "type": "string" }, "field": { "anyOf": [ { "type": "string", "minLength": 1 }, { "$ref": "#/$defs/element" } ] }, "text": { "type": "string" }, "rate": { "$ref": "#/$defs/typingRate" } } },
     "scrollTo": { "$comment": "An element, or an end: top or bottom.", "anyOf": [ { "$ref": "#/$defs/element" }, { "enum": ["top", "bottom"] } ] },
     "elementCheck": {
       "$comment": "An element to wait for or verify: one of id, text, label, xpath or css, and optionally contains (text the element shows, itself or anything under it: an iOS label, an Android child's text; ignoring case and runs of space).",
@@ -288,7 +289,8 @@
             "label": { "type": "string", "minLength": 1 },
             "xpath": { "type": "string", "minLength": 1 },
             "css": { "type": "string", "minLength": 1 },
-            "into": { "$comment": "The field to type into, found by its text (placeholder).", "type": "string", "minLength": 1 }
+            "into": { "$comment": "The field to type into, found by its text (placeholder).", "type": "string", "minLength": 1 },
+            "rate": { "$ref": "#/$defs/typingRate" }
           } } } },
         { "type": "object", "required": ["wait"], "additionalProperties": false, "properties": {
           "$comment": { "type": "string" }, "name": { "$ref": "#/$defs/stepName" },
@@ -352,6 +354,7 @@
             { "type": "object", "required": ["fields"], "additionalProperties": false, "properties": {
               "$comment": { "type": "string" },
               "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/fillField" } },
+              "rate": { "$comment": "Every field's typing pace, keys a second (a field's own rate wins).", "$ref": "#/$defs/typingRate" },
               "in": { "$comment": "The pane the fields are in (scrolled within): the scroll view or anything inside it.", "$ref": "#/$defs/element" },
               "keyboard": { "$comment": "true (default): closed after, as hideKeyboard; keep: left up (and the focus kept); or hideKeyboard's tries.", "anyOf": [ { "type": "boolean" }, { "const": "keep" }, { "$ref": "#/$defs/keyboardTries" } ] },
               "unfocus": { "$comment": "Clear the focus after (default true, unless the keyboard's kept).", "type": "boolean" },

@@ -231,8 +231,17 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - `listing.py import --platform` for a fastlane folder; a later Apple platform's differing words become its
   overrides; each store's `locales` and primary come from what its source had.
 - `appstores_lib.chrome.Chrome.render(..., full_page=N)`: capture the whole page, up to N CSS px tall.
+- `store-capture`: `rate` on `type` and `fill` (the fill's, or one field's): keys a second, typed key by key so a
+  recorded take shows each key land rather than the value appearing at once (Appium a `setValue` a key, `adb` and
+  `uiautomator` an `input text` a key, Chrome an `insertText` a key; Maestro, the Mac and an agent's own fill put
+  the value in at once and warn that the rate is left out). `references/video.md` says to use it for takes;
+  `references/staging.md` says to seed again right before each capture session, as relative dates go stale.
 
 ### Fixed
+- `store-capture`: a `scroll` `in` a text field with nothing that scrolls found around it no longer swipes the field
+  on Appium, `adb` or `uiautomator` (each swipe tapped it and reopened the keyboard, and `scroll {"to": "top"}`
+  repeated that until it gave up); the screen is scrolled instead, with a warning to name the pane. `config.md`
+  notes that on iOS through Appium a `tap` scrolls its element into view, so a `scroll {to}` before it isn't needed.
 - `store-screenshots`: an iOS simulator capture's black corner tip (its framebuffer's own few pure-black pixels) no
   longer squares every iPhone frame's screen corners: the corner check ignores the corner's tip, pure black near it
   and a few stray pixels; a radius the frame sets is always kept (what it cuts is reported, and `check.py` warns); a

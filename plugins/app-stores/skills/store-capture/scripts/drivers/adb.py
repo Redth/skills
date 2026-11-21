@@ -1192,13 +1192,27 @@ class AdbDriver(base.Driver):
         x, y = self._point(ctx, value, "tap")
         self.shell("input", "tap", x, y)
 
+    TYPES_AT_A_RATE = True
+    SCROLL_SWIPES = True
+
     def step_type(self, ctx, value):
-        """Tap the field if one's named, then ``input text``."""
+        """Tap the field if one's named, then ``input text``. With ``rate`` (keys a second), one ``input text`` a
+        character, paced (each also takes the device a moment to start, so the pace is at most ``rate``)."""
         query = base.step_element("type", value)
         target = {query[0]: query[1], "timeout": value.get("timeout")} if query else None
+        rate = self.rate_of(ctx, value)
         if target:
             self.step_tap(ctx, target)
-        self.shell("input", "text", input_text(value["text"]))
+        text = str(value["text"])
+        if rate:
+            input_text(text)        # refuse what it can't type before typing any of it
+            base.note("  typing %r key by key, %g a second" % (text, rate))
+            for n, key in enumerate(text):
+                if n:
+                    base.sleep(1.0 / rate)
+                self.shell("input", "text", input_text(key))
+            return
+        self.shell("input", "text", input_text(text))
 
     def _swipe_for(self, ctx, direction, bounds=None):
         """A swipe's ``(x1, y1, x2, y2)`` across the screen's middle, or ``bounds``' (an element's: a pane)."""

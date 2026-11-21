@@ -120,6 +120,10 @@ them first, as for screenshots.
 breaks when the app changes. Drive it with the same steps as the screenshots, mark the moments by name rather than
 by time in the file, and check each one happened.
 
+**Type at a person's pace.** A `type` or `fill` puts its value in at once, which reads as a jump on video: give the
+take's typing steps a `rate` (keys a second; 4 to 6 reads naturally) so each key lands on camera
+([config.md](config.md#typing-at-a-persons-pace)). Screenshots don't need it.
+
 ## Editing a simulator recording by frame index
 
 A preview is rarely one take: a settled screen held for a beat, then the motion that matters at full speed.

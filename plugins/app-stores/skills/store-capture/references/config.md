@@ -225,7 +225,7 @@ One kind a step: `{ "<kind>": <value> }`.
 | `deepLink` | a URL | `simctl openurl`, `am start -a VIEW -d`, or the agent's navigation |
 | `url` | a URL or path | web: resolved against `app.web.url` |
 | `tap` | an element, or `{ "x": …, "y": … }` | coordinates are a last resort: they differ per device size |
-| `type` | `{ "text": "…", <finder> }` | types into the focused field, or one found by `id`, `label`, `xpath`, `css`, or `into` (its placeholder text) |
+| `type` | `{ "text": "…", <finder>, "rate"? }` | types into the focused field, or one found by `id`, `label`, `xpath`, `css`, or `into` (its placeholder text); `rate` (keys a second) types key by key, for a recording ([below](#typing-at-a-persons-pace)) |
 | `wait` | a number (ms), `{ "ms": … }`, or an element (with `contains`, optionally) | an element waits for it to appear (and, with `contains`, to show that text), up to its `timeout` (seconds, default 10). A driver that can't see elements waits and warns |
 | `scroll` | `{ "to": <element> \| "top" \| "bottom" }` or `{ "direction": "up"\|"down"\|"left"\|"right", "times": n }`, either with `"in": <element>` | `to` an element looks `direction` first (default down) until it's in view or the content stops moving, then the other way; `"top"`/`"bottom"` scroll until the content stops moving; `in` scrolls within that element (a pane, a list) rather than at the screen's middle (on a two-pane layout, the other pane): the scroll view itself or anything inside it (the pane's content, one of its fields), whose nearest scrolling ancestor is what's scrolled ([below](#scrolling-in-a-pane)). On iOS through Appium each scroll is a quick swipe ([appium.md](appium.md#scrolling-on-ios)). Wait for scroll bars to fade after (`settle`) |
 | `back` | `true` | the system back (Android), the agent's or Appium's back |
@@ -237,7 +237,7 @@ One kind a step: `{ "<kind>": <value> }`.
 | `posture` | `"folded"`, `"open"`, `"half-open"` | folds the device in the middle of the steps ([Foldables](#foldables)); `simctl`, `adb`, and the drivers they host |
 | `hideKeyboard` | `true`, or `{ "done", "tap", "scroll", "own" }` | closes the on-screen keyboard if it's up, trying each way until it's down ([below](#the-keyboard-focus-and-forms)); never a navigation back |
 | `unfocus` | `true`, or `{ "tap": <element or {x, y}> }` | clears the text field's focus, so no caret blinks in the shot ([below](#the-keyboard-focus-and-forms)) |
-| `fill` | a list of `{ "field": <element, or an id>, "text": "…" }`, or `{ "fields": [...], "in", "keyboard", "unfocus", "scrollTo" }` | types a form's fields in one step, the same on every driver that types ([below](#the-keyboard-focus-and-forms)) |
+| `fill` | a list of `{ "field": <element, or an id>, "text": "…", "rate"? }`, or `{ "fields": [...], "in", "keyboard", "unfocus", "scrollTo", "rate" }` | types a form's fields in one step, the same on every driver that types ([below](#the-keyboard-focus-and-forms)) |
 
 Any step may carry a **`name`** (`{ "tap": { "id": "tab-history" }, "name": "open-tab" }`) for an override's
 `stepsPatch` to refer to it; names are unique within a screen's steps.
@@ -264,6 +264,26 @@ text after it.
 
 On `maestro` a `fill` becomes `scrollUntilVisible` (down only), `tapOn`, `inputText` and `hideKeyboard` per field; it
 can't scroll within a pane (`in`). Give the step a `name` so a device's `stepsPatch` can change it.
+
+#### Typing at a person's pace
+
+A value goes in at once by default: right for a screenshot, wrong for a preview video, where a field jumps from
+empty to full. **`rate`** (keys a second, above 0, at most 50) types key by key instead, so a recording shows each
+key land: on a `type`, on a `fill` (every field), or on one `fill` field (it wins over the fill's).
+
+```json
+{ "fill": { "fields": [ { "field": "servings", "text": "12" }, { "field": "minutes", "text": "45" } ], "rate": 4 } }
+```
+
+| Driver | With a `rate` |
+|---|---|
+| `appium` (iOS, Android) | one `setValue` a key, which appends; paused `1/rate` between keys |
+| `adb`, `uiautomator` | one `input text` a key; each call takes its own time on the device, so the pace is at most `rate` |
+| `chrome` | one `Input.insertText` a key |
+| an agent (DevFlow, Ailoha) | the host's own `type` gets the rate where it types into the focused field; its `fill` puts a value in at once, so the rate is left out, with a warning |
+| `maestro`, `macos` | the value goes in at once; the rate is left out, with a warning |
+
+Leave `rate` out of screenshot plans: it only slows the run.
 
 **Verify only what the shot shows.** A `verify` (and its `contains`) is checked against what the driver sees when
 the shot is taken, which is what's on screen (Android's dump lists nothing else). A field `fill` typed below the visible
@@ -364,11 +384,18 @@ source, a node with `scrollable="true"`; in Appium's iOS or Mac page source, an 
 `Table`, `CollectionView` (or a Mac's `Outline`), found again by its path for its element id; in an agent's tree, a
 `ScrollView`, `CollectionView`, `ListView`, `RecyclerView` or `ScrollViewer` (or a `scrollable` flag where the agent
 gives one); on the web, the nearest element whose overflow scrolls (`overflow: auto` or `scroll`, with more content
-than room). With nothing around it that scrolls, the element itself is scrolled, as named. When what was scrolled
+than room). With nothing around it that scrolls, the element itself is scrolled, as named, **except a text field on
+a driver that swipes** (`appium`, `adb`, `uiautomator`): a swipe on a field taps it and opens the keyboard (and a
+`scroll {"to": "top"}` would repeat that until it gave up), so the screen is scrolled instead, with a warning ("it's
+a text field, so the screen was scrolled instead"); name the pane's scroll view or something else in it that isn't
+a field. The agents and `chrome` scroll without touching, so they scroll the field's pane as named. When what was scrolled
 isn't the element named, the report's `panes` says so ("in id 'servings': scrolled its nearest scrolling ancestor,
 android.widget.ScrollView [600,200][1080,1920]"); read it when a scroll moved the wrong thing. Once found on a
 screen, the pane serves that screen's later scrolls when the element named has scrolled out of sight (a field at
 the top of the form, once the fill's reached the bottom).
+
+On iOS through Appium a `tap` on an element below the visible part scrolls it into view first (XCUITest does), so
+a `scroll {"to": <element>}` before a `tap` of the same element isn't needed; on Android and the agents it is.
 
 ### Dragging a slider or a handle
 

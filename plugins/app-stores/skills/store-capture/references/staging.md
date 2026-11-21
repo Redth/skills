@@ -83,7 +83,8 @@ be changed for the whole device. Fixing on-screen times **needs a screenshot mod
 
 - pick screens that show no time or date;
 - shift the seeded data so relative times read well (the newest entry "yesterday"), and accept absolute times
-  that differ from the status bar's;
+  that differ from the status bar's. Relative times go stale: **seed again right before each capture session**
+  (shots or takes made the next morning read "2 days ago" against earlier ones' "1 day ago");
 - add the screenshot mode's `ScreenshotNow`, the lasting fix.
 
 Write the choice in `staging.clock.how`.
