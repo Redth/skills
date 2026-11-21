@@ -274,6 +274,17 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 - `store-capture` (Appium): `appium:isHeadless` by default on simulators (Xcode 27 moved Simulator.app); a failed
   session reports its own cause, and the simulator it shut down is booted again (and the session retried) instead
   of later screens failing with "device is not booted".
+- `store-capture` (Android): an AVD's `systemImage` missing from the SDK in use (`$ANDROID_HOME`, else
+  `$ANDROID_SDK_ROOT`) fails the device once before `avdmanager` runs (and in `--dry-run`), naming that SDK, the
+  other SDK folders that have the image (`$ANDROID_SDK_ROOT`, `$ANDROID_HOME`, Android Studio's and Homebrew's
+  default places) and the `sdkmanager --sdk_root` that installs it, instead of avdmanager's "Package path is not
+  valid. Valid system image paths are: null" on every screen; that avdmanager error is explained the same way when
+  no variable names the SDK. The emulator gets `ANDROID_SDK_ROOT` when only `ANDROID_HOME` is set ("Cannot find AVD
+  system path" otherwise); `base.spawn` logs the variables it adds.
+- `store-capture` (Android foldables): the unlock after a posture change waits for `sys.boot_completed`, then tries
+  wake and `wm dismiss-keyguard` up to four times with a longer wait each (adding `input keyevent 82`) before warning
+  "the lock screen is still up": an emulator booted fresh and unfolded at once kept its lock screen over the first
+  dismiss and the screen was missed. adb.md (The SDK, Foldables), pitfalls.md and SKILL.md say so.
 - `store-capture`: `avdmanager` found in a versioned `cmdline-tools/<version>/` when there's no `latest`; a .NET
   Fast Deployment APK is warned about; the dry run shows the `wm size` a real run sets; no env warning on Android
   for keys `args` also carries; an opaque alpha channel no longer lists `alpha-flattened` on every shot (counted

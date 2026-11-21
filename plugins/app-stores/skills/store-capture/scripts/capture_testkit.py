@@ -143,6 +143,7 @@ class Hooks(object):
         self.log = []
         self.saved = (base.RUNNER, base.SPAWNER, base.SLEEP, base.CLOCK, base.LOG, base.DRY_RUN)
         self.spawned = []
+        self.spawned_env = []
         base.RUNNER = self.runner
         base.SPAWNER = self.spawn
         base.SLEEP = self.time.sleep
@@ -151,8 +152,10 @@ class Hooks(object):
         base.DRY_RUN = False
 
     def spawn(self, cmd, log_path=None, env=None, cwd=None):
-        """A fake ``SPAWNER``: records the command and returns a process that's always running."""
+        """A fake ``SPAWNER``: records the command (and in ``spawned_env`` the variables it adds) and returns a
+        process that's always running."""
         self.spawned.append(base.quote(cmd))
+        self.spawned_env.append(dict(env) if env else None)
 
         class Proc(object):
             def __init__(self):

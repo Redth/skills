@@ -1026,7 +1026,9 @@ retried when another client's command turned it away; a reply of `success: false
 else `unverified`.
 
 **Foldables**: `adb` folds an emulator through its console (`emu fold`, `emu unfold`, `emu posture 2`, the hinge
-sensor) and a real foldable through `cmd device_state state` (reset after), then wakes and unlocks it, finds the
+sensor) and a real foldable through `cmd device_state state` (reset after), then, once `sys.boot_completed` is 1,
+wakes and unlocks it (tried again with a longer wait, and `input keyevent 82`, while `dumpsys window` says the lock
+screen is up; a warning after the last try), finds the
 physical display in use (`dumpsys display`), sets `wm size`/`wm density` again on it (each display keeps its own;
 each is put back in its posture) and re-applies demo mode; `screencap -d` takes the display in use. `simctl` folds
 the iPhone Duo simulator through DevFlow's fold control (`maui devflow device fold set …`, experimental, no agent
@@ -1035,7 +1037,11 @@ fold through their host. **The full-screen keyboard**: before every tap on Andro
 agents' on a device `adb` hosts) a keyboard that `dumpsys input_method` says is up and `mIsFullscreen=true` (text
 entry in landscape: it covers the app) is closed with back, only while it's up; `hideKeyboard` closes it the same
 way. A CoreSimulator hiccup ("server died") in `simctl` boot, install, launch or capture is
-tried once more.
+tried once more. **The Android SDK**: `adb` uses `$ANDROID_HOME`, else `$ANDROID_SDK_ROOT`; before `avdmanager`
+creates an AVD (and in `--dry-run`) it checks the `systemImage` is installed there
+(`<sdk>/system-images/<the package id's parts>/` with `system.img` or `source.properties`), else `prepare` fails
+naming that SDK and the SDK folders that have it (`$ANDROID_SDK_ROOT`, `$ANDROID_HOME`, the usual default places);
+the emulator gets `ANDROID_SDK_ROOT` when only `ANDROID_HOME` is set.
 
 **Network**: drivers talk only to the local machine (simulators, emulators, devices over adb, a local Appium
 server, the in-app agents on loopback ports). Nothing reaches the internet.
