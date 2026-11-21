@@ -22,13 +22,14 @@
     },
     {
       "name": "app-stores",
-      "description": "Take an app's store listing from one config to the App Store and Google Play: words per locale, store rules as dated and sourced data checked offline, fastlane-compatible output, a preview of each store's page, and a look-first send (plan, then apply exactly that plan); plus screenshots designed per store from real captures, every size and locale from one design, with drawn device frames and checks; and the captures themselves, taken at exactly each store's sizes on any stack (a screenshot mode, the DevFlow or Ailoha in-app agents, Appium, XCUITest, UI Automator, Maestro, simctl, adb, headless Chrome, or imported), with preview videos encoded to spec. Any app, any stack. Stdlib Python; network only when sending, only to the stores' own APIs; capture talks only to this machine.",
+      "description": "Take an app's store listing from one config to the App Store and Google Play: words per locale, store rules as dated and sourced data checked offline, fastlane-compatible output, a preview of each store's page, and a look-first send (plan, then apply exactly that plan); plus screenshots designed per store from real captures, every size and locale from one design, with drawn device frames and checks; and the captures themselves, taken at exactly each store's sizes on any stack (a screenshot mode, the DevFlow or Ailoha in-app agents, Appium, XCUITest, UI Automator, Maestro, simctl, adb, headless Chrome, or imported), with preview videos encoded to spec; and the App Store previews themselves, composed from real recordings with headlines, touch hotspots, a spotlight, drawn device frames and an end card. Any app, any stack. Stdlib Python; network only when sending, only to the stores' own APIs; capture talks only to this machine.",
       "source": "./",
       "strict": false,
       "skills": [
         "./plugins/app-stores/skills/store-listings",
         "./plugins/app-stores/skills/store-screenshots",
-        "./plugins/app-stores/skills/store-capture"
+        "./plugins/app-stores/skills/store-capture",
+        "./plugins/app-stores/skills/store-previews"
       ]
     }
   ]

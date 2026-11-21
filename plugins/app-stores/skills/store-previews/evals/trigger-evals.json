@@ -1,0 +1,20 @@
+[
+  {"query": "Make an App Store preview video for our app.", "should_trigger": true},
+  {"query": "We need an app preview for the iPhone listing, 15 to 30 seconds, from real recordings.", "should_trigger": true},
+  {"query": "Add headlines and a tap indicator to our App Store preview video.", "should_trigger": true},
+  {"query": "Our app preview's zoom is too dramatic and the typing looks choppy. Can you fix the edit?", "should_trigger": true},
+  {"query": "Make a preview video for the iPad and the foldable too.", "should_trigger": true},
+  {"query": "Does our app preview follow Apple's rules? Can it have a device frame and text?", "should_trigger": true},
+  {"query": "Put an end card on our preview that says it needs an account and has a subscription.", "should_trigger": true},
+  {"query": "Highlight the results card in our app preview with a spotlight.", "should_trigger": true},
+  {"query": "The app changed; redo our App Store preview with new recordings.", "should_trigger": true},
+  {"query": "Make a short portrait promo video of the app for our Google Play listing.", "should_trigger": true},
+  {"query": "Design our App Store screenshots with captions and device frames.", "should_trigger": false},
+  {"query": "Take screenshots of every screen on the iPhone 6.9-inch simulator.", "should_trigger": false},
+  {"query": "Just record the simulator for 20 seconds and encode it to the App Store's preview spec.", "should_trigger": false},
+  {"query": "Write our App Store description and keywords.", "should_trigger": false},
+  {"query": "Upload our preview videos to App Store Connect.", "should_trigger": false},
+  {"query": "Make a 60-second brand film for our website with people using the app.", "should_trigger": false},
+  {"query": "Create the app icon in every size.", "should_trigger": false},
+  {"query": "Our app's in-app onboarding video stutters on Android; fix the playback.", "should_trigger": false}
+]

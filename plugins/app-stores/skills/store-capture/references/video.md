@@ -5,6 +5,10 @@ checks the result with **ffprobe** against the rules data (`rules/apple.json`'s 
 ffprobe are found at run time (`FFMPEG` and `FFPROBE`, then `PATH`); they're never bundled, and without them
 `video.py` exits 3 with how to install them.
 
+**Composing a preview** from these recordings (a storyboard, frames held and played, headlines, touch hotspots, a
+spotlight, a drawn device frame, slides and an end card) is the `store-previews` skill: it takes the folders
+`frames` writes and hands `encode` a master. This page covers recording, the frames, and the spec.
+
 ```sh
 # record a screen's steps (the moments to show) on the plan's device: captures/<locale>/<device>/<screen>.mov|.mp4
 python3 scripts/capture.py --record --devices iphone-6.9 --screens tour

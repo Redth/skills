@@ -1,0 +1,55 @@
+{
+  "skill_name": "store-previews",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Make an App Store preview video for Sample Recipes. We already have the screenshots done with a locked style. Just make it, the app's the usual demo build.",
+      "expected_output": "The agent reads Apple's preview rules and proposes a storyboard (three to five beats in 15 to 30 seconds, each with one headline, the moment it shows, the camera and any emphasis; the poster frame at 5 s; the end card with an account and subscription disclosure), then stops for the user's agreement before recording or writing an edit, despite 'just make it'.",
+      "files": [],
+      "expectations": [
+        "The agent proposes a storyboard as a table or ordered list of beats, each with a headline of about 2 to 5 words and the app moment it shows",
+        "The core value appears in the first beat",
+        "The agent says which frame is the poster frame (5 s by default) and what it shows",
+        "The end card includes a disclosure of an account requirement or subscription, or the agent asks the user for those facts",
+        "The agent proposes using the locked screenshot style for the look",
+        "The agent stops for the user's agreement before recording takes or running compose.py"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Here's our edit for the Sample Recipes iPhone preview (examples/sample-edit.json). The recipe card highlight is a bit off the card and the corners of the highlight don't line up. Fix it.",
+      "expected_output": "The agent measures the card's rect and corner radius from the dumped frame's pixels at the spotlight's time (not the UI tree or a guess), sets rect to the card itself, r to the card's own radius and an even pad, renders a still at the spotlight's settled time with compose.py --frames N --stills, opens it at full size, and reports what it saw.",
+      "files": ["examples/sample-edit.json"],
+      "expectations": [
+        "The agent measures the element from the dumped frames' pixels rather than guessing",
+        "The agent sets r to the element's own corner radius and uses pad for the margin, so the hole's corners are concentric",
+        "The agent renders a still at the spotlight's time with compose.py --frames and --stills",
+        "The agent opens the still and describes whether the margin is even on every side"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Can we zoom right into the calorie number on the Sample Recipes preview so people can read it, maybe 2x? And speed up the typing part so it's shorter.",
+      "expected_output": "The agent explains that Apple advises against zooming and that the camera stops where the whole device fits, offering a spotlight on the element instead; and that typing should stay at a person's pace (record with rate 4 to 6, play it with step 1), offering to shorten the beat by cutting dead time with holds rather than speeding up the typing.",
+      "files": [],
+      "expectations": [
+        "The agent does not set a camera scale that crops the device frame",
+        "The agent mentions Apple's guidance against zooming into the app or showing the app faster than it is",
+        "The agent offers a spotlight (or the push-in to the whole device) as the alternative",
+        "The agent offers to shorten the typing beat by cutting dead time with holds or a shorter take, not by stepping through the typing"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "We need the preview for the iPhone Duo too. The open screen is really wide.",
+      "expected_output": "The agent says the Duo preview is the same 886x1920 size as other iPhones, and proposes one video carrying both postures: the cover display's take with a foldable-outer frame, then a slide to the open display as a second footage (foldable-inner, pan true) panned a pane at a time; it warns that the open display's recording may dump squeezed and to force its landscape shape with video.py frames --size.",
+      "files": [],
+      "expectations": [
+        "The agent states the iPhone Duo preview size is 886x1920 (or 1920x886)",
+        "The agent proposes showing both the folded (cover) and open displays in one video",
+        "The agent uses a panned second footage for the open display rather than shrinking it to fit or cropping it",
+        "The agent mentions the squeezed rotated recording and video.py frames --size"
+      ]
+    }
+  ]
+}

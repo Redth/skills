@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "A preview edit (CONTRACT.md 11, references/edit.md): the frames of recorded takes on a timeline, how the parts join, the camera, and the overlays, for compose.py. Times are seconds or \"@mark\" / \"@mark+s\" / \"@mark-s\" (a mark a segment sets). Footage positions (touch points, a spotlight's rect) are the footage's own pixels, as dumped. Uses only the subset appstores_lib/schema.py validates.",
+  "type": "object",
+  "required": ["name", "width", "height", "footage", "segments"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string"},
+    "$comment": {"type": "string"},
+    "name": {
+      "$comment": "Names the output: <out>/<name>/ for the frames, <out>/<name>-master.mp4.",
+      "type": "string", "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "width": {"type": "integer", "minimum": 100, "maximum": 4096},
+    "height": {"type": "integer", "minimum": 100, "maximum": 4096},
+    "fps": {
+      "$comment": "The output rate. Apple takes at most 30 fps; the default is 30.",
+      "type": "integer", "minimum": 1, "maximum": 60
+    },
+    "framePattern": {
+      "$comment": "The frame files' names in a take's folder (printf style). Default frame-%05d.jpg (video.py frames).",
+      "type": "string", "pattern": "%0?[0-9]*d"
+    },
+    "style": {
+      "$comment": "A store-screenshots screenshot-style.json: its palette, first font and image background become the preview's, so the video and the screenshots match.",
+      "type": "string", "minLength": 1
+    },
+    "styleRoot": {
+      "$comment": "Where the style's relative paths (fonts, the background image) are, when not beside it: usually the screenshots config's folder.",
+      "type": "string", "minLength": 1
+    },
+    "theme": {"$ref": "#/$defs/theme"},
+    "background": {
+      "$comment": "An image for the background, over the theme's (a path, relative to the edit).",
+      "type": "string", "minLength": 1
+    },
+    "headSize": {
+      "$comment": "The largest headline size (px). Every headline gets one size: the largest at which each line fits on one line.",
+      "type": "number", "minimum": 20, "maximum": 300
+    },
+    "headTop": {"$comment": "Headlines' top (stage px) unless one sets its own.", "type": "number"},
+    "slideShift": {"$comment": "How far a slide moves the screens (stage px). Default 720.", "type": "number", "minimum": 0},
+    "footage": {"$ref": "#/$defs/footage"},
+    "footages": {
+      "$comment": "More footages by name (a segment's \"footage\"), e.g. a foldable's open display alongside its cover display (\"main\").",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/footage"}
+    },
+    "segments": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/segment"}},
+    "camera": {
+      "$comment": "[time, k] keys: k 0 the screen floating on the background at its float scale, 1 pushed in to its full scale. Eased between keys; held outside them.",
+      "type": "array", "minItems": 1,
+      "items": {"type": "array", "prefixItems": [{"$ref": "#/$defs/time"}, {"type": "number", "minimum": 0, "maximum": 1}], "minItems": 2, "maxItems": 2}
+    },
+    "pan": {
+      "$comment": "[time, x] keys (stage px) moving a wide footage (one with \"pan\": true) sideways, a pane at a time.",
+      "type": "array", "minItems": 1,
+      "items": {"type": "array", "prefixItems": [{"$ref": "#/$defs/time"}, {"type": "number"}], "minItems": 2, "maxItems": 2}
+    },
+    "overlays": {"type": "array", "items": {"$ref": "#/$defs/overlay"}},
+    "endOut": {
+      "$comment": "When the screen sinks away for the end card.",
+      "$ref": "#/$defs/time"
+    },
+    "end": {"$ref": "#/$defs/end"}
+  },
+  "$defs": {
+    "time": {
+      "$comment": "Seconds from the start (negative: already under way at the first frame, so it opens composed), or a mark.",
+      "anyOf": [
+        {"type": "number"},
+        {"type": "string", "pattern": "^@[A-Za-z0-9_.]+([+-][0-9]+(\\.[0-9]+)?)?$"}
+      ]
+    },
+    "point": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+    "theme": {
+      "$comment": "The look without a style, or over it. Paths are relative to the edit.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {"type": "string"},
+        "background": {"type": "string", "minLength": 3},
+        "background2": {"type": "string", "minLength": 3},
+        "ink": {"type": "string", "minLength": 3},
+        "accent": {"type": "string", "minLength": 3},
+        "font": {"type": ["string", "null"]},
+        "fontSrc": {"type": ["string", "null"]},
+        "fontWeight": {"type": ["string", "integer", "null"]},
+        "backgroundImage": {"type": ["string", "null"]}
+      }
+    },
+    "footage": {
+      "$comment": "A take's frames: w x h pixels as dumped.",
+      "type": "object",
+      "required": ["w", "h"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {"type": "string"},
+        "w": {"type": "integer", "minimum": 1},
+        "h": {"type": "integer", "minimum": 1},
+        "frame": {
+          "$comment": "The drawn device frame, store-screenshots' class (bezel and corner radius as fractions of the screen's short side). none: the screen alone, still rounded by nothing.",
+          "enum": ["phone", "phone-classic", "foldable-outer", "foldable-inner", "tablet", "none"]
+        },
+        "full": {
+          "$comment": "The scale pushed in (camera 1). Keep the whole device on the stage: about 0.8 for a phone at the stage's width.",
+          "type": "number", "exclusiveMinimum": 0, "maximum": 2
+        },
+        "float": {
+          "$comment": "The scale and centre (stage px) floating on the background (camera 0).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {"type": "string"},
+            "scale": {"type": "number", "exclusiveMinimum": 0, "maximum": 2},
+            "cy": {"type": "number"}
+          }
+        },
+        "pan": {
+          "$comment": "A wide screen shown a pane at a time: stays floating, moved by the edit's pan keys; no spotlight on it.",
+          "type": "boolean"
+        }
+      }
+    },
+    "op": {
+      "anyOf": [
+        {"type": "array", "prefixItems": [{"const": "hold"}, {"type": "integer", "minimum": 0}, {"type": "number", "exclusiveMinimum": 0}], "minItems": 3, "maxItems": 3},
+        {"type": "array", "prefixItems": [{"const": "play"}, {"type": "integer", "minimum": 0}, {"type": "integer", "minimum": 0}, {"type": "number", "exclusiveMinimum": 0}], "minItems": 3, "maxItems": 4},
+        {"type": "array", "prefixItems": [{"const": "mark"}, {"type": "string", "pattern": "^[A-Za-z0-9_.]+$"}], "minItems": 2, "maxItems": 2}
+      ]
+    },
+    "segment": {
+      "oneOf": [
+        {
+          "$comment": "Frames from one take's folder (relative to the edit): held, played, marked.",
+          "type": "object",
+          "required": ["frames", "ops"],
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {"type": "string"},
+            "frames": {"type": "string", "minLength": 1},
+            "footage": {"type": "string", "minLength": 1},
+            "ops": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/op"}}
+          }
+        },
+        {
+          "$comment": "A dissolve: the next segment fades in over the last seconds of the one before.",
+          "type": "object",
+          "required": ["dissolve"],
+          "additionalProperties": false,
+          "properties": {"$comment": {"type": "string"}, "dissolve": {"type": "number", "exclusiveMinimum": 0, "maximum": 3}}
+        },
+        {
+          "$comment": "A slide: the outgoing screen holds and leaves left, the next arrives from the right.",
+          "type": "object",
+          "required": ["slide"],
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {"type": "string"},
+            "slide": {"type": "number", "exclusiveMinimum": 0, "maximum": 3},
+            "shift": {"type": "number", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "overlay": {
+      "oneOf": [
+        {
+          "$comment": "A headline on the background: lines that rise in through their masks and leave faster. [Bracketed] words take the accent.",
+          "type": "object",
+          "required": ["kind", "lines", "in", "out"],
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {"type": "string"},
+            "kind": {"const": "headline"},
+            "lines": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "minLength": 1}},
+            "in": {"$ref": "#/$defs/time"},
+            "out": {"$ref": "#/$defs/time"},
+            "top": {"type": "number"}
+          }
+        },
+        {
+          "$comment": "A touch hotspot on the main footage: appears at \"at\" (footage px), presses, optionally moves to \"to\" (a drag), leaves.",
+          "type": "object",
+          "required": ["kind", "at", "in", "press", "out"],
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {"type": "string"},
+            "kind": {"const": "touch"},
+            "at": {"$ref": "#/$defs/point"},
+            "to": {"$ref": "#/$defs/point"},
+            "in": {"$ref": "#/$defs/time"},
+            "press": {"$ref": "#/$defs/time"},
+            "hold": {"type": "number", "minimum": 0},
+            "moveIn": {"$ref": "#/$defs/time"},
+            "moveFor": {"type": "number", "exclusiveMinimum": 0},
+            "out": {"$ref": "#/$defs/time"}
+          }
+        },
+        {
+          "$comment": "A spotlight: everything but one element dims. rect is the element's [x, y, w, h] and r its corner radius (footage px, measured from the frames); pad an even margin round it.",
+          "type": "object",
+          "required": ["kind", "rect", "in", "out"],
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {"type": "string"},
+            "kind": {"const": "spotlight"},
+            "rect": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+            "r": {"type": "number", "minimum": 0},
+            "pad": {"type": "number", "minimum": 0},
+            "dim": {"type": "number", "minimum": 0, "maximum": 1},
+            "in": {"$ref": "#/$defs/time"},
+            "out": {"$ref": "#/$defs/time"}
+          }
+        }
+      ]
+    },
+    "end": {
+      "$comment": "The end card on the background: the mark (an icon, relative to the edit), the name, who makes it, a tag line or two, and the fine print (account and subscription disclosure, references/apple-previews.md).",
+      "type": "object",
+      "required": ["in", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {"type": "string"},
+        "in": {"$ref": "#/$defs/time"},
+        "mark": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "by": {"type": "string"},
+        "tagLines": {"type": "array", "maxItems": 3, "items": {"type": "string", "minLength": 1}},
+        "fine": {"type": "string"},
+        "top": {"type": "number"}
+      }
+    }
+  }
+}

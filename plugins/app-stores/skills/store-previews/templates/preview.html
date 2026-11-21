@@ -1,0 +1,260 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- store-previews: one frame of a preview video. compose.py calls setup(edit) once, then frame(i) for each frame and
+     screenshots the page. Camera, pan and spotlight come worked out per frame; headlines, touches and the end card
+     animate from the time. Everything is a function of the frame number, so frames render in any order. -->
+<style>
+  :root { --bg: #0B2540; --bg2: #061524; --ink: #FFFFFF; --accent: #6CC6F5; --font: system-ui, sans-serif; }
+  html, body { margin: 0; padding: 0; overflow: hidden; background: var(--bg2); }
+  #stage { position: relative; overflow: hidden; font-family: var(--font); color: var(--ink); }
+
+  /* The background: the story layer the app recedes into (the style's gradient and its image, drifting slowly). */
+  #water { position: absolute; inset: -60px; background: linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%); }
+  #lines { position: absolute; inset: -60px -160px; background-position: center; background-size: cover;
+           background-repeat: no-repeat; opacity: .9; transform-origin: 50% 62%; }
+
+  /* A drawn device as store-screenshots draws its frames (no maker's details, buttons or cutout): a metal band, a
+     glass bezel and the screen, clipped with clip-path (border-radius with overflow doesn't reliably clip a scaled,
+     composited image, so the corners leak while it moves). */
+  .device { position: absolute; left: 0; top: 0; transform-origin: 50% 50%;
+            background: linear-gradient(135deg, #5b5f68 0%, #2c2f35 22%, #1c1e22 50%, #34373e 78%, #4c5059 100%); }
+  .device.bare { background: none; }
+  .device .glass { position: absolute; background: #08090b; }
+  .device .sheen { position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+                   box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -1px 0 rgba(0,0,0,.35); }
+  .screen { position: absolute; background: #F2F1F6; }
+  .screen img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+  .screen svg.spot { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; }
+
+  /* Headlines sit on the background, never over the app. Each line rises out of (and leaves through) its own mask;
+     the mask clips only top and bottom, so the letter-spacing settle never shaves a line's ends. */
+  .headline { position: absolute; left: 48px; right: 48px; text-align: center; font-weight: 600; font-size: 90px;
+              line-height: 1.06; }
+  .line { display: block; white-space: nowrap; clip-path: inset(-0.02em -200px 0.02em -200px); padding: 0 0 .1em;
+          margin-bottom: -.1em; }
+  .line > span { display: inline-block; }
+  .hi { color: var(--accent); }
+
+  .touch { position: absolute; width: 0; height: 0; opacity: 0; }
+  .touch .ring { position: absolute; left: -40px; top: -40px; width: 80px; height: 80px; box-sizing: border-box;
+                 border-radius: 50%; border: 5px solid #fff; background: rgba(255,255,255,.28);
+                 box-shadow: 0 8px 20px rgba(0,0,0,.26); }
+  .touch .wave { position: absolute; left: -40px; top: -40px; width: 80px; height: 80px; box-sizing: border-box;
+                 border-radius: 50%; border: 3px solid rgba(255,255,255,.9); opacity: 0; }
+
+  #end { position: absolute; inset: 0; text-align: center; pointer-events: none; }
+  #end .mark { position: absolute; left: 50%; width: 300px; margin-left: -150px; opacity: 0; }
+  #end .block { position: absolute; left: 60px; right: 60px; }
+  #end .name { font-size: 128px; font-weight: 600; line-height: 1.05; }
+  #end .by { font-size: 40px; font-weight: 400; color: var(--accent); }
+  #end .tag { font-size: 54px; line-height: 1.16; font-weight: 500; }
+  #end .fine { position: absolute; left: 90px; right: 90px; bottom: 110px; font-size: 27px; line-height: 1.45;
+               opacity: 0; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="water"><div id="lines"></div></div>
+  <div id="screens"></div>
+  <div id="heads"></div>
+  <div id="touches"></div>
+  <div id="end"></div>
+</div>
+<script>
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const outExpo = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+const outCubic = t => 1 - Math.pow(1 - t, 3);
+const inCubic = t => t * t * t;
+const inOutQuart = t => t < .5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
+const inOutCubic = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const ramp = (t, t0, d) => clamp((t - t0) / d);
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// a line's text, [bracketed] words in the accent colour
+const masked = text => `<span class="line"><span>${esc(text).replace(/\[([^\]]+)\]/g, '<span class="hi">$1</span>')}</span></span>`;
+
+let E, S = [], heads = [], touches = [], endLines = [], slidesBefore = [];
+
+async function setup(edit) {
+  E = edit;
+  const th = E.theme, root = document.documentElement.style;
+  root.setProperty("--bg", th.background); root.setProperty("--bg2", th.background2);
+  root.setProperty("--ink", th.ink); root.setProperty("--accent", th.accent);
+  if (th.font && th.fontSrc) {
+    const face = new FontFace(th.font, `url("${th.fontSrc}")`, { weight: th.fontWeight || "100 900" });
+    document.fonts.add(await face.load());
+    root.setProperty("--font", `"${th.font}", system-ui, sans-serif`);
+  }
+  if (th.backgroundImage) document.getElementById("lines").style.backgroundImage = `url("${th.backgroundImage}")`;
+  const st = document.getElementById("stage");
+  st.style.width = E.width + "px"; st.style.height = E.height + "px";
+  for (let i = 0; i < 2; i++) {
+    const dev = document.createElement("div"); dev.className = "device";
+    const glass = document.createElement("div"); glass.className = "glass"; dev.appendChild(glass);
+    const s = document.createElement("div"); s.className = "screen"; dev.appendChild(s);
+    const sheen = document.createElement("div"); sheen.className = "sheen"; dev.appendChild(sheen);
+    const img = new Image(); img.alt = ""; s.appendChild(img);
+    const inc = new Image(); inc.alt = ""; inc.style.opacity = "0"; s.appendChild(inc);
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("class", "spot");
+    s.appendChild(svg);
+    document.getElementById("screens").appendChild(dev);
+    S.push({ dev, glass, sheen, el: s, img, inc, svg });
+  }
+  for (const o of E.overlays || []) {
+    if (o.kind === "headline") {
+      const h = document.createElement("div"); h.className = "headline";
+      h.style.top = (o.top ?? E.headTop ?? 232) + "px";
+      h.innerHTML = o.lines.map(masked).join("");
+      document.getElementById("heads").appendChild(h); heads.push([o, h]);
+    } else if (o.kind === "touch") {
+      const d = document.createElement("div"); d.className = "touch";
+      d.innerHTML = `<div class="wave"></div><div class="ring"></div>`;
+      document.getElementById("touches").appendChild(d); touches.push([o, d]);
+    }
+  }
+  // One size for every headline: the largest (up to headSize) at which each one's widest line fits; never wraps.
+  const want = E.headSize || 90;
+  let size = want;
+  for (const [, h] of heads) {
+    h.style.fontSize = want + "px";
+    const avail = h.clientWidth;
+    h.querySelectorAll(".line > span").forEach(sp => { size = Math.min(size, want * avail / (sp.scrollWidth * 1.01)); });
+  }
+  size = Math.floor(size);
+  for (const [, h] of heads) h.style.fontSize = size + "px";
+  window.__appstoresReport = { headSize: size };
+  if (E.end) {
+    const e = E.end, end = document.getElementById("end"), top = e.top ?? 520;
+    end.innerHTML = (e.mark ? `<img class="mark" src="${e.mark}" alt="" style="top:${top}px">` : "") +
+      `<div class="block name" style="top:${top + 340}px">${masked(e.name)}</div>` +
+      (e.by ? `<div class="block by" style="top:${top + 502}px">${masked(e.by)}</div>` : "") +
+      `<div class="block tag" style="top:${top + 630}px">${(e.tagLines || []).map(masked).join("")}</div>` +
+      (e.fine ? `<div class="fine">${esc(e.fine)}</div>` : "");
+    endLines = [...end.querySelectorAll(".line > span")];
+    const imgs = [...end.querySelectorAll("img")];
+    await Promise.all(imgs.map(im => im.decode().catch(() => null)));
+  }
+  // how many slides have finished before each frame (the background's parallax accumulates across them)
+  let done = 0, inSlide = false;
+  E.frames.forEach((f, i) => { if (f.slide != null) inSlide = true; else if (inSlide) { done++; inSlide = false; } slidesBefore[i] = done; });
+  return true;
+}
+
+// A masked line: rises in from below, de-blurring and settling its spacing; leaves up through the mask, faster.
+function lineAt(sp, t, tin, tout) {
+  const p = outExpo(ramp(t, tin, .9));
+  const e = tout == null ? 0 : inCubic(ramp(t, tout, .42));
+  sp.style.transform = `translateY(${((1 - p) * 112 - e * 112).toFixed(2)}%)`;
+  const blur = (1 - p) * 10 + e * 6;
+  sp.style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : "none";
+  sp.style.letterSpacing = lerp(0.012, -0.02, p).toFixed(4) + "em";
+  sp.style.opacity = (clamp((t - tin) / .3) * (1 - e)).toFixed(4);
+}
+
+function cameraFor(key, k, sink) {
+  const fp = E.footages[key], fl = fp.float || { scale: 0.64, cy: E.height * 0.62 };
+  const kk = fp.pan ? 0 : k;                       // a wide, panned screen stays floating
+  return { fp, k: kk, scale: lerp(fl.scale, fp.full ?? 0.8, kk) * (1 - .04 * sink),
+           cy: lerp(fl.cy, E.height / 2, kk) + sink * 420 };
+}
+
+function paintScreen(s, src, incoming, mix, x, cam, opacity, blur) {
+  const fp = cam.fp, w = fp.w, h = fp.h, g = fp.frameGeometry, b = g.bezel, R = g.radius;
+  const DW = w + 2 * b, DH = h + 2 * b, rim = Math.max(1, Math.round(b * .28));
+  if (s.w !== w || s.h !== h || s.b !== b) {
+    s.dev.classList.toggle("bare", b === 0);
+    Object.assign(s.dev.style, { width: DW + "px", height: DH + "px", borderRadius: (R + b) + "px" });
+    Object.assign(s.glass.style, { left: rim + "px", top: rim + "px", right: rim + "px", bottom: rim + "px",
+                                   borderRadius: (R + b - rim) + "px", display: b ? "" : "none" });
+    s.sheen.style.display = b ? "" : "none";
+    Object.assign(s.el.style, { left: b + "px", top: b + "px", width: w + "px", height: h + "px",
+                                clipPath: `inset(0 round ${R}px)` });
+    s.svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    s.w = w; s.h = h; s.b = b;
+  }
+  const left = E.width / 2 - DW / 2 + x, top = cam.cy - DH / 2, sc = cam.scale;
+  s.dev.style.transform = `translate(${left.toFixed(2)}px, ${top.toFixed(2)}px) scale(${sc.toFixed(5)})`;
+  s.dev.style.boxShadow = `0 ${(64 / sc).toFixed(1)}px ${(130 / sc).toFixed(1)}px rgba(0,0,0,.5), 0 ${(12 / sc).toFixed(1)}px ${(28 / sc).toFixed(1)}px rgba(0,0,0,.32)`;
+  s.dev.style.opacity = opacity.toFixed(4);
+  s.dev.style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : "none";
+  const loads = [];
+  if (s.img.getAttribute("src") !== src) { s.img.src = src; loads.push(s.img.decode()); }
+  if (incoming && s.inc.getAttribute("src") !== incoming) { s.inc.src = incoming; loads.push(s.inc.decode()); }
+  s.inc.style.opacity = incoming ? mix.toFixed(4) : "0";
+  return loads;
+}
+
+function drawSpot(s, spot, fp) {
+  // compose.py worked out the hole: the element's rect grown by an even pad, corners concentric (radius + pad)
+  if (!spot) { s.svg.style.opacity = "0"; s.svg.innerHTML = ""; return; }
+  const { x, y, w, h } = spot, r = Math.min(spot.r, w / 2, h / 2), W = fp.w, H = fp.h;
+  const hole = `M${x + r},${y} H${x + w - r} A${r},${r} 0 0 1 ${x + w},${y + r} V${y + h - r} A${r},${r} 0 0 1 ${x + w - r},${y + h} H${x + r} A${r},${r} 0 0 1 ${x},${y + h - r} V${y + r} A${r},${r} 0 0 1 ${x + r},${y} Z`;
+  s.svg.innerHTML = `<path fill-rule="evenodd" fill="rgba(0,0,0,${spot.dim})" d="M0,0 H${W} V${H} H0 Z ${hole}"/>`;
+  s.svg.style.opacity = spot.alpha.toFixed(4);
+}
+
+function drawTouch(o, d, t, cam) {
+  const vis = outCubic(ramp(t, o.in, .2)) * (1 - ramp(t, o.out - .2, .2));
+  d.style.opacity = vis.toFixed(4);
+  let fx = o.at[0], fy = o.at[1];
+  if (o.to) { const m = inOutQuart(ramp(t, o.moveIn ?? o.press, o.moveFor ?? .9)); fx = lerp(o.at[0], o.to[0], m); fy = lerp(o.at[1], o.to[1], m); }
+  const sx = E.width / 2 + (fx - cam.fp.w / 2) * cam.scale;        // footage pixels -> stage pixels
+  const sy = cam.cy + (fy - cam.fp.h / 2) * cam.scale;
+  d.style.left = sx.toFixed(2) + "px"; d.style.top = sy.toFixed(2) + "px";
+  const press = ramp(t, o.press, .14), rel = ramp(t, o.press + (o.hold ?? .2), .18);
+  d.querySelector(".ring").style.transform = `scale(${((1 - .16 * press + .16 * rel) * (.7 + .3 * vis)).toFixed(4)})`;
+  const wv = ramp(t, o.press, .55), wave = d.querySelector(".wave");
+  wave.style.opacity = (t >= o.press ? (1 - wv) * .8 : 0).toFixed(4);
+  wave.style.transform = `scale(${(1 + 1.1 * outCubic(wv)).toFixed(4)})`;
+}
+
+function drawEnd(t) {
+  if (!E.end) return;
+  const t0 = E.end.in, mark = document.querySelector("#end .mark");
+  if (mark) {
+    const m = outExpo(ramp(t, t0, 1.0));
+    mark.style.opacity = clamp((t - t0) / .35).toFixed(4);
+    mark.style.transform = `translateY(${((1 - m) * 26).toFixed(2)}px) scale(${lerp(.92, 1, m).toFixed(4)})`;
+    mark.style.filter = m < .995 ? `blur(${((1 - m) * 10).toFixed(2)}px)` : "none";
+  }
+  endLines.forEach((sp, i) => lineAt(sp, t, t0 + .16 + i * .1, null));
+  const fine = document.querySelector("#end .fine");
+  if (fine) fine.style.opacity = (outCubic(ramp(t, t0 + .75, .6)) * .84).toFixed(4);
+}
+
+async function frame(i) {
+  const t = i / (E.fps || 30), f = E.frames[i];
+  const sink = E.endOut != null ? inOutQuart(ramp(t, E.endOut, .9)) : 0;
+  const cam = cameraFor(f.fa, f.k, sink), camB = f.fb ? cameraFor(f.fb, f.k, sink) : cam;
+  const panA = cam.fp.pan ? f.pan : 0, panB = camB.fp.pan ? f.pan : 0;
+  const loads = [];
+  let slideX = 0;
+  if (f.slide != null) {
+    // a hand-off between parts: the outgoing screen leaves left, the next arrives from the right, a small dip in
+    // depth and a touch of speed blur at the fastest point
+    const p = inOutCubic(f.slide), v = Math.sin(Math.PI * p), shift = f.shift || E.slideShift || 720;
+    slideX = p;
+    loads.push(...paintScreen(S[0], f.a, null, 0, -p * shift + panA, { ...cam, scale: cam.scale * (1 - .02 * v) }, 1, v * .7));
+    loads.push(...paintScreen(S[1], f.b, null, 0, (1 - p) * shift + panB, { ...camB, scale: camB.scale * (1 - .02 * v) }, 1, v * .7));
+    S[1].dev.style.display = "";
+  } else {
+    loads.push(...paintScreen(S[0], f.a, f.b, f.mix, panA, cam, 1 - sink, 0));
+    S[1].dev.style.display = "none";
+  }
+  drawSpot(S[0], f.slide != null ? null : f.spot, cam.fp);
+  const drift = -t * 5 - (slidesBefore[i] + slideX) * 30;
+  document.getElementById("lines").style.transform =
+    `translate(${drift.toFixed(2)}px, ${(Math.sin(t * .35) * 6).toFixed(2)}px) scale(${(1 + .02 * f.k).toFixed(4)})`;
+  for (const [o, h] of heads) h.querySelectorAll(".line > span").forEach((sp, j) => lineAt(sp, t, o.in + j * .08, o.out - .42 + j * .05));
+  const main = cameraFor("main", f.k, sink);
+  for (const [o, d] of touches) drawTouch(o, d, t, main);
+  drawEnd(t);
+  await Promise.all(loads);
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  return true;
+}
+</script>
+</body>
+</html>

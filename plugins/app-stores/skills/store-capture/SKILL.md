@@ -41,6 +41,8 @@ sends as it is.
 
 - **Design.** Captions, frames, backgrounds and layouts are `store-screenshots`. This skill hands it raw captures.
 - **The listing.** Words, the stores' checks of the whole listing and sending are `store-listings`.
+- **Composing a preview video.** Headlines, touches, a spotlight, frames and transitions over the recorded takes
+  are `store-previews`; this skill records the takes, dumps their frames and encodes and checks the result.
 - **Resizing to fit.** A wrong size is a failure to fix at the device, never a resize. Only lossless repairs are
   made (flattening alpha, 16-bit to 8-bit, converting to sRGB), and each is reported.
 - **Building, signing or uploading the app.** The plan points at a build the user made.

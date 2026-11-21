@@ -35,6 +35,7 @@ SYNC = {
     "store-listings": ("appstores_lib", "rules"),
     "store-screenshots": ("appstores_lib", "rules"),
     "store-capture": ("appstores_lib", "rules"),
+    "store-previews": ("appstores_lib",),
 }
 
 # Never copied, never counted as drift.
