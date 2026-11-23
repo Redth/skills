@@ -1810,8 +1810,9 @@ def build_apple(listing, check, out):
     manifest["review"] = collections.OrderedDict([
         ("notes", review.get("notes")),
         ("contact", collections.OrderedDict(sorted((review.get("contact") or {}).items()))),
-        ("demoAccount", review.get("demoAccount")),  # null: no demo account needed; else env names
     ])
+    if "demoAccount" in review:  # null: no demo account needed; env names: this one. Left out: as the store has it
+        manifest["review"]["demoAccount"] = review["demoAccount"]
     manifest["auth"] = _auth(a, APPLE_AUTH)
     return manifest, web_only
 

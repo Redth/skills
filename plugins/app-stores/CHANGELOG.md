@@ -249,6 +249,9 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   `references/staging.md` says to seed again right before each capture session, as relative dates go stale.
 
 ### Fixed
+- `store-listings`: a config with no `review.demoAccount` no longer tells App Store Connect that no demo account
+  is needed: `build` writes `demoAccount` only when the config has it, so `push.py plan` leaves App Review's demo
+  account as the store has it (a media-only push turned `demoAccountRequired` off). `null` still means none needed.
 - `store-capture`: a `scroll` `in` a text field with nothing that scrolls found around it no longer swipes the field
   on Appium, `adb` or `uiautomator` (each swipe tapped it and reopened the keyboard, and `scroll {"to": "top"}`
   repeated that until it gave up); the screen is scrolled instead, with a warning to name the pane. `config.md`
