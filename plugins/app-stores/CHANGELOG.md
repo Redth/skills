@@ -8,6 +8,17 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
 
 ### Added
 
+- `store-previews` 0.1.0 (#33): App Store previews (and portrait Play promo videos) composed from an app's real
+  recordings. A storyboard agreed with the user first (three to five beats, one headline each, the poster frame,
+  an end card with the account and subscription disclosure); an edit file (schema `schema/preview-edit.schema.json`)
+  naming frames dumped by `store-capture`'s `video.py frames` (held, played, stepped, marked; times as `@mark±s`),
+  dissolves and slides, camera keys (floating on the background or pushed in, never past the whole device), pan
+  keys for a foldable's open display, headlines (masked line reveals), touch hotspots and a spotlight with an even,
+  concentric margin; the look from a locked `screenshot-style.json` and store-screenshots' device frame classes,
+  clipped with `clip-path`. `compose.py` works out each frame's footage, camera, pan and spotlight, draws it in
+  headless Chrome (`templates/preview.html`, a pure function of the frame number) and encodes a master with ffmpeg
+  (`--dry-run`, `--frames … --stills`). References: Apple's preview rules (read 2026-11-20), storyboard, motion,
+  editing, the edit's fields, devices (iPhone, iPad, foldables folded and open), checking.
 - `store-capture` 0.1.0 (#13): an app's real screens captured at exactly each store's sizes, on any stack.
   `capture-plan.json` (schema `schema/capture-plan.schema.json`: devices each promising a width and height, screens
   reached by steps, locales, appearance, clock, status bar, seed, per-device and per-screen overrides);

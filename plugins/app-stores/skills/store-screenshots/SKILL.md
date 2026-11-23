@@ -8,7 +8,7 @@ description: >
   screenshots for the stores, find a look from screenshots we like, redo or refresh the screenshots our
   listing has now, or keep this release's screenshots consistent with last time's. Takes real captures (or any tool's PNGs) and renders them with HTML templates
   in headless Chrome. Do not use for capturing from a simulator, emulator or device (store-capture), the
-  listing's words or sending it to a store (store-listings), app icons, website images, preview videos, or
+  listing's words or sending it to a store (store-listings), preview videos (store-previews), app icons, website images, or
   building a screenshot editor.
 license: MIT
 ---
@@ -51,8 +51,10 @@ output is the folder `store-listings` reads.
   PNGs: as captures for a layout, or as finished files `store-listings` takes directly.
 - **Conversion claims.** Every "+X%" is a hypothesis; the stores' own experiments are the test
   ([references/evidence.md](references/evidence.md)).
-- **Preview videos, app icons, iOS 27's search and header assets and Play's feature graphic.** Not version 0.1's
-  layouts; [references/store-rules.md](references/store-rules.md) has their sizes.
+- **Preview videos.** That's `store-previews`, which reads this skill's locked style and draws the same device
+  frames, so the video matches the set.
+- **App icons, iOS 27's search and header assets and Play's feature graphic.** Not version 0.1's layouts;
+  [references/store-rules.md](references/store-rules.md) has their sizes.
 
 ## When to use
 

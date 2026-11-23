@@ -179,7 +179,9 @@ Skills: `store-listings` (the App Store and Google Play listing: words, checks, 
 locale rendered from one design, drawn frames, mocks of each store's search row and page, and checks) and
 `store-capture` (the captures themselves, at exactly each store's sizes on any stack: a screenshot mode, the
 DevFlow or Ailoha in-app agents, Appium, XCUITest, UI Automator, Maestro, `simctl`, `adb` or Chrome, or imported
-from fastlane and others; preview videos encoded to spec). To follow: `store-signing` (#14), `game-achievements`
+from fastlane and others; preview videos encoded to spec) and `store-previews` (App Store previews composed from
+real recordings: a storyboard agreed first, headlines, touch hotspots, a spotlight, drawn device frames and an end
+card, every frame drawn in headless Chrome). To follow: `store-signing` (#14), `game-achievements`
 (#15). Details, quick starts and the contributor guide:
 [plugins/app-stores/README.md](./plugins/app-stores/README.md).
 
