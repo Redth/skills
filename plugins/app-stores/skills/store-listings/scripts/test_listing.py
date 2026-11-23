@@ -580,6 +580,18 @@ class Build(Builds):
         self.assertEqual(m["apple"]["review"]["demoAccount"], {"usernameEnv": "SR_DEMO_USER",
                                                                "passwordEnv": "SR_DEMO_PASSWORD"})
 
+    def test_a_review_without_demo_account_leaves_it_out(self):
+        config = self.sample()
+
+        def change(d):
+            d["stores"]["apple"]["review"] = {}
+        kit.edit_config(config, change)
+        code, out, text, _ = self.build(config)
+        self.assertEqual(code, 0, text)
+        with open(os.path.join(out, "listing.json")) as f:
+            m = json.load(f)
+        self.assertNotIn("demoAccount", m["apple"]["review"])  # push.py plan then leaves App Review's alone
+
     def test_de_de_gets_its_own_shot_and_the_rest_fall_back(self):
         config = self.sample()
         code, out, _, _ = self.build(config)

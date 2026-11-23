@@ -166,7 +166,8 @@ Limits and what each field may say: [words.md](words.md).
   `FREQUENT_OR_INTENSE`, booleans for capabilities). Sent only with `push.py plan apple --age-rating`, so it's
   sent once settled. Definitions: [forms.md](forms.md).
 - `review.notes`: App Review's notes (4,000 bytes). `review.contact` names environment variables, never values.
-  `demoAccount`: `null`, or environment variable names for a sign-in that must not expire.
+  `demoAccount`: `null` (no demo account needed), or environment variable names for a sign-in that must not
+  expire; left out, App Review's demo account stays as App Store Connect has it (a media-only push, say).
 - `tvPrivacyText`: path to the privacy policy as plain text, required for tvOS (Apple TV has no browser).
 
 ## `stores.google`

@@ -449,6 +449,16 @@ class ApplePlanTests(PushCase):
         self.assertIn("App Review's contact: APPLE_REVIEW_PHONE isn't set, so it's left as App Store Connect has it.",
                       plan["notes"])
 
+    def test_no_demo_account_in_the_listing_leaves_the_stores(self):
+        detail = self.store.routes["GET /v1/appStoreVersions/ver-ios-11/appStoreReviewDetail"]["body"]["data"]
+        detail["attributes"]["demoAccountRequired"] = True
+        data = self.listing()
+        data["apple"]["review"].pop("demoAccount", None)
+        self.write_listing(data)
+        plan, _ = self.plan("apple")
+        for action in self.actions(plan, "apple.review.update"):
+            self.assertNotIn("demoAccountRequired", action["set"])
+
     def test_demo_account_from_env(self):
         data = self.listing()
         data["apple"]["review"]["demoAccount"] = {"usernameEnv": "APPLE_DEMO_USER", "passwordEnv": "APPLE_DEMO_PASSWORD"}
