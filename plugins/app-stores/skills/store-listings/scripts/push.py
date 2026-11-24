@@ -1129,7 +1129,7 @@ class AppleApplier(object):
         self._send_parts(path, attrs(data).get("uploadOperations") or [])
         c.call("PATCH", "/v1/appAssetLibraryImages/%s" % image_id,
                resource("appAssetLibraryImages", image_id, {"uploaded": True}))
-        say("      sent %s" % os.path.basename(path))
+        say("      sent %s" % (up.get("name") or os.path.basename(path)))
         for attempt in range(max(1, 300 // POLL_SECONDS)):
             ia = attrs((c.get("/v1/appAssetLibraryImages/%s" % image_id) or {}).get("data"))
             state = ia.get("state")
