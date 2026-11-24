@@ -1251,15 +1251,20 @@ class StoreCheck:
                 for f in rules.check_count(rule, n, where, rule.get("noun") or "screenshots"):
                     self.report.add(self.store, f)
                 continue
+            groups = collections.OrderedDict()  # Apple's slots that share a display type are one set
             for s in slots:
                 if s not in used:
                     continue
-                items = pics.get(s) or []
+                key = ((self.slots.get(s) or {}).get("displayType") if self.store == "apple" else None) or s
+                groups.setdefault(key, []).append(s)
+            for key, members in groups.items():
+                items = [p for s in members for p in (pics.get(s) or [])]
                 noun = rule.get("noun") or "pictures"
                 if rule.get("of"):
                     items = [p for p in items if in_range(p.size, rule.get("of"))]
                     noun = "pictures that qualify (%s)" % describe_range(rule.get("of"))
-                for f in rules.check_count(rule, len(items), "%s %s" % (here, s), noun):
+                where = members[0] if len(members) == 1 else "%s (%s)" % (key, " + ".join(members))
+                for f in rules.check_count(rule, len(items), "%s %s" % (here, where), noun):
                     self.report.add(self.store, f)
 
     def _required_message(self, slots):
@@ -1393,14 +1398,14 @@ class StoreCheck:
                 continue
             items = self.previews.get(platform) or []
             if rule.kind == "count":
-                per_slot = collections.OrderedDict()
+                per_type = collections.OrderedDict()  # slots that share a preview type are one set
                 for screen, item, slot, why in items:
-                    if slot:
-                        per_slot.setdefault(slot, []).append(item)
-                for slot, its in per_slot.items():
-                    if slot in rule.slots:
-                        for f in rules.check_count(rule, len(its), "%s %s previews" % (platform, slot), "previews"):
-                            self.report.add(self.store, f)
+                    if slot and slot in rule.slots:
+                        ptype = (((self.slots.get(slot) or {}).get("preview")) or {}).get("type") or slot
+                        per_type.setdefault(ptype, []).append(item)
+                for ptype, its in per_type.items():
+                    for f in rules.check_count(rule, len(its), "%s %s previews" % (platform, ptype), "previews"):
+                        self.report.add(self.store, f)
             elif rule.kind == "video":
                 for screen, item, slot, why in items:
                     for f in self.check_video(rule, platform, screen, item, slot, why):
@@ -1755,15 +1760,22 @@ def build_apple(listing, check, out):
             for name, value in files:
                 if value is not None:
                     _write_text(os.path.join(meta, code, name + ".txt"), value)
-            per_slot = collections.OrderedDict()
+            # Slots that share Apple's display type are one set (the iPhone Duo's folded and open pictures go in
+            # APP_IPHONE_DUO together), in the shots' order: the order the store shows them
+            by_display = collections.OrderedDict()
             for slot, pics in (check.pictures.get((platform, loc)) or {}).items():
                 display = (check.slots.get(slot) or {}).get("displayType")
                 if not display:
                     for pic in pics:
                         web_only.append((platform, code, slot, pic.rel))
                     continue
+                by_display.setdefault(display, []).extend((slot, pic) for pic in pics)
+            order = dict((sid, n) for n, sid in enumerate(s.get("id") for s in listing.shots()))
+            per_slot = collections.OrderedDict()
+            for display, items in by_display.items():
+                items = sorted(items, key=lambda sp: order.get(sp[1].shot, len(order)))  # stable: screen order
                 entries = []
-                for i, pic in enumerate(pics, 1):
+                for i, (slot, pic) in enumerate(items, 1):
                     dst = os.path.join(base, "screenshots", code, "%02d_%s_%s%s" % (i, display, pic.shot,
                                                                                      _picture_ext(pic)))
                     _copy(pic.path, dst)

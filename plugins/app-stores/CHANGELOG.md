@@ -249,6 +249,11 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   `references/staging.md` says to seed again right before each capture session, as relative dates go stale.
 
 ### Fixed
+- `store-listings`: the iPhone Duo goes up by API. App Store Connect has one Duo set for both postures,
+  `APP_IPHONE_DUO` (screenshots, 1398×2034 and 2853×2007 mixed, up to 10) and `IPHONE_DUO` (previews), though
+  Apple's OpenAPI spec 4.6.1 doesn't list them. The rules' `IPHONE_DUO_OUTER` and `IPHONE_DUO_INNER` slots both
+  carry them (`verified`); `build` makes slots that share a display type one set, ordered by `screenshots.shots`,
+  and `check` counts them (and previews sharing a preview type) together.
 - `store-listings`: a config with no `review.demoAccount` no longer tells App Store Connect that no demo account
   is needed: `build` writes `demoAccount` only when the config has it, so `push.py plan` leaves App Review's demo
   account as the store has it (a media-only push turned `demoAccountRequired` off). `null` still means none needed.

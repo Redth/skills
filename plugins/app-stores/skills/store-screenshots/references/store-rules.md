@@ -129,7 +129,8 @@ recommended, and works like Steam's small capsule: legible at its smallest. Show
 
 ## What's still unverified
 
-- iPhone Duo's requirement date and scope, and its API display type.
+- iPhone Duo's requirement date and scope (its API display type, `APP_IPHONE_DUO`, one set for both postures, was
+  confirmed 2026-11-24).
 - Whether App Review enforces the marketing guidelines' device rules on screenshots.
 - The on-device thumbnail sizes in search, and how many product-page shots show before scrolling (iOS 26 and 27,
   iPhone and iPad, and Play): the mocks use estimates.

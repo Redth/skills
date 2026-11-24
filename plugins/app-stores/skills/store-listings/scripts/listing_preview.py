@@ -87,7 +87,11 @@ def _apple_slot_order(platform):
         return []
     mine = [(k, v) for k, v in slots.items() if v.get("platform") == platform and v.get("displayType")]
     phones = [v["displayType"] for k, v in mine if v.get("kind") == "phone"]
-    return phones + [v["displayType"] for k, v in mine if v.get("kind") != "phone"]
+    out = []
+    for d in phones + [v["displayType"] for k, v in mine if v.get("kind") != "phone"]:
+        if d not in out:  # the iPhone Duo's two slots share APP_IPHONE_DUO
+            out.append(d)
+    return out
 
 
 def apple_page(manifest, out, platform, code):

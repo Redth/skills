@@ -90,8 +90,8 @@ Each posture is its own device in the plan, with its own id and size ([config.md
 
 - **App Store:** the iPhone Duo has its own two slots, `IPHONE_DUO_OUTER` (1398×2034, folded) and
   `IPHONE_DUO_INNER` (open). The inner display captures landscape, **2853×2007**: write `width: 2853, height: 2007`
-  and don't rotate anything; `check_captures.py` and `listing.py check` accept the turned size. Both are
-  `unverified` in the rules (no API display type yet: App Store Connect's web app takes them).
+  and don't rotate anything; `check_captures.py` and `listing.py check` accept the turned size. Both go in
+  Apple's one iPhone Duo set (`APP_IPHONE_DUO`, up to 10 pictures for both postures together), sent by the API.
 - **Google Play has no foldable slot.** Its slots are the phone (at most 2:1, at most 8 pictures), the 7" and 10"
   tablets (16:9 or 9:16, 1080–7680 px) and the rest. So:
   - the cover display (folded) is a phone: lay it out at `wmSize "1080x1920"` like any phone. It competes with the

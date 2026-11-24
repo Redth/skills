@@ -580,6 +580,48 @@ class Build(Builds):
         self.assertEqual(m["apple"]["review"]["demoAccount"], {"usernameEnv": "SR_DEMO_USER",
                                                                "passwordEnv": "SR_DEMO_PASSWORD"})
 
+    def _duo(self, outer, inner):
+        """The sample plus an iPhone Duo: ``outer`` shots folded (1398x2034), ``inner`` open (2853x2007)."""
+        config = self.sample()
+        root = os.path.dirname(config)
+        for screen, (w, h), ids in (("duo-outer", (1398, 2034), outer), ("duo-inner", (2853, 2007), inner)):
+            for sid in ids:
+                kit.write_png(os.path.join(root, "screenshots", "en-US", screen, sid + ".png"), w, h)
+
+        def change(d):
+            d["screens"]["duo-outer"] = {"kind": "phone"}
+            d["screens"]["duo-inner"] = {"kind": "phone"}
+            d["stores"]["apple"]["platforms"]["IOS"]["screens"] += ["duo-outer", "duo-inner"]
+            known = [x["id"] for x in d["screenshots"]["shots"]]
+            for x in d["screenshots"]["shots"]:
+                if x["screens"] is None:
+                    x["screens"] = ["iphone", "ipad", "android-phone", "android-tablet"]
+                x["screens"] += [s for s, ids in (("duo-outer", outer), ("duo-inner", inner)) if x["id"] in ids]
+            for sid in [i for i in outer + inner if i not in known]:
+                d["screenshots"]["shots"].append({"id": sid, "screens": [s for s, ids in (
+                    ("duo-outer", outer), ("duo-inner", inner)) if sid in ids], "stores": ["apple"]})
+                known.append(sid)
+        kit.edit_config(config, change)
+        return config
+
+    def test_iphone_duo_folded_and_open_are_one_set_in_shot_order(self):
+        config = self._duo(outer=["week", "grocery-list"], inner=["recipe", "pantry"])
+        code, out, text, _ = self.build(config)
+        self.assertEqual(code, 0, text)
+        with open(os.path.join(out, "listing.json")) as f:
+            m = json.load(f)
+        duo = m["apple"]["platforms"]["IOS"]["screenshots"]["en-US"]["APP_IPHONE_DUO"]
+        self.assertEqual([os.path.basename(e["file"]) for e in duo],
+                         ["01_APP_IPHONE_DUO_week.png", "02_APP_IPHONE_DUO_recipe.png",
+                          "03_APP_IPHONE_DUO_grocery-list.png", "04_APP_IPHONE_DUO_pantry.png"])
+
+    def test_iphone_duo_counts_both_postures_together(self):
+        config = self._duo(outer=["d1", "d2", "d3", "d4", "d5", "d6"], inner=["e1", "e2", "e3", "e4", "e5"])
+        code, report = kit.check_json(config)
+        found = kit.findings(report, "apple.screenshots.count", where="en-US IOS APP_IPHONE_DUO")
+        self.assertEqual(len(found), 1, report["findings"])
+        self.assertIn("IPHONE_DUO_OUTER + IPHONE_DUO_INNER", found[0]["where"])
+
     def test_a_review_without_demo_account_leaves_it_out(self):
         config = self.sample()
 
