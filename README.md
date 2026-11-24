@@ -15,7 +15,7 @@ skills).
 | Plugin | Elevator pitch | Jump to |
 |---|---|---|
 | **`skill-reflect`** | A privacy-conscious feedback loop that analyzes how session skills actually performed, returns actionable findings plus evals in chat, and can optionally save or route them to authors. | [↓ skill-reflect](#skill-reflect) |
-| **`app-stores`** | Your app's store listing from one config to the App Store and Google Play: checked offline against each store's rules (dated, sourced data), previewed as each store's page, then sent with a plan you read first; screenshots designed per store from your real captures, and those captures taken at each store's exact sizes on any stack. Any app, any stack. | [↓ app-stores](#app-stores) |
+| **`app-stores`** | Four skills for your App Store and Google Play presence: listing words and assets, real captures, designed screenshots and preview videos. Start from what's live, work across devices and languages, check offline, and approve a plan before anything is sent. Any app, any stack. | [↓ app-stores](#app-stores) |
 
 ---
 
@@ -157,38 +157,92 @@ engine, wiring reflection into more skills, and dedupe behavior). Binding spec:
 
 # app-stores
 
-**Getting an app's store listing right means knowing every store's rules, and they change.** `app-stores` keeps
-the listing in one `store-listing.json`, checks it offline against each store's rules (kept as data, each rule
-with its source, the date it was checked and whether it's verified), builds fastlane-compatible output, shows each
-store's page before anything is sent, and sends through the stores' own APIs only after you've read the plan.
+**Your app's store presence, from what's live to the next release.** Four skills work together (or alone) on
+the listing, real captures, designed screenshots and preview videos. Any app, any stack: the App Store
+(iPhone, iPad, Mac, Apple TV, Vision Pro) and Google Play (phones, tablets, TV, Wear), with checklists for
+Steam and itch.io.
 
-- 📋 **One config, every store:** words per locale, screenshots per screen, categories, age rating and review notes.
-- 📸 **Captures on any stack:** exact store sizes from the right simulator, emulator or viewport (never resized),
-  a clean status bar and demo data, in-app agents, Appium or UI tests to reach each screen, and an honest report.
-- 🖼️ **Screenshots designed per store:** captions sized for search, drawn device frames (never a maker's art), every
-  size and locale from one design, and a look at each store's first impression before anything ships.
-- 📏 **Rules as data:** limits counted the way each store counts them, price words only where a store bans them,
-  required screenshot sizes, and checklists for what no script can decide.
-- 👀 **Plan, then apply:** `push.py plan` only reads; `push.py apply` does exactly that plan and refuses if the
-  store changed since.
-- 🔒 **No network by default:** only `push.py` reaches a network, only the stores' own APIs; capture talks only to
-  this machine. Keys come from environment variables, never the config. Stdlib Python 3.8+, `openssl`, and Chrome for previews.
+## The app-stores skills
 
-Skills: `store-listings` (the App Store and Google Play listing: words, checks, previews, plan and apply),
-`store-screenshots` (designed screenshots per store from real captures: a storyboard agreed first, every size and
-locale rendered from one design, drawn frames, mocks of each store's search row and page, and checks) and
-`store-capture` (the captures themselves, at exactly each store's sizes on any stack: a screenshot mode, the
-DevFlow or Ailoha in-app agents, Appium, XCUITest, UI Automator, Maestro, `simctl`, `adb` or Chrome, or imported
-from fastlane and others; preview videos encoded to spec) and `store-previews` (App Store previews composed from
-real recordings: a storyboard agreed first, headlines, touch hotspots, a spotlight, drawn device frames and an end
-card, every frame drawn in headless Chrome). To follow: `store-signing` (#14), `game-achievements`
-(#15). Details, quick starts and the contributor guide:
-[plugins/app-stores/README.md](./plugins/app-stores/README.md).
+| Skill | What it does |
+|---|---|
+| [`store-listings`](./plugins/app-stores/skills/store-listings/) | Keeps words, locales, screenshots, previews, categories, ratings and review notes in one `store-listing.json`. Imports existing metadata, checks each store's rules, builds fastlane-compatible output, previews store pages, and sends through Apple and Google's APIs with plan-then-apply approval. |
+| [`store-capture`](./plugins/app-stores/skills/store-capture/) | Takes real screenshots at the stores' exact sizes, never resized, and records preview takes. Stages demo data with you, drives the app with the technique that fits, and keeps a repeatable capture plan with an honest report of taken, missed, failed or skipped shots. |
+| [`store-screenshots`](./plugins/app-stores/skills/store-screenshots/) | Turns real captures into designed screenshots for every store, size and locale. Starts with your current set and examples, explores rendered directions, agrees a storyboard, then locks an approved style and checks later releases against it. |
+| [`store-previews`](./plugins/app-stores/skills/store-previews/) | Composes App Store previews and portrait Play promo videos from real recordings. Agrees the storyboard first, then adds headlines, touch hotspots, spotlights, drawn frames, transitions and an end card, matching the screenshots' approved style. |
+
+### What's included
+
+- **Start from what's live.** Pull the current listing, screenshots and previews read-only; Apple's public lookup
+  works without keys, with its missing fields called out. Import that baseline or fastlane, Triple-T / Gradle Play
+  Publisher and Expo metadata. Decide what to keep, then see a field-by-field diff before planning changes.
+  Languages can differ by store and Apple platform, and kept screenshot slots stay untouched.
+- **Repeatable captures that look in use.** Agree the screens, sign-in, fictional demo data and each screen's
+  state before running. Fill forms, close keyboards, clear focus and scroll within the right pane; verify the
+  intended state before capturing. Dedicated simulators and emulators keep your own setup separate, changes are
+  restored afterwards, and a missed shot is reported even when its old picture is kept. After an app update,
+  compare source changes with the previous capture to identify screens to re-check.
+- **Use the tools your app has.** A screenshot mode, DevFlow (.NET MAUI), Ailoha, Appium, XCUITest, UI Automator,
+  Maestro, macOS Accessibility, `simctl`, `adb` or headless Chrome. Existing fastlane snapshot / screengrab,
+  xcresult, Maestro, Flutter, Detox and Playwright captures can be imported instead.
+- **Design once, keep the look.** Compare two to four directions or choose from eight starting styles. Render
+  localized captions, full-bleed screens, framed devices, tilted or paired layouts, callouts, heroes and panoramas;
+  inspect mock-ups of search results and store pages. Checks catch caption overflow, poor legibility, frame
+  problems and drift from the approved baseline. Generic frames fit each capture; device art you supply is used
+  unchanged under its maker's terms. Play is frameless by default.
+- **Foldables throughout.** Capture folded and open displays, patch only the steps that differ by device or
+  layout, and show a partly folded device in screenshot designs. Preview videos can move between cover and open
+  displays. iPhone Duo screenshots and previews upload through the API, with both postures sharing one store set.
+- **Videos from real app interactions.** Record each take's steps, including paced typing and press-and-hold
+  drags, then extract numbered frames for precise editing. Preview composition uses the screenshots' style,
+  keeps the device in view and includes account and subscription disclosures on the end card. Inspect key
+  stills before rendering, then encode to the store's specification and check the result.
+- **Apple creative assets.** Check, build and send localized product page header and search results images
+  for iOS 27 / iPadOS 27 through the Asset Library. Unchanged files are reused; creative-asset video uploads
+  are not supported yet.
+- **Rules you can inspect.** Limits, sizes, counts and restricted words are dated, sourced data, with unverified
+  rules reported as warnings. Forms without an API get drafted answers and a checklist, not a claim that the
+  console was updated.
+
+## For consumers — using app-stores
+
+Install the whole set in Claude Code:
 
 ```text
 /plugin marketplace add Redth/skills
 /plugin install app-stores@redth-skills
 ```
+
+On any agent that can load the skills, ask in your own words:
+
+> Pull our live App Store and Google Play listings and show what needs updating.
+>
+> Capture our store screens on every device, in English and German, with demo data.
+>
+> Show a few screenshot directions, then keep the approved look for future releases.
+>
+> Make an App Store preview from real recordings, matching our screenshots.
+>
+> Check the listing and show the plan before sending anything.
+
+The usual handoff is **capture → screenshot design → listing**, or **recorded takes → preview composition →
+video encoding and checks → listing**. Each skill also works alone: `store-listings` accepts images from any tool.
+
+**Local-first, with approval before sending.** Imports, checks, builds, page previews, screenshot design and
+video composition work offline. Only `push.py` reaches the stores' APIs and media hosts; `pull` and `plan`
+only read, and only `apply` changes the listing. Apply follows the plan you approved and refuses if the store or
+built listing changed since. Keys and review credentials come from environment variables, never the config.
+An update that omits a demo account leaves the store's existing App Review sign-in settings alone.
+Capture automation talks only to local tools, devices and services. No telemetry or extra account.
+
+**Tools:** stdlib Python 3.8+; `openssl` for store API authentication; Chrome / Chromium for rendered screenshots,
+page PNGs and preview frames; `ffmpeg` / `ffprobe` for video; and the local capture tools your app needs.
+Store credentials are needed only for authenticated store operations, not offline work.
+
+Full workflows, command examples, prerequisites and the contributor guide:
+[plugins/app-stores/README.md](./plugins/app-stores/README.md).
+Planned skills: `store-signing` ([#14](https://github.com/Redth/skills/issues/14)) and
+`game-achievements` ([#15](https://github.com/Redth/skills/issues/15), if it earns its place).
 
 ---
 
