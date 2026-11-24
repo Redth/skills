@@ -195,7 +195,7 @@
       ]
     },
     "appleSlots": {
-      "$comment": "Keyed by App Store Connect's ScreenshotDisplayType, or by our own key (displayType null) for a device class the API doesn't have yet. Order matters: where a size fits several slots of a platform, the first listed wins.",
+      "$comment": "Keyed by App Store Connect's ScreenshotDisplayType, or by our own key: for a device class the API doesn't have yet (displayType null), or for slots that share one display type (the iPhone Duo's folded and open slots are both APP_IPHONE_DUO: one set, built and counted together). Order matters: where a size fits several slots of a platform, the first listed wins.",
       "type": "object",
       "properties": { "$comment": { "type": "string" } },
       "patternProperties": { "^[A-Z][A-Z0-9_]*$": { "$ref": "#/$defs/appleSlot" } },

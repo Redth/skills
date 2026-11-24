@@ -59,8 +59,13 @@ meets the requirement. Make the medium set; the mapping of `APP_IPHONE_61` to "m
 enum has no descriptions).
 
 **iPhone Duo:** Apple announced Duo screenshots (1398×2034 outer, 2007×2853 inner) as required from April 2027.
-Its news and its screenshot page disagree on which apps; plan for every app. There's no API display type for
-them yet (`unverified`).
+Its news and its screenshot page disagree on which apps; plan for every app. **One set takes both postures:**
+the API's `APP_IPHONE_DUO` (screenshots: 1398×2034 and 2853×2007, either way round, up to 10 mixed) and `IPHONE_DUO`
+(previews, 886×1920 or 1920×886, up to 3). Apple's OpenAPI spec (4.6.1) doesn't list them yet, but App Store Connect
+accepts them (its answer to an invalid type lists them, 2026-11-24). The rules keep two slots, `IPHONE_DUO_OUTER`
+(folded) and `IPHONE_DUO_INNER` (open), both `APP_IPHONE_DUO`: `listing.py build` makes them one set in the shots'
+order, and `check` counts them together, so choose which shots each posture shows (`screenshots.shots[].screens`)
+to stay within 10.
 
 Source: https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications
 (checked 2026-11-14).

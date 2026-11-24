@@ -987,7 +987,7 @@
       "source": "https://developer.apple.com/help/app-store-connect/release-notes",
       "checked": "2026-11-14",
       "status": "unverified",
-      "note": "Required from April 2027: Apple's screenshot page says for apps built with the iOS 27.1 SDK or later, its news says for every submission. No API display type yet, so it can't be sent by the API; upload it in App Store Connect. Plan for every iPhone app."
+      "note": "Required from April 2027: Apple's screenshot page says for apps built with the iOS 27.1 SDK or later, its news says for every submission. One set (APP_IPHONE_DUO) takes both postures. Plan for every iPhone app."
     },
     {
       "id": "apple.screenshots.in_use",
@@ -1692,7 +1692,7 @@
       "note": "App previews aren't supported at this size (the API's IPHONE_35 preview type exists but Apple's preview page lists no size)."
     },
     "IPHONE_DUO_OUTER": {
-      "displayType": null,
+      "displayType": "APP_IPHONE_DUO",
       "platform": "IOS",
       "kind": "phone",
       "device": "iPhone Duo, outer display",
@@ -1705,20 +1705,20 @@
       "required": false,
       "fallsBackTo": null,
       "preview": {
-        "type": null,
+        "type": "IPHONE_DUO",
         "sizes": [
           [
             886,
             1920
           ]
         ],
-        "note": "886x1920 per Apple's preview page; no API preview type yet."
+        "note": "886x1920 or 1920x886 (App Store Connect's iPhone Duo media page). Apple's one IPHONE_DUO preview set, up to 3."
       },
-      "status": "unverified",
-      "note": "New device class (Apple release notes, 2026-10-05). No ScreenshotDisplayType for it yet, so nothing can be sent through the API; App Store Connect's web app takes it. Required from April 2027 (rule apple.screenshots.iphone_duo.required). The key is ours, not Apple's."
+      "status": "verified",
+      "note": "Folded (the cover display). Apple has one iPhone Duo set for both postures: ScreenshotDisplayType APP_IPHONE_DUO takes 1398x2034 and 2853x2007 either way round, up to 10 mixed (App Store Connect's media page; the API answered with APP_IPHONE_DUO and IPHONE_DUO among its valid values on 2026-11-24, though OpenAPI spec 4.6.1 doesn't list them). This slot and IPHONE_DUO_INNER share the type: listing.py builds them as one set, in the shots' order, and counts them together. Required from April 2027 (rule apple.screenshots.iphone_duo.required). The key is ours."
     },
     "IPHONE_DUO_INNER": {
-      "displayType": null,
+      "displayType": "APP_IPHONE_DUO",
       "platform": "IOS",
       "kind": "phone",
       "device": "iPhone Duo, inner display",
@@ -1731,17 +1731,17 @@
       "required": false,
       "fallsBackTo": null,
       "preview": {
-        "type": null,
+        "type": "IPHONE_DUO",
         "sizes": [
           [
             886,
             1920
           ]
         ],
-        "note": "886x1920 per Apple's preview page; no API preview type yet."
+        "note": "886x1920 or 1920x886 (App Store Connect's iPhone Duo media page). Apple's one IPHONE_DUO preview set, up to 3."
       },
-      "status": "unverified",
-      "note": "As IPHONE_DUO_OUTER. The key is ours, not Apple's."
+      "status": "verified",
+      "note": "Open (the inner display). The same Apple set as IPHONE_DUO_OUTER (APP_IPHONE_DUO): see its note. The key is ours."
     },
     "APP_IPAD_PRO_3GEN_129": {
       "displayType": "APP_IPAD_PRO_3GEN_129",

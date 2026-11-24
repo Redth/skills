@@ -134,7 +134,7 @@ simulator is already in isn't set again, nor put back. Ailoha has no fold contro
 `posture` out (the inner display is captured as long as it's the one in use).
 
 App Store slots: `IPHONE_DUO_OUTER` (1398×2034) and `IPHONE_DUO_INNER`, captured landscape (2853×2007: `width`
-2853, `height` 2007; don't try to rotate it). [sizes.md](sizes.md).
+2853, `height` 2007; don't try to rotate it). Both are Apple's one Duo set (`APP_IPHONE_DUO`). [sizes.md](sizes.md).
 
 ## CoreSimulator hiccups
 
