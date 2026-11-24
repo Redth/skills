@@ -634,6 +634,46 @@ class Build(Builds):
             m = json.load(f)
         self.assertNotIn("demoAccount", m["apple"]["review"])  # push.py plan then leaves App Review's alone
 
+    def _creative(self, header, search=None, alpha=False):
+        config = self.sample()
+        root = os.path.dirname(config)
+        files = {}
+        for key, (w, h) in (("header", header), ("searchResults", search)):
+            if not w:
+                continue
+            rel = "art/%s-%dx%d.png" % (key, w, h)
+            kit.write_png(os.path.join(root, rel), w, h, alpha=alpha)
+            files[key] = rel
+
+        def change(d):
+            d["stores"]["apple"]["platforms"]["IOS"]["creative"] = files
+        kit.edit_config(config, change)
+        return config
+
+    def test_creative_universal_builds_into_both_placements(self):
+        config = self._creative(header=(5244, 2950), search=(5244, 2950))
+        code, out, text, _ = self.build(config)
+        self.assertEqual(code, 0, text)
+        with open(os.path.join(out, "listing.json")) as f:
+            m = json.load(f)
+        creative = m["apple"]["platforms"]["IOS"]["creative"]["en-US"]
+        self.assertEqual(sorted(creative), ["APP_STORE_SEARCH_RESULTS_ASSET", "PRODUCT_PAGE_HEADER_ASSET"])
+        self.assertEqual(creative["PRODUCT_PAGE_HEADER_ASSET"]["file"],
+                         "apple/IOS/creative/en-US/PRODUCT_PAGE_HEADER_ASSET.png")
+        self.assertEqual(creative["PRODUCT_PAGE_HEADER_ASSET"]["placementGroup"], "DEFAULT_PROFILE")
+        self.assertEqual(creative["PRODUCT_PAGE_HEADER_ASSET"]["name"], "header-5244x2950.png")
+        self.assertIn("de-DE", m["apple"]["platforms"]["IOS"]["creative"])  # one file for every locale
+
+    def test_creative_wrong_size_and_alpha_are_errors(self):
+        config = self._creative(header=(3840, 2560), search=(1920, 1280), alpha=True)
+        code, report = kit.check_json(config)
+        size = kit.findings(report, "apple.creative.size")
+        self.assertEqual(len(size), 1, report["findings"])
+        self.assertIn("3840x1646 (21:9)", size[0]["message"])
+        self.assertIn("5244x2950 (16:9, universal)", size[0]["message"])
+        self.assertEqual(len(kit.findings(report, "apple.creative.alpha")), 1)  # the search one fits; its alpha doesn't
+        self.assertNotEqual(code, 0)
+
     def test_de_de_gets_its_own_shot_and_the_rest_fall_back(self):
         config = self.sample()
         code, out, _, _ = self.build(config)

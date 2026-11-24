@@ -24,8 +24,8 @@ get a checklist with the answers drafted.
 
 ## Purpose
 
-- **One config** for the words (per locale), the screenshots (per screen), the URLs, categories and age rating
-  answers of every store the app is on. Schema: `schema/store-listing.schema.json`.
+- **One config** for the words (per locale), the screenshots (per screen), the App Store's creative assets (product
+  page header and search results), the URLs, categories and age rating answers of every store the app is on. Schema: `schema/store-listing.schema.json`.
 - **Store rules as dated, sourced data** (`rules/<store>.json`): every limit, size, count and banned word has
   the store page it came from, the date it was checked and a status. An unverified rule only warns.
 - **Start from what's live:** `push.py pull` reads the listing the stores have now (words, categories, every

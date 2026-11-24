@@ -94,6 +94,27 @@ App Store Connect. Source:
 https://developer.apple.com/help/app-store-connect/reference/app-information/app-preview-specifications
 (checked 2026-11-14).
 
+## Creative assets (product page header, search results)
+
+iOS 27 and iPadOS 27 show two optional pictures (or 5–30 s videos) per version localization: the **product page
+header** (21:9, 3840×1646 PNG; art safe area 1646×661 at 1097, 493) and the **search results asset** (3:2, 1920×1280
+to 3840×2560, PNG or JPEG; safe area 2168×1030 at 836, 765 at the largest size). A **universal** 5244×2950 PNG
+(16:9; safe area 1402×962 at 1921, 660) goes in either, so one picture can be both. No alpha. Everything that must
+be seen goes in the safe area: Apple crops the rest by device and orientation. Text only as a short phrase,
+localized; no prices, URLs, copyright symbols, other platforms' logos or Apple's own awards; fit for 4+. Without a
+search results asset the store shows screenshots and previews there. Apple reviews them; once approved they can be
+changed on the version on sale without a new version.
+
+`stores.apple.platforms.IOS.creative`: `header` and `searchResults`, each a path (every locale) or an object of locale
+to path. `check` matches each file to the specs in `rules/apple.json` (`creative`, from the API's
+`appAssetLibraryRefData`); `push.py` sends a file once to the app's **Asset Library** (`appAssetLibraryImages`,
+category `CREATIVE_ASSETS`, named `<file name> <first 12 of its SHA-256>`, which is how a later plan knows the
+store's image is the same file: the library keeps no checksum), waits until Apple has processed it, then replaces
+each placement (`appAssetLibraryPlacements`, `PRODUCT_PAGE_HEADER_ASSET` and `APP_STORE_SEARCH_RESULTS_ASSET`,
+group `DEFAULT_PROFILE`, one each: the old one is deleted first). Videos aren't sent yet. Sources:
+https://developer.apple.com/help/app-store-connect/reference/app-information/creative-assets-specifications/,
+https://developer.apple.com/app-store/asset-best-practices/ (checked 2026-11-24).
+
 ## How `push.py` talks to App Store Connect
 
 - **Token:** an ES256 JWT (`aud` `appstoreconnect-v1`, about 20 minutes), signed with `openssl`.

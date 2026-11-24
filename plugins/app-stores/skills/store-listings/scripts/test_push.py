@@ -741,6 +741,124 @@ class HelperTests(unittest.TestCase):
 
 
 @unittest.skipUnless(OPENSSL, "openssl isn't on PATH")
+class AppleCreativeTests(PushCase):
+    """The product page header and search results asset: Asset Library images placed on the version localization."""
+
+    PLACEMENTS = ("GET /v1/appStoreVersionLocalizations/loc-ios-en/placements?filter[placementType]="
+                  "APP_STORE_SEARCH_RESULTS_ASSET,PRODUCT_PAGE_HEADER_ASSET&include=image"
+                  "&fields[appAssetLibraryImages]=fileName,fileSize,referenceName,state&limit=50")
+
+    def setUp(self):
+        super().setUp()
+        content = b"\x89PNG\r\n\x1a\n" + b"universal-art" * 64
+        self.sha = hashlib.sha256(content).hexdigest()
+        data = self.listing()
+        creative = {}
+        for ptype in ("PRODUCT_PAGE_HEADER_ASSET", "APP_STORE_SEARCH_RESULTS_ASSET"):
+            rel = "apple/IOS/creative/en-US/%s.png" % ptype
+            os.makedirs(os.path.dirname(os.path.join(self.out, rel)), exist_ok=True)
+            with open(os.path.join(self.out, rel), "wb") as f:
+                f.write(content)
+            creative[ptype] = {"file": rel, "md5": hashlib.md5(content).hexdigest(), "sha256": self.sha,
+                               "size": len(content), "placementGroup": "DEFAULT_PROFILE", "name": "spring-art.png"}
+        data["apple"]["platforms"]["IOS"]["creative"] = {"en-US": creative}
+        self.write_listing(data)
+        self.store.routes.update({
+            self.PLACEMENTS: {"body": {"data": []}},
+            "GET /v1/apps/1234567890/assetLibrary": {"body": {"data": {"type": "appAssetLibraries", "id": "lib-1"}}},
+            "GET /v1/appAssetLibraries/lib-1/images?*": {"body": {"data": []}},
+            "POST /v1/appAssetLibraryImages": {"$reserve": "appAssetLibraryImages"},
+            "PATCH /v1/appAssetLibraryImages/*": {"$echo": True},
+            "GET /v1/appAssetLibraryImages/*": {"body": {"data": {"type": "appAssetLibraryImages", "id": "x",
+                                                                   "attributes": {"state": "COMPLETE"}}}},
+            "POST /v1/appAssetLibraryPlacements": {"status": 201, "body": {"data": {"type": "appAssetLibraryPlacements",
+                                                                                  "id": "pl-new"}}},
+            "DELETE /v1/appAssetLibraryPlacements/*": {"status": 204},
+        })
+
+    def creative_actions(self, plan):
+        return [a for a in plan["actions"] if a["kind"] == "apple.creative.place"]
+
+    def test_plan_places_both(self):
+        plan, _ = self.plan("apple")
+        acts = self.creative_actions(plan)
+        self.assertEqual(sorted(a["placementType"] for a in acts),
+                         ["APP_STORE_SEARCH_RESULTS_ASSET", "PRODUCT_PAGE_HEADER_ASSET"])
+        for a in acts:
+            self.assertEqual(a["localizationId"], "loc-ios-en")
+            self.assertIsNone(a["delete"])
+            self.assertTrue(a["upload"]["referenceName"].endswith(self.sha[:12]))
+        self.assertEqual(self.store.writes(), [])
+
+    def test_the_same_image_is_unchanged_and_another_is_replaced(self):
+        self.store.routes[self.PLACEMENTS] = {"body": {
+            "data": [{"type": "appAssetLibraryPlacements", "id": "pl-h",
+                      "attributes": {"placementType": "PRODUCT_PAGE_HEADER_ASSET"},
+                      "relationships": {"image": {"data": {"type": "appAssetLibraryImages", "id": "img-ours"}}}},
+                     {"type": "appAssetLibraryPlacements", "id": "pl-s",
+                      "attributes": {"placementType": "APP_STORE_SEARCH_RESULTS_ASSET"},
+                      "relationships": {"image": {"data": {"type": "appAssetLibraryImages", "id": "img-old"}}}}],
+            "included": [{"type": "appAssetLibraryImages", "id": "img-ours",
+                          "attributes": {"referenceName": "PRODUCT_PAGE_HEADER_ASSET %s" % self.sha[:12]}},
+                         {"type": "appAssetLibraryImages", "id": "img-old",
+                          "attributes": {"referenceName": "last-season 0123456789ab"}}]}}
+        plan, _ = self.plan("apple")
+        acts = self.creative_actions(plan)
+        self.assertEqual([(a["placementType"], a["delete"]) for a in acts], [("APP_STORE_SEARCH_RESULTS_ASSET", "pl-s")])
+        self.assertTrue(any("product page header, as it is" in u for u in plan["unchanged"]))
+
+    def test_apply_sends_the_image_once_and_places_it_twice(self):
+        self.plan("apple")
+        start = len(self.store.requests)
+        code, text = self.run_push("apply", "plan-apple.json")
+        self.assertEqual(code, 0, text)
+        keys = self.store.keys(start)
+        reserves = [r for r in self.store.since(start) if r.key == "POST /v1/appAssetLibraryImages"]
+        self.assertEqual(len(reserves), 1)
+        attrs_ = reserves[0].json()["data"]["attributes"]
+        self.assertEqual(attrs_["category"], "CREATIVE_ASSETS")
+        self.assertEqual(attrs_["referenceName"], "spring-art %s" % self.sha[:12])
+        self.assertEqual(attrs_["fileName"], "spring-art.png")
+        self.assertEqual(reserves[0].json()["data"]["relationships"]["assetLibrary"]["data"]["id"], "lib-1")
+        commit = [r for r in self.store.since(start) if r.key.startswith("PATCH /v1/appAssetLibraryImages/")][0]
+        self.assertIs(commit.json()["data"]["attributes"]["uploaded"], True)
+        places = [r.json()["data"] for r in self.store.since(start) if r.key == "POST /v1/appAssetLibraryPlacements"]
+        self.assertEqual(sorted(p["attributes"]["placementType"] for p in places),
+                         ["APP_STORE_SEARCH_RESULTS_ASSET", "PRODUCT_PAGE_HEADER_ASSET"])
+        for p in places:
+            self.assertEqual(p["attributes"]["placementGroup"], "DEFAULT_PROFILE")
+            self.assertEqual(p["relationships"]["appStoreVersionLocalization"]["data"]["id"], "loc-ios-en")
+            self.assertEqual(p["relationships"]["image"]["data"]["id"], reserves and "appAssetLibraryImages-new-%d"
+                             % self.store.made)
+        self.assertLess(keys.index("POST /v1/appAssetLibraryImages"), keys.index("POST /v1/appAssetLibraryPlacements"))
+        self.assertEqual(self.store.unknown, [])
+
+    def test_apply_replaces_the_old_placement_first(self):
+        self.store.routes[self.PLACEMENTS] = {"body": {"data": [{
+            "type": "appAssetLibraryPlacements", "id": "pl-old", "attributes": {"placementType": "PRODUCT_PAGE_HEADER_ASSET"},
+            "relationships": {"image": {"data": {"type": "appAssetLibraryImages", "id": "img-old"}}}}], "included": []}}
+        self.plan("apple")
+        start = len(self.store.requests)
+        code, text = self.run_push("apply", "plan-apple.json")
+        self.assertEqual(code, 0, text)
+        reqs = self.store.since(start)
+        delete = [i for i, r in enumerate(reqs) if r.key == "DELETE /v1/appAssetLibraryPlacements/pl-old"]
+        header = [i for i, r in enumerate(reqs) if r.key == "POST /v1/appAssetLibraryPlacements"
+                  and r.json()["data"]["attributes"]["placementType"] == "PRODUCT_PAGE_HEADER_ASSET"]
+        self.assertEqual(len(delete), 1)
+        self.assertLess(delete[0], header[0])  # one a placement: the old one goes first
+
+    def test_a_refused_image_stops_before_any_placement(self):
+        self.store.routes["GET /v1/appAssetLibraryImages/*"] = {"body": {"data": {
+            "type": "appAssetLibraryImages", "id": "x", "attributes": {"state": "FAILED", "stateDetails": [{"code": "BAD"}]}}}}
+        self.plan("apple")
+        start = len(self.store.requests)
+        code, text = self.run_push("apply", "plan-apple.json")
+        self.assertNotEqual(code, 0)
+        self.assertIn("refused", text)
+        self.assertNotIn("POST /v1/appAssetLibraryPlacements", self.store.keys(start))
+
+
 class AppleKeyTests(unittest.TestCase):
     """The .p8 key as a path, its text, or base64; the token verifies with the key's public half."""
 

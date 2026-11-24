@@ -157,7 +157,10 @@ Limits and what each field may say: [words.md](words.md).
   `HH:MM:SS:FF`), and optionally `locales`: the App Store locales that platform gets, e.g. `["en-US"]` for an Apple
   TV version in English only while the iPhone one has German too (`null` or absent: every one of the store's; the
   store's primary must be among them). App Store Connect keeps each platform's listing apart, so only those are
-  checked, built and sent for it.
+  checked, built and sent for it. `creative` (iOS 27 and later): `header` and `searchResults`, each a path for every
+  locale or an object of locale to path (others fall back to the primary locale's): the product page header and the
+  search results asset, sizes in [apple.md](apple.md#creative-assets-product-page-header-search-results). A
+  universal 5244×2950 PNG can be both: name the same file twice.
 - `keep`: slots whose pictures stay as the App Store has them, by display type (`["APP_IPHONE_61"]`). They're still
   checked and previewed; `push.py plan` leaves them alone. `listing.py import --from live` sets it for the slots it
   filled with the App Store's own copies (re-encoded, not the uploads: everything a public pull downloaded, and App

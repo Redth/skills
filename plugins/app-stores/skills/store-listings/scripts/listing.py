@@ -94,6 +94,54 @@ def config_finding(rule_id, where, message, severity="error"):
     return rules.Finding(rule_id, severity, where, message, None, "verified")
 
 
+def _fits_spec(w, h, spec):
+    """True when a picture of ``w`` x ``h`` is one of a creative spec's sizes, or in its range at its aspect."""
+    if [w, h] in [list(x) for x in spec.get("sizes") or []]:
+        return True
+    rng = spec.get("range")
+    if not rng:
+        return False
+    (lw, lh), (hw, hh) = rng["min"], rng["max"]
+    if not (lw <= w <= hw and lh <= h <= hh):
+        return False
+    aspect = spec.get("aspect")
+    if aspect:
+        a, b = (int(x) for x in aspect.split(":"))
+        return w * b == h * a
+    return True
+
+
+def _spec_text(spec):
+    """A creative spec in words: ``3840x1646 (21:9)``, ``1920x1280 to 3840x2560 (3:2)``."""
+    if spec.get("sizes"):
+        size = " or ".join("%dx%d" % tuple(x) for x in spec["sizes"])
+    else:
+        size = "%dx%d to %dx%d" % tuple(spec["range"]["min"] + spec["range"]["max"])
+    extra = ", " + spec["name"] if spec.get("name") == "universal" else ""
+    return "%s (%s%s)" % (size, spec.get("aspect") or "", extra)
+
+
+CREATIVE_KEYS = ("header", "searchResults")
+
+
+def creative_rules():
+    """Apple's creative asset section of the rules data (placements and specs), or ``{}``."""
+    try:
+        return jsonio.load(os.path.join(RULES_DIR, "apple.json")).get("creative") or {}
+    except (jsonio.JsonError, OSError):
+        return {}
+
+
+def creative_file(listing, platform, key, locale):
+    """The file a platform's ``creative.<key>`` names for a locale (one path for every locale, or a path per locale
+    falling back to the config's primary locale's), or ``None``."""
+    value = ((listing.store("apple").get("platforms") or {}).get(platform) or {}).get("creative") or {}
+    value = value.get(key)
+    if isinstance(value, dict):
+        return value.get(locale) or value.get(listing.data.get("primaryLocale"))
+    return value or None
+
+
 def _missing(value):
     """True for a value a ``required`` rule counts as absent: null, empty or blank text, an empty list or object."""
     if value is None:
@@ -751,6 +799,11 @@ def _store_files(listing, store):
             for screen, items in (a["platforms"][p].get("previews") or {}).items():
                 for i, item in enumerate(items):
                     out.append(("stores.apple.platforms.%s.previews.%s[%d]" % (p, screen, i), item.get("file")))
+            for key, value in ((a["platforms"][p].get("creative") or {}).items()):
+                if key.startswith("$"):
+                    continue
+                for loc, rel in (value.items() if isinstance(value, dict) else [(None, value)]):
+                    out.append(("stores.apple.platforms.%s.creative.%s%s" % (p, key, "." + loc if loc else ""), rel))
     else:
         g = listing.store("google")
         if g.get("dataSafetyCsv"):
@@ -991,6 +1044,8 @@ class StoreCheck:
         else:
             self.assign_google()
         self.field_fallbacks()
+        if self.store == "apple":
+            self.check_creative()
         for pic in self.unreadable:
             self.report.add(self.store, config_finding("config.files", pic.rel, pic.error))
         folder = (self.listing.data.get("screenshots") or {}).get("folder") or "screenshots"
@@ -1388,6 +1443,53 @@ class StoreCheck:
                 out.append(rules.finding(rule, pic.rel, "is %d bytes; %s takes at most %d" % (
                     n, pic.slot, rule.get("maxBytes"))))
         return out
+
+    # -- creative assets (Apple) -----------------------------------------------------------------------
+
+    def check_creative(self):
+        """The product page header and search results asset: each file's size against Apple's specs for its
+        placement, its format, no alpha, its bytes (rules data ``creative``)."""
+        cr = creative_rules()
+        if not cr:
+            return
+        placements, specs = cr.get("placements") or {}, cr.get("specs") or []
+        seen = set()
+        for platform in self.listing.apple_platforms():
+            for loc in self.platform_locales(platform):
+                for key in CREATIVE_KEYS:
+                    rel = creative_file(self.listing, platform, key, loc)
+                    if not rel or (rel, key) in seen:
+                        continue
+                    seen.add((rel, key))
+                    path = self.listing.abspath(rel)
+                    if not os.path.isfile(path):
+                        continue  # config.files reports it
+                    name = (placements.get(key) or {}).get("name") or key
+                    try:
+                        info = png.info(path)
+                    except png.ImageError as e:
+                        self._creative(cr, "apple.creative.format", rel, "isn't a PNG or JPEG (%s)" % e)
+                        continue
+                    mine = [sp for sp in specs if key in (sp.get("placements") or [])]
+                    fit = next((sp for sp in mine if _fits_spec(info.width, info.height, sp)), None)
+                    if fit is None:
+                        self._creative(cr, "apple.creative.size", rel, "is %dx%d; the %s takes %s" % (
+                            info.width, info.height, name, " or ".join(_spec_text(sp) for sp in mine)))
+                        continue
+                    if info.format not in (fit.get("formats") or []):
+                        self._creative(cr, "apple.creative.format", rel, "is a %s; the %s at %s takes %s" % (
+                            info.format.upper(), name, _spec_text(fit),
+                            " or ".join(f.upper() for f in fit.get("formats") or [])))
+                    if cr.get("alpha") is False and info.has_alpha:
+                        self._creative(cr, "apple.creative.alpha", rel, "has an alpha channel or transparency, which "
+                                       "the %s doesn't take: save it without alpha" % name)
+                    if cr.get("maxBytes") and os.path.getsize(path) > cr["maxBytes"]:
+                        self._creative(cr, "apple.creative.bytes", rel, "is %d bytes; the %s takes at most %d" % (
+                            os.path.getsize(path), name, cr["maxBytes"]))
+
+    def _creative(self, cr, rule_id, where, message):
+        self.report.add(self.store, rules.Finding(rule_id, "error", where, message, cr.get("source"),
+                                                  cr.get("status") or "verified"))
 
     # -- previews (Apple) ------------------------------------------------------------------------------
 
@@ -1815,8 +1917,23 @@ def build_apple(listing, check, out):
             entry["mime"] = VIDEO_MIME.get(os.path.splitext(dst)[1].lower(), "application/octet-stream")
             for code in plat_codes.values():
                 previews.setdefault(code, collections.OrderedDict()).setdefault(ptype, []).append(entry)
+        creative = collections.OrderedDict()  # locale code -> placementType -> file entry
+        placements = creative_rules().get("placements") or {}
+        for loc, code in plat_codes.items():
+            for key in CREATIVE_KEYS:
+                rel = creative_file(listing, platform, key, loc)
+                ptype = (placements.get(key) or {}).get("placementType")
+                src = listing.abspath(rel) if rel else None
+                if not ptype or not src or not os.path.isfile(src):
+                    continue
+                dst = os.path.join(base, "creative", code, "%s%s" % (ptype, os.path.splitext(src)[1].lower()))
+                _copy(src, dst)
+                entry = _file_entry(out, dst)
+                entry["placementGroup"] = (placements.get(key) or {}).get("placementGroup")
+                entry["name"] = os.path.basename(src)  # the Asset Library shows it
+                creative.setdefault(code, collections.OrderedDict())[ptype] = entry
         platforms[platform] = collections.OrderedDict([
-            ("localizations", locs), ("screenshots", shots), ("previews", previews)])
+            ("localizations", locs), ("screenshots", shots), ("previews", previews), ("creative", creative)])
     manifest["platforms"] = platforms
     review = a.get("review") or {}
     manifest["review"] = collections.OrderedDict([
