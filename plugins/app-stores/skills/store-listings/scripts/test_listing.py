@@ -661,6 +661,7 @@ class Build(Builds):
         self.assertEqual(creative["PRODUCT_PAGE_HEADER_ASSET"]["file"],
                          "apple/IOS/creative/en-US/PRODUCT_PAGE_HEADER_ASSET.png")
         self.assertEqual(creative["PRODUCT_PAGE_HEADER_ASSET"]["placementGroup"], "DEFAULT_PROFILE")
+        self.assertEqual(creative["PRODUCT_PAGE_HEADER_ASSET"]["name"], "header-5244x2950.png")
         self.assertIn("de-DE", m["apple"]["platforms"]["IOS"]["creative"])  # one file for every locale
 
     def test_creative_wrong_size_and_alpha_are_errors(self):

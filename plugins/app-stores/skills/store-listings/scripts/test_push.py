@@ -760,7 +760,7 @@ class AppleCreativeTests(PushCase):
             with open(os.path.join(self.out, rel), "wb") as f:
                 f.write(content)
             creative[ptype] = {"file": rel, "md5": hashlib.md5(content).hexdigest(), "sha256": self.sha,
-                               "size": len(content), "placementGroup": "DEFAULT_PROFILE"}
+                               "size": len(content), "placementGroup": "DEFAULT_PROFILE", "name": "spring-art.png"}
         data["apple"]["platforms"]["IOS"]["creative"] = {"en-US": creative}
         self.write_listing(data)
         self.store.routes.update({
@@ -817,7 +817,8 @@ class AppleCreativeTests(PushCase):
         self.assertEqual(len(reserves), 1)
         attrs_ = reserves[0].json()["data"]["attributes"]
         self.assertEqual(attrs_["category"], "CREATIVE_ASSETS")
-        self.assertTrue(attrs_["referenceName"].endswith(self.sha[:12]))
+        self.assertEqual(attrs_["referenceName"], "spring-art %s" % self.sha[:12])
+        self.assertEqual(attrs_["fileName"], "spring-art.png")
         self.assertEqual(reserves[0].json()["data"]["relationships"]["assetLibrary"]["data"]["id"], "lib-1")
         commit = [r for r in self.store.since(start) if r.key.startswith("PATCH /v1/appAssetLibraryImages/")][0]
         self.assertIs(commit.json()["data"]["attributes"]["uploaded"], True)

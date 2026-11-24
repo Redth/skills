@@ -972,7 +972,7 @@ CREATIVE_DONE = ("COMPLETE", "PREPARE_FOR_SUBMISSION", "READY_FOR_REVIEW", "WAIT
 def creative_reference(entry):
     """The Asset Library name an image gets: its file's name and the start of its SHA-256, which is how a later
     plan knows the store's image is this file (the library keeps no checksum)."""
-    stem = os.path.splitext(os.path.basename(entry["file"]))[0]
+    stem = os.path.splitext(entry.get("name") or os.path.basename(entry["file"]))[0]
     return "%s %s" % (stem, entry["sha256"][:12])
 
 
@@ -1000,7 +1000,8 @@ def _apple_creative(client, listing, app_id, platform, locale, loc_id, made_by, 
             plan.unchanged.append("%s %s %s, as it is" % (platform, locale, name))
             continue
         upload = {"file": entry["file"], "size": os.path.getsize(listing.file(entry["file"])),
-                  "sha256": listing.checked(entry, "sha256"), "referenceName": ref}
+                  "sha256": listing.checked(entry, "sha256"), "referenceName": ref,
+                  "name": entry.get("name") or os.path.basename(entry["file"])}
         extra = {"appId": app_id, "localizationId": loc_id, "placementType": ptype,
                  "placementGroup": entry.get("placementGroup") or "DEFAULT_PROFILE", "upload": upload,
                  "delete": current["id"] if current else None}
@@ -1120,7 +1121,7 @@ class AppleApplier(object):
         path = self.listing.file(up["file"])
         reserved = c.call("POST", "/v1/appAssetLibraryImages", resource(
             "appAssetLibraryImages", None,
-            {"category": "CREATIVE_ASSETS", "fileName": os.path.basename(path), "fileSize": up["size"],
+            {"category": "CREATIVE_ASSETS", "fileName": up.get("name") or os.path.basename(path), "fileSize": up["size"],
              "referenceName": up["referenceName"]},
             {"assetLibrary": to("appAssetLibraries", lib)}))
         data = reserved["data"]

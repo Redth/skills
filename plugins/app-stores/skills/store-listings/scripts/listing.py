@@ -1930,6 +1930,7 @@ def build_apple(listing, check, out):
                 _copy(src, dst)
                 entry = _file_entry(out, dst)
                 entry["placementGroup"] = (placements.get(key) or {}).get("placementGroup")
+                entry["name"] = os.path.basename(src)  # the Asset Library shows it
                 creative.setdefault(code, collections.OrderedDict())[ptype] = entry
         platforms[platform] = collections.OrderedDict([
             ("localizations", locs), ("screenshots", shots), ("previews", previews), ("creative", creative)])
