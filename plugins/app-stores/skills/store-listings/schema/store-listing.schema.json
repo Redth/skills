@@ -321,6 +321,13 @@
     },
     "categoryId": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
     "categoryIds": { "type": "array", "maxItems": 2, "uniqueItems": true, "items": { "$ref": "#/$defs/categoryId" } },
+    "creativeFile": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1 },
+        { "type": "object", "minProperties": 1, "additionalProperties": false, "patternProperties": { "^[a-z]{2,3}(-[A-Za-z0-9]+)*$": { "type": "string", "minLength": 1 } } }
+      ]
+    },
     "applePlatform": {
       "anyOf": [
         { "type": "null" },
@@ -332,6 +339,16 @@
             "$comment": { "type": "string" },
             "screens": { "$comment": "The screens whose pictures this platform uses.", "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/name" } },
             "locales": { "$comment": "The App Store locales this platform gets (each one of the store's); null or absent: every one. App Store Connect keeps a version's listing per platform, so one can have fewer languages.", "$ref": "#/$defs/storeLocales" },
+            "creative": {
+              "$comment": "The App Store's creative assets (iOS 27 and later), sent through the App Asset Library: the product page header (3840x1646, 21:9, PNG) and the search results asset (3:2, 1920x1280 to 3840x2560, PNG or JPEG); a universal 5244x2950 PNG (16:9) goes in either. Each is a path for every locale, or an object of locale -> path (others fall back to the primary locale's). Optional: without a search results asset the store shows screenshots and previews there.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "$comment": { "type": "string" },
+                "header": { "$ref": "#/$defs/creativeFile" },
+                "searchResults": { "$ref": "#/$defs/creativeFile" }
+              }
+            },
             "previews": {
               "$comment": "App previews per screen, up to 3 each.",
               "type": "object",

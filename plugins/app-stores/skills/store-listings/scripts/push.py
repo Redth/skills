@@ -777,6 +777,13 @@ def _apple_platform(client, listing, A, app_section, app_id, platform, P, option
         for locale in sorted(slots):
             loc_id, made_by = loc_ids[locale]
             _apple_assets(client, listing, asset, platform, locale, loc_id, made_by, slots[locale] or {}, plan, seen)
+    creative = P.get("creative") or {}
+    for locale in sorted(creative):
+        if locale not in loc_ids:
+            theirs = locs.get(locale)
+            loc_ids[locale] = (theirs["id"], None) if theirs else (None, None)
+        loc_id, made_by = loc_ids[locale]
+        _apple_creative(client, listing, app_id, platform, locale, loc_id, made_by, creative[locale] or {}, plan, seen)
 
 
 def _apple_live_promotional_text(client, platform, P, versions, plan, seen):
@@ -956,6 +963,54 @@ def _apple_assets(client, listing, asset, platform, locale, loc_id, made_by, slo
                          items=frames, **fields)
 
 
+CREATIVE_NAMES = {"PRODUCT_PAGE_HEADER_ASSET": "product page header",
+                  "APP_STORE_SEARCH_RESULTS_ASSET": "search results asset"}
+CREATIVE_DONE = ("COMPLETE", "PREPARE_FOR_SUBMISSION", "READY_FOR_REVIEW", "WAITING_FOR_REVIEW", "IN_REVIEW",
+                 "ACCEPTED", "APPROVED")
+
+
+def creative_reference(entry):
+    """The Asset Library name an image gets: its file's name and the start of its SHA-256, which is how a later
+    plan knows the store's image is this file (the library keeps no checksum)."""
+    stem = os.path.splitext(os.path.basename(entry["file"]))[0]
+    return "%s %s" % (stem, entry["sha256"][:12])
+
+
+def _apple_creative(client, listing, app_id, platform, locale, loc_id, made_by, ours, plan, seen):
+    """The version localization's creative placements (product page header, search results asset) against ours:
+    one image and placement each; an image whose Asset Library name carries our file's hash is the same file."""
+    theirs = {}
+    if loc_id:
+        doc = client.get("/v1/appStoreVersionLocalizations/%s/placements?filter[placementType]=%s&include=image"
+                         "&fields[appAssetLibraryImages]=fileName,fileSize,referenceName,state&limit=50"
+                         % (loc_id, ",".join(sorted(CREATIVE_NAMES))), ok404=True) or {}
+        images = dict((i["id"], attrs(i)) for i in doc.get("included") or [] if i.get("type") == "appAssetLibraryImages")
+        for pl in doc.get("data") or []:
+            img = (((pl.get("relationships") or {}).get("image") or {}).get("data") or {}).get("id")
+            theirs[attrs(pl).get("placementType")] = {"id": pl["id"], "image": img,
+                                                      "name": (images.get(img) or {}).get("referenceName")}
+        seen.put("%s %s creative placements" % (platform, locale),
+                 sorted([t, v["id"], v["image"]] for t, v in theirs.items()))
+    order = list(CREATIVE_NAMES)  # the header first, as App Store Connect shows them
+    for ptype, entry in sorted(ours.items(), key=lambda kv: (order.index(kv[0]) if kv[0] in order else 9, kv[0])):
+        name = CREATIVE_NAMES.get(ptype, ptype)
+        ref = creative_reference(entry)
+        current = theirs.get(ptype)
+        if current and (current.get("name") or "").endswith(entry["sha256"][:12]):
+            plan.unchanged.append("%s %s %s, as it is" % (platform, locale, name))
+            continue
+        upload = {"file": entry["file"], "size": os.path.getsize(listing.file(entry["file"])),
+                  "sha256": listing.checked(entry, "sha256"), "referenceName": ref}
+        extra = {"appId": app_id, "localizationId": loc_id, "placementType": ptype,
+                 "placementGroup": entry.get("placementGroup") or "DEFAULT_PROFILE", "upload": upload,
+                 "delete": current["id"] if current else None}
+        if made_by:
+            extra["localizationFrom"] = made_by
+        verb = "replace the %s with %s" % (name, entry["file"]) if current else "set the %s: %s" % (name, entry["file"])
+        plan.add("apple.creative.place", verb + " (sent to the Asset Library; Apple reviews it)",
+                 platform=platform, locale=locale, **extra)
+
+
 # ------------------------------------------------------------------------------------------ Apple: applying
 
 class AppleApplier(object):
@@ -965,6 +1020,7 @@ class AppleApplier(object):
         self.client = client
         self.listing = listing
         self.created = {}
+        self.images = {}  # sha256 -> the Asset Library image sent or found this apply
 
     def run(self, action):
         kind = action["kind"]
@@ -1021,9 +1077,87 @@ class AppleApplier(object):
             for item in action["items"]:
                 c.call("PATCH", "/v1/appPreviews/%s" % item["id"],
                        resource("appPreviews", item["id"], {"previewFrameTimeCode": item["previewFrameTimeCode"]}))
+        elif kind == "apple.creative.place":
+            return self._place(action)
         else:
             raise Usage("The plan has an action this push.py doesn't know: %s." % kind)
         return "done"
+
+    def _place(self, action):
+        """Put an image in a creative placement: the Asset Library image (sent once a plan, shared by both
+        placements), processed, then the old placement out and the new one in (Apple allows one a placement)."""
+        c = self.client
+        loc_id = action.get("localizationId") or self.created.get(action.get("localizationFrom"))
+        if not loc_id:
+            raise Failure("The %s localization this action needs wasn't created." % action.get("locale"))
+        up = action["upload"]
+        image_id = self.images.get(up["sha256"])
+        sent = False
+        if not image_id:
+            lib = c.get("/v1/apps/%s/assetLibrary" % action["appId"])["data"]["id"]
+            found = c.get("/v1/appAssetLibraries/%s/images?filter[referenceName]=%s&limit=20"
+                          % (lib, urllib.parse.quote(up["referenceName"])), ok404=True) or {}
+            for img in found.get("data") or []:
+                if attrs(img).get("state") in CREATIVE_DONE:
+                    image_id = img["id"]
+                    break
+            if not image_id:
+                image_id = self._upload_library_image(lib, up)
+                sent = True
+            self.images[up["sha256"]] = image_id
+        if action.get("delete"):
+            c.call("DELETE", "/v1/appAssetLibraryPlacements/%s" % action["delete"])
+        c.call("POST", "/v1/appAssetLibraryPlacements", resource(
+            "appAssetLibraryPlacements", None,
+            {"placementType": action["placementType"], "placementGroup": action.get("placementGroup")},
+            {"image": to("appAssetLibraryImages", image_id),
+             "appStoreVersionLocalization": to("appStoreVersionLocalizations", loc_id)}))
+        return "done (%s)" % ("sent to the Asset Library" if sent else "the Asset Library's image")
+
+    def _upload_library_image(self, lib, up):
+        """Reserve an Asset Library image, send its parts, mark it uploaded, wait until Apple has processed it."""
+        c = self.client
+        path = self.listing.file(up["file"])
+        reserved = c.call("POST", "/v1/appAssetLibraryImages", resource(
+            "appAssetLibraryImages", None,
+            {"category": "CREATIVE_ASSETS", "fileName": os.path.basename(path), "fileSize": up["size"],
+             "referenceName": up["referenceName"]},
+            {"assetLibrary": to("appAssetLibraries", lib)}))
+        data = reserved["data"]
+        image_id = data["id"]
+        self._send_parts(path, attrs(data).get("uploadOperations") or [])
+        c.call("PATCH", "/v1/appAssetLibraryImages/%s" % image_id,
+               resource("appAssetLibraryImages", image_id, {"uploaded": True}))
+        say("      sent %s" % os.path.basename(path))
+        for attempt in range(max(1, 300 // POLL_SECONDS)):
+            ia = attrs((c.get("/v1/appAssetLibraryImages/%s" % image_id) or {}).get("data"))
+            state = ia.get("state")
+            if state in CREATIVE_DONE:
+                return image_id
+            if state in ("FAILED", "REJECTED"):
+                raise Failure("App Store Connect refused %s (%s): %s." % (
+                    os.path.basename(path), state, json.dumps(ia.get("stateDetails") or [])))
+            web.SLEEP(POLL_SECONDS)
+        raise Failure("App Store Connect is still processing %s after 5 minutes: plan again later (it's in the Asset "
+                      "Library as %r)." % (os.path.basename(path), up["referenceName"]))
+
+    def _send_parts(self, path, operations):
+        """Send a file's parts where Apple's upload operations say (retrying a part's 5xx, 408 and 429)."""
+        name = os.path.basename(path)
+        with open(path, "rb") as f:
+            content = f.read()
+        for op in operations:
+            url = op.get("url") or ""
+            if not url.startswith("https://"):
+                raise Failure("App Store Connect gave an upload address that isn't https: stopped.")
+            offset, length = int(op.get("offset") or 0), int(op.get("length") or 0)
+            headers = dict((h.get("name"), h.get("value")) for h in (op.get("requestHeaders") or []) if h.get("name"))
+            method = op.get("method") or "PUT"
+            res = send("Apple's upload server", method, url, headers, content[offset: offset + length],
+                       retry=True, timeout=300)
+            if res.status >= 400:
+                raise StoreError("Apple's upload server (%s, the part at %d)" % (name, offset), res.status, method,
+                                 url, res.text())
 
     def _order(self, asset, set_id, ids):
         self.client.call("PATCH", "/v1/%s/%s/relationships/%s" % (asset.sets, set_id, asset.items),

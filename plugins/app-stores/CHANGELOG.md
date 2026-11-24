@@ -248,6 +248,13 @@ All notable changes to the `app-stores` plugin's skills. The format is based on
   the value in at once and warn that the rate is left out). `references/video.md` says to use it for takes;
   `references/staging.md` says to seed again right before each capture session, as relative dates go stale.
 
+- `store-listings`: the App Store's creative assets (iOS 27): the product page header and the search results
+  asset, from `stores.apple.platforms.<P>.creative` (`header`, `searchResults`: a path, or one a locale). `check`
+  matches each file to Apple's specs (rules data `creative`, from the API's `appAssetLibraryRefData`: 3840×1646,
+  3:2 from 1920×1280 to 3840×2560, or a universal 5244×2950 PNG for both; no alpha); `build` writes them to
+  `out/apple/<P>/creative/`; `push.py` sends each file once to the Asset Library, named with its hash so a later
+  plan sees it's unchanged, waits for processing, and replaces the placements (`apple.creative.place`).
+
 ### Fixed
 - `store-listings`: the iPhone Duo goes up by API. App Store Connect has one Duo set for both postures,
   `APP_IPHONE_DUO` (screenshots, 1398×2034 and 2853×2007 mixed, up to 10) and `IPHONE_DUO` (previews), though

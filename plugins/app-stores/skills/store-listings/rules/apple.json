@@ -2480,5 +2480,100 @@
         "group": "Regional"
       }
     }
+  },
+  "creative": {
+    "$comment": "The App Store's creative assets (iOS 27 / iPadOS 27 and later): the product page header and the search results asset, one each per version localization, sent through the App Asset Library (an image, then a placement). Specs from the API's appAssetLibraryRefData and Apple's creative asset specifications page; the art safe area is where everything that must be seen goes (the rest is cropped on some devices and orientations).",
+    "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/creative-assets-specifications/",
+    "checked": "2026-11-24",
+    "status": "verified",
+    "placements": {
+      "header": {
+        "placementType": "PRODUCT_PAGE_HEADER_ASSET",
+        "placementGroup": "DEFAULT_PROFILE",
+        "name": "product page header"
+      },
+      "searchResults": {
+        "placementType": "APP_STORE_SEARCH_RESULTS_ASSET",
+        "placementGroup": "DEFAULT_PROFILE",
+        "name": "search results asset"
+      }
+    },
+    "specs": [
+      {
+        "name": "header",
+        "aspect": "21:9",
+        "sizes": [
+          [
+            3840,
+            1646
+          ]
+        ],
+        "formats": [
+          "png"
+        ],
+        "placements": [
+          "header"
+        ],
+        "safeArea": [
+          1097,
+          493,
+          1646,
+          661
+        ]
+      },
+      {
+        "name": "search results",
+        "aspect": "3:2",
+        "range": {
+          "min": [
+            1920,
+            1280
+          ],
+          "max": [
+            3840,
+            2560
+          ]
+        },
+        "formats": [
+          "png",
+          "jpeg"
+        ],
+        "placements": [
+          "searchResults"
+        ],
+        "safeArea": [
+          836,
+          765,
+          2168,
+          1030
+        ],
+        "note": "The safe area is given for the largest size, 3840x2560; scale it for a smaller one."
+      },
+      {
+        "name": "universal",
+        "aspect": "16:9",
+        "sizes": [
+          [
+            5244,
+            2950
+          ]
+        ],
+        "formats": [
+          "png"
+        ],
+        "placements": [
+          "header",
+          "searchResults"
+        ],
+        "safeArea": [
+          1921,
+          660,
+          1402,
+          962
+        ]
+      }
+    ],
+    "alpha": false,
+    "maxBytes": 524288000
   }
 }

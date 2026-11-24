@@ -13,7 +13,8 @@
     "slots": { "type": "object" },
     "categories": { "$ref": "#/$defs/categories" },
     "ageRating": { "$ref": "#/$defs/ageRating" },
-    "design": { "$ref": "#/$defs/design" }
+    "design": { "$ref": "#/$defs/design" },
+    "creative": { "$ref": "#/$defs/creative" }
   },
   "anyOf": [
     { "properties": { "store": { "const": "apple" }, "slots": { "$ref": "#/$defs/appleSlots" } } },
@@ -21,6 +22,43 @@
     { "properties": { "store": { "enum": ["amazon", "steam", "itch"] } } }
   ],
   "$defs": {
+    "creative": {
+      "$comment": "Apple's creative assets (product page header, search results): where each goes (placements: our key -> the API's placementType) and what each accepts (specs, from the API's appAssetLibraryRefData).",
+      "type": "object",
+      "required": ["source", "checked", "status", "placements", "specs", "alpha"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "source": { "$ref": "#/$defs/url" },
+        "checked": { "$ref": "#/$defs/date" },
+        "status": { "$ref": "#/$defs/status" },
+        "placements": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object", "required": ["placementType", "name"], "additionalProperties": false,
+            "properties": { "placementType": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }, "placementGroup": { "type": "string" }, "name": { "type": "string" } }
+          }
+        },
+        "specs": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "required": ["name", "formats", "placements"], "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "aspect": { "type": "string" },
+              "sizes": { "$ref": "#/$defs/sizeList" },
+              "range": { "type": "object", "required": ["min", "max"], "additionalProperties": false, "properties": { "min": { "$ref": "#/$defs/pixelSize" }, "max": { "$ref": "#/$defs/pixelSize" } } },
+              "formats": { "type": "array", "items": { "enum": ["png", "jpeg"] } },
+              "placements": { "type": "array", "items": { "type": "string" } },
+              "safeArea": { "$comment": "x, y, width, height in the spec's pixels.", "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "integer", "minimum": 0 } },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "alpha": { "type": "boolean" },
+        "maxBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
     "date": { "type": "string", "format": "date", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
     "status": {
       "$comment": "verified: the store's own page says so. observed: seen happening, not written down by the store. unverified: secondary sources only, or the store's page is silent.",
