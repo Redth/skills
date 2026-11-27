@@ -1,0 +1,10 @@
+:root {
+    --accent: #3366ff;
+    --surface: #ffffff;
+}
+
+/* #000000 in a comment doesn't count */
+.platform-macos .card { border-radius: 10px; }
+.platform-macos .button { background: #f2f2f7; }
+.platform-windows .card { border-radius: 4px; }
+#notes-list { color: var(--accent); }

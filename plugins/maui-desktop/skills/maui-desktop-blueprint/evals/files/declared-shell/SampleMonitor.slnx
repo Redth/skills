@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/SampleMonitor.Core/SampleMonitor.Core.csproj" />
+  <Project Path="src/SampleMonitor.Ui/SampleMonitor.Ui.csproj" />
+  <Project Path="src/SampleMonitor.MacOS/SampleMonitor.MacOS.csproj" />
+  <Project Path="src/SampleMonitor.Windows/SampleMonitor.Windows.csproj" />
+</Solution>

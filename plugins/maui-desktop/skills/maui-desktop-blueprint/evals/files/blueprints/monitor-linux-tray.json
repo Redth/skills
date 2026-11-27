@@ -1,0 +1,83 @@
+{
+  "$comment": "Warnings only: a tray icon and a global hotkey on Linux, start-at-login from a Flatpak, and auto-update on store-updated channels.",
+  "version": 1,
+  "confirmedByUser": false,
+  "decided": [],
+  "app": {
+    "name": "Sample Monitor",
+    "id": "com.example.samplemonitor",
+    "namespace": "SampleMonitor",
+    "kind": "monitor",
+    "existing": true
+  },
+  "platforms": {
+    "macos": {
+      "enabled": true,
+      "home": true,
+      "minimum": "14.0"
+    },
+    "windows": {
+      "enabled": true,
+      "minimum": "10.0.19041"
+    },
+    "linux": {
+      "enabled": true,
+      "desktop": "gnome"
+    },
+    "web": {
+      "enabled": true,
+      "role": "devhost"
+    }
+  },
+  "stack": {
+    "dotnet": "11.0",
+    "content": "blazor",
+    "componentLibrary": "custom",
+    "sharing": "rcl"
+  },
+  "chrome": {
+    "sidebar": {
+      "macos": "native",
+      "windows": "native",
+      "linux": "web",
+      "web": "web"
+    },
+    "toolbar": "native",
+    "menuBar": {
+      "macos": "minimal",
+      "windows": "none",
+      "linux": "none"
+    }
+  },
+  "integrations": {
+    "tray": true,
+    "closeToTray": true,
+    "launchAtLogin": true,
+    "globalHotkey": {
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    "autoUpdate": true
+  },
+  "distribution": {
+    "channels": {
+      "macos": [
+        "direct"
+      ],
+      "windows": [
+        "installer",
+        "msix"
+      ],
+      "linux": [
+        "flatpak"
+      ]
+    },
+    "signing": {
+      "macos": "available",
+      "windows": "available",
+      "linux": "none"
+    }
+  }
+}

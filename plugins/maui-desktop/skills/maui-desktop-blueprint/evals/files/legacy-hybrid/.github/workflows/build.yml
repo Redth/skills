@@ -1,0 +1,24 @@
+name: Build
+
+on: [push]
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - run: dotnet publish src/SampleNotes.MacOS -c Release
+      # Mentioned only in this comment, so it doesn't count: altool --upload
+      - run: codesign --force --options runtime --sign "$IDENTITY" "Sample Notes.app"
+      - run: xcrun notarytool submit SampleNotes.zip --wait
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: dotnet publish src/SampleNotes -c Release
+      - run: iscc build/windows/SampleNotes.iss
+      - run: winget validate --manifest winget/
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - run: dotnet publish src/SampleNotes.LinuxGtk -c Release -p:CreateDeb=true -p:CreateFlatpak=false

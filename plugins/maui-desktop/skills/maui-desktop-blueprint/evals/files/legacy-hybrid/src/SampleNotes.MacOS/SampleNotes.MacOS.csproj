@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0-macos</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <UseMaui>true</UseMaui>
+    <RootNamespace>SampleNotes</RootNamespace>
+    <ApplicationTitle>Sample Notes</ApplicationTitle>
+    <ApplicationId>com.example.samplenotes</ApplicationId>
+    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Platforms.MacOS" />
+    <PackageReference Include="Microsoft.Maui.Platforms.MacOS.BlazorWebView" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SampleNotes.Core\SampleNotes.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Shared services and static files, borrowed from the Windows head -->
+  <ItemGroup>
+    <Compile Include="..\SampleNotes\Services\*.cs" Link="Services\Shared\%(Filename)%(Extension)" />
+    <BundleResource Include="..\SampleNotes\wwwroot\**" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

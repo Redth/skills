@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SampleNotes/SampleNotes.csproj" />
+    <Project Path="src/SampleNotes.MacOS/SampleNotes.MacOS.csproj" />
+    <Project Path="src/SampleNotes.LinuxGtk/SampleNotes.LinuxGtk.csproj" />
+    <Project Path="src/SampleNotes.Core/SampleNotes.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SampleNotes.Core.Tests/SampleNotes.Core.Tests.csproj" />
+  </Folder>
+</Solution>

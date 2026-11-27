@@ -1,0 +1,810 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "desktop-blueprint.json",
+  "description": "Every decision about a .NET MAUI desktop app's shape (maui-desktop CONTRACT.md section 2). Per-platform fields take one value, or an object keyed by macos, windows, linux, web or * (every other platform).",
+  "type": "object",
+  "required": [
+    "version",
+    "confirmedByUser",
+    "decided",
+    "app",
+    "platforms"
+  ],
+  "patternProperties": {
+    "^\\$": {}
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "confirmedByUser": {
+      "type": "boolean",
+      "description": "Set only by blueprint.py confirm, on the user's own word."
+    },
+    "decided": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "Field paths the user has answered; blueprint.py questions skips them.",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z*][A-Za-z0-9_*-]*(\\.[A-Za-z*][A-Za-z0-9_*-]*)*$"
+      }
+    },
+    "app": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind"
+      ],
+      "patternProperties": {
+        "^\\$": {}
+      },
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9-]*(\\.[A-Za-z0-9][A-Za-z0-9-]*)+$",
+          "description": "Reverse-DNS application id, such as com.example.samplenotes."
+        },
+        "namespace": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+        },
+        "kind": {
+          "enum": [
+            "tool",
+            "monitor",
+            "document",
+            "launcher",
+            "dashboard"
+          ]
+        },
+        "existing": {
+          "type": "boolean"
+        }
+      }
+    },
+    "platforms": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {}
+      },
+      "additionalProperties": false,
+      "properties": {
+        "macos": {
+          "$ref": "#/$defs/desktopPlatform"
+        },
+        "windows": {
+          "$ref": "#/$defs/desktopPlatform"
+        },
+        "linux": {
+          "type": "object",
+          "required": [
+            "enabled"
+          ],
+          "patternProperties": {
+            "^\\$": {}
+          },
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "desktop": {
+              "enum": [
+                "gnome",
+                "kde",
+                "any"
+              ]
+            }
+          }
+        },
+        "web": {
+          "type": "object",
+          "required": [
+            "enabled"
+          ],
+          "patternProperties": {
+            "^\\$": {}
+          },
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "role": {
+              "enum": [
+                "devhost",
+                "product",
+                "none"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "stack": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {}
+      },
+      "additionalProperties": false,
+      "properties": {
+        "dotnet": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+$"
+        },
+        "content": {
+          "enum": [
+            "blazor",
+            "other"
+          ]
+        },
+        "componentLibrary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sharing": {
+          "enum": [
+            "rcl",
+            "links",
+            "symlinks",
+            "single",
+            "unknown"
+          ]
+        },
+        "backends": {
+          "type": "object",
+          "patternProperties": {
+            "^\\$": {}
+          },
+          "additionalProperties": false,
+          "properties": {
+            "macos": {
+              "type": "string",
+              "minLength": 1
+            },
+            "windows": {
+              "type": "string",
+              "minLength": 1
+            },
+            "linux": {
+              "type": "string",
+              "minLength": 1
+            },
+            "web": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "chrome": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {}
+      },
+      "additionalProperties": false,
+      "properties": {
+        "sidebar": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/barValue"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "macos": {
+                  "$ref": "#/$defs/barValue"
+                },
+                "windows": {
+                  "$ref": "#/$defs/barValue"
+                },
+                "linux": {
+                  "$ref": "#/$defs/barValue"
+                },
+                "web": {
+                  "$ref": "#/$defs/barValue"
+                },
+                "*": {
+                  "$ref": "#/$defs/barValue"
+                }
+              },
+              "patternProperties": {
+                "^\\$": {}
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "toolbar": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/barValue"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "macos": {
+                  "$ref": "#/$defs/barValue"
+                },
+                "windows": {
+                  "$ref": "#/$defs/barValue"
+                },
+                "linux": {
+                  "$ref": "#/$defs/barValue"
+                },
+                "web": {
+                  "$ref": "#/$defs/barValue"
+                },
+                "*": {
+                  "$ref": "#/$defs/barValue"
+                }
+              },
+              "patternProperties": {
+                "^\\$": {}
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "search": {
+          "enum": [
+            "toolbar",
+            "content",
+            "none"
+          ]
+        },
+        "menuBar": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/menuBarValue"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "macos": {
+                  "$ref": "#/$defs/menuBarValue"
+                },
+                "windows": {
+                  "$ref": "#/$defs/menuBarValue"
+                },
+                "linux": {
+                  "$ref": "#/$defs/menuBarValue"
+                },
+                "web": {
+                  "$ref": "#/$defs/menuBarValue"
+                },
+                "*": {
+                  "$ref": "#/$defs/menuBarValue"
+                }
+              },
+              "patternProperties": {
+                "^\\$": {}
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "dialogs": {
+          "enum": [
+            "native-frame",
+            "web",
+            "mixed"
+          ]
+        },
+        "settings": {
+          "enum": [
+            "window",
+            "dialog",
+            "page"
+          ]
+        },
+        "commandPalette": {
+          "type": "boolean"
+        },
+        "multiWindow": {
+          "type": "boolean"
+        }
+      }
+    },
+    "look": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {}
+      },
+      "additionalProperties": false,
+      "properties": {
+        "fidelity": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/fidelityValue"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "macos": {
+                  "$ref": "#/$defs/fidelityValue"
+                },
+                "windows": {
+                  "$ref": "#/$defs/fidelityValue"
+                },
+                "linux": {
+                  "$ref": "#/$defs/fidelityValue"
+                },
+                "web": {
+                  "$ref": "#/$defs/fidelityValue"
+                },
+                "*": {
+                  "$ref": "#/$defs/fidelityValue"
+                }
+              },
+              "patternProperties": {
+                "^\\$": {}
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "accent": {
+          "enum": [
+            "brand",
+            "platform",
+            "system"
+          ]
+        },
+        "theme": {
+          "enum": [
+            "system",
+            "system-with-override"
+          ]
+        },
+        "density": {
+          "type": "boolean"
+        }
+      }
+    },
+    "integrations": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {}
+      },
+      "additionalProperties": false,
+      "properties": {
+        "tray": {
+          "description": "A tray or menu-bar icon.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "$ref": "#/$defs/platformList"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "closeToTray": {
+          "description": "Keep running when the window closes.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "$ref": "#/$defs/platformList"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "launchAtLogin": {
+          "description": "Start at login.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "$ref": "#/$defs/platformList"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "notifications": {
+          "description": "OS notifications.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "$ref": "#/$defs/platformList"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "badge": {
+          "description": "A dock or taskbar badge.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "$ref": "#/$defs/platformList"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "progress": {
+          "description": "Progress on the dock or taskbar icon.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "$ref": "#/$defs/platformList"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "singleInstance": {
+          "description": "One running copy; a second launch hands over to it.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "$ref": "#/$defs/platformList"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "deepLinks": {
+          "description": "A URL scheme the app opens; needs scheme.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "$ref": "#/$defs/platformList"
+                },
+                "scheme": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "fileTypes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fileType"
+          },
+          "description": "File types the app opens (empty: none)."
+        },
+        "globalHotkey": {
+          "description": "A system-wide shortcut.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "$ref": "#/$defs/platformList"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "contextMenus": {
+          "enum": [
+            "web",
+            "native"
+          ]
+        },
+        "fileDrop": {
+          "description": "Files dropped on the window.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "$ref": "#/$defs/platformList"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "windowState": {
+          "description": "Remember window size and position.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "$ref": "#/$defs/platformList"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "autoUpdate": {
+          "description": "The app updates itself.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "$ref": "#/$defs/platformList"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        }
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {}
+      },
+      "additionalProperties": false,
+      "properties": {
+        "channels": {
+          "type": "object",
+          "properties": {
+            "macos": {
+              "$ref": "#/$defs/channelList"
+            },
+            "windows": {
+              "$ref": "#/$defs/channelList"
+            },
+            "linux": {
+              "$ref": "#/$defs/channelList"
+            },
+            "*": {
+              "$ref": "#/$defs/channelList"
+            }
+          },
+          "patternProperties": {
+            "^\\$": {}
+          },
+          "additionalProperties": false
+        },
+        "signing": {
+          "type": "object",
+          "properties": {
+            "macos": {
+              "$ref": "#/$defs/signingValue"
+            },
+            "windows": {
+              "$ref": "#/$defs/signingValue"
+            },
+            "linux": {
+              "$ref": "#/$defs/signingValue"
+            },
+            "*": {
+              "$ref": "#/$defs/signingValue"
+            }
+          },
+          "patternProperties": {
+            "^\\$": {}
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "engineering": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {}
+      },
+      "additionalProperties": false,
+      "properties": {
+        "devHost": {
+          "type": "boolean"
+        },
+        "gallery": {
+          "type": "boolean"
+        },
+        "devflow": {
+          "type": "boolean"
+        },
+        "crashReporting": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accessibility": {
+          "enum": [
+            "wcag-aa",
+            "wcag-aaa",
+            "none"
+          ]
+        },
+        "locales": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+          }
+        }
+      }
+    },
+    "decisionsLog": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "desktopPlatform": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "patternProperties": {
+        "^\\$": {}
+      },
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "home": {
+          "type": "boolean"
+        },
+        "minimum": {
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+){0,3}$"
+        }
+      }
+    },
+    "platformList": {
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 1,
+      "items": {
+        "enum": [
+          "macos",
+          "windows",
+          "linux",
+          "web"
+        ]
+      }
+    },
+    "barValue": {
+      "enum": [
+        "native",
+        "web",
+        "none"
+      ]
+    },
+    "menuBarValue": {
+      "enum": [
+        "none",
+        "minimal",
+        "standard",
+        "full"
+      ]
+    },
+    "fidelityValue": {
+      "enum": [
+        "unified",
+        "adaptive",
+        "native-faithful"
+      ]
+    },
+    "signingValue": {
+      "enum": [
+        "available",
+        "later",
+        "none"
+      ]
+    },
+    "channelList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "direct",
+          "homebrew",
+          "mac-app-store",
+          "installer",
+          "winget",
+          "msix",
+          "microsoft-store",
+          "deb",
+          "rpm",
+          "flatpak",
+          "appimage",
+          "snap"
+        ]
+      }
+    },
+    "fileType": {
+      "type": "object",
+      "required": [
+        "extension"
+      ],
+      "patternProperties": {
+        "^\\$": {}
+      },
+      "additionalProperties": false,
+      "properties": {
+        "extension": {
+          "type": "string",
+          "pattern": "^\\.[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "role": {
+          "enum": [
+            "editor",
+            "viewer"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+@page "/status"
+
+<p class="status">All checks passing.</p>
+
+@code {
+    static PageChrome Chrome => new("Status", new[] { new ChromeAction("refresh", "Refresh", "refresh") });
+
+    Task ClearAsync() => Shell.ShowDialogAsync(new DialogRequest("Clear history?", "This can't be undone."));
+}

@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "confirmedByUser": false,
+  "decided": [
+    "platforms",
+    "chrome.sidebar"
+  ],
+  "app": {
+    "name": "Sample Notes",
+    "id": "com.example.samplenotes",
+    "namespace": "SampleNotes",
+    "kind": "tool",
+    "existing": true
+  },
+  "platforms": {
+    "macos": {
+      "enabled": true,
+      "home": true,
+      "minimum": "14.0"
+    },
+    "windows": {
+      "enabled": true,
+      "minimum": "10.0.19041"
+    },
+    "linux": {
+      "enabled": false
+    },
+    "web": {
+      "enabled": true,
+      "role": "devhost"
+    }
+  },
+  "stack": {
+    "dotnet": "11.0",
+    "content": "blazor",
+    "componentLibrary": "custom",
+    "sharing": "rcl",
+    "backends": {
+      "macos": "Microsoft.Maui.Platforms.MacOS 0.1.0-preview.16.26575.3",
+      "windows": "Microsoft.Maui.Controls 11.0.10"
+    }
+  },
+  "chrome": {
+    "sidebar": {
+      "macos": "native",
+      "windows": "native",
+      "linux": "web"
+    },
+    "toolbar": "native",
+    "search": "toolbar",
+    "menuBar": {
+      "macos": "none",
+      "windows": "none"
+    },
+    "dialogs": "native-frame",
+    "settings": "dialog",
+    "commandPalette": true,
+    "multiWindow": false
+  },
+  "look": {
+    "fidelity": "adaptive",
+    "accent": "brand",
+    "theme": "system-with-override",
+    "density": false
+  },
+  "integrations": {
+    "tray": false,
+    "closeToTray": false,
+    "launchAtLogin": false,
+    "notifications": true,
+    "badge": false,
+    "progress": true,
+    "singleInstance": true,
+    "deepLinks": {
+      "scheme": "Sample Notes"
+    },
+    "fileTypes": [
+      {
+        "extension": ".samplenote",
+        "role": "editor"
+      }
+    ],
+    "globalHotkey": false,
+    "contextMenus": "web",
+    "fileDrop": true,
+    "windowState": true,
+    "autoUpdate": true
+  },
+  "distribution": {
+    "channels": {
+      "macos": [
+        "direct"
+      ],
+      "windows": [
+        "installer"
+      ]
+    },
+    "signing": {
+      "macos": "available",
+      "windows": "later"
+    }
+  },
+  "engineering": {
+    "devHost": true,
+    "gallery": true,
+    "devflow": true,
+    "crashReporting": "none",
+    "accessibility": "wcag-aa",
+    "locales": [
+      "en"
+    ]
+  },
+  "decisionsLog": "docs/desktop/decisions.md",
+  "$comment": "Three consistency errors: a macOS menu bar of none, deep links without a usable scheme, and a per-platform key for Linux, which is disabled."
+}

@@ -1,0 +1,31 @@
+<Project>
+
+  <!-- Explicit SDK imports, so the head can be inert where it can't build. -->
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk.Razor" />
+
+  <PropertyGroup Condition="!$([MSBuild]::IsOSPlatform('osx'))">
+    <TargetFramework>net11.0</TargetFramework>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx'))">
+    <TargetFramework>net11.0-macos</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <UseMaui>true</UseMaui>
+    <RootNamespace>SampleMonitor.MacOS</RootNamespace>
+    <ApplicationTitle>Sample Monitor</ApplicationTitle>
+    <ApplicationId>com.example.samplemonitor</ApplicationId>
+    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Platforms.MacOS" Version="0.1.0-preview.16.26575.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../SampleMonitor.Ui/SampleMonitor.Ui.csproj" />
+    <ProjectReference Include="../SampleMonitor.Core/SampleMonitor.Core.csproj" />
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk.Razor" />
+
+</Project>

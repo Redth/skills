@@ -103,3 +103,9 @@ jobs:
           path: plugins/app-stores/skills/store-capture
           fail-on-warning: "false"
           validate-references: "true"
+      - name: Lint maui-desktop's maui-desktop-blueprint SKILL.md
+        uses: Flash-Brew-Digital/validate-skill@v1
+        with:
+          path: plugins/maui-desktop/skills/maui-desktop-blueprint
+          fail-on-warning: "false"
+          validate-references: "true"

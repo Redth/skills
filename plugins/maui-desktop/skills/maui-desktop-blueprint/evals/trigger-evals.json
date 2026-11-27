@@ -1,0 +1,21 @@
+[
+  { "query": "We're starting a cross-platform desktop app with .NET MAUI and Blazor for Mac, Windows and Linux. How should we structure it?", "should_trigger": true },
+  { "query": "Should our MAUI app's sidebar be native or web on Linux?", "should_trigger": true },
+  { "query": "Plan the native versus web split for our MAUI Blazor Hybrid desktop app.", "should_trigger": true },
+  { "query": "Review our MAUI desktop app's architecture and tell us what to change first.", "should_trigger": true },
+  { "query": "We want a menu-bar icon, notifications and launch at login in our MAUI desktop app. Is that a good idea on all three platforms?", "should_trigger": true },
+  { "query": "What desktop features should our .NET MAUI developer tool add? Tray, deep links, single instance?", "should_trigger": true },
+  { "query": "Add Linux support to our Mac and Windows MAUI app: what do we need to decide?", "should_trigger": true },
+  { "query": "Should our MAUI app use native dialogs or web dialogs?", "should_trigger": true },
+  { "query": "Interview me about how our new MAUI desktop app should look and behave on each OS.", "should_trigger": true },
+  { "query": "Do we want our Blazor Hybrid content to look different on macOS and Windows, or the same everywhere?", "should_trigger": true },
+  { "query": "Write a desktop-blueprint.json for our app.", "should_trigger": true },
+  { "query": "Create a design language and color tokens for our MAUI desktop app.", "should_trigger": false },
+  { "query": "Generate tokens.css and Tokens.g.cs from our design tokens file.", "should_trigger": false },
+  { "query": "Fix this NETSDK1005 error when building our MAUI Android app.", "should_trigger": false },
+  { "query": "Set up our App Store listing and screenshots.", "should_trigger": false },
+  { "query": "Build an Electron app with a system tray.", "should_trigger": false },
+  { "query": "Add a page to our MAUI iOS app with a CollectionView.", "should_trigger": false },
+  { "query": "Notarize and sign our macOS app in GitHub Actions.", "should_trigger": false },
+  { "query": "Debug why our Blazor WebView shows a blank page using DevFlow.", "should_trigger": false }
+]

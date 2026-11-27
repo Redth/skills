@@ -1,0 +1,21 @@
+@page "/notes"
+
+<a href="#top">Back to top</a>
+<p>Fixed in issue #123.</p>
+<p style="color: #c00">Unsaved changes</p>
+
+@if (confirming)
+{
+    <div class="modal-overlay">
+        <div class="modal">Delete this note?</div>
+    </div>
+}
+
+<style>
+    .modal-overlay { background: #00000080; }
+    .note-title { color: #333; }
+</style>
+
+@code {
+    bool confirming;
+}
