@@ -34,11 +34,12 @@
     },
     {
       "name": "maui-desktop",
-      "description": "Build a desktop app for macOS, Windows and Linux with .NET MAUI: native controls where the look and feel matters most (window, sidebar, toolbar, menus, dialog frames, tray), Blazor Hybrid content everywhere else, and no seams between them. Reads an existing project first, interviews the user in one message with a proposed answer for every question (platforms, native or web per surface, dialogs, per-platform look, tray, notifications, deep links, updates, distribution), records the decisions with reasons and a gap report. The skills teach structure; they never paste template code into the app. Stdlib Python on macOS, Linux and Windows; no network.",
+      "description": "Build a desktop app for macOS, Windows and Linux with .NET MAUI: native controls where the look and feel matters most (window, sidebar, toolbar, menus, dialog frames, tray), Blazor Hybrid content everywhere else, and no seams between them. Reads an existing project first, interviews the user in one message with a proposed answer for every question (platforms, native or web per surface, dialogs, per-platform look, tray, notifications, deep links, updates, distribution), records the decisions with reasons and a gap report; then a design language both sides read: DESIGN.md, one tokens file generating the CSS and the C# native chrome uses, one icons file mapped to SF Symbols, Adwaita, Segoe Fluent and an SVG sprite, per-platform differences, a seam checklist, and contrast and lint gates that ratchet an existing app onto tokens. The skills teach structure; they never paste template code into the app. Stdlib Python on macOS, Linux and Windows; no network.",
       "source": "./",
       "strict": false,
       "skills": [
-        "./plugins/maui-desktop/skills/maui-desktop-blueprint"
+        "./plugins/maui-desktop/skills/maui-desktop-blueprint",
+        "./plugins/maui-desktop/skills/maui-desktop-design"
       ]
     }
   ]

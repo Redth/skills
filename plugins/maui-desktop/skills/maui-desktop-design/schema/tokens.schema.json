@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "design/tokens.json",
+  "description": "Every colour, size and duration an app uses, written once (maui-desktop CONTRACT.md section 4). Keys starting with $ are ignored, apart from a scale group's $prefix and $base.",
+  "type": "object",
+  "required": ["version", "meta", "primitives", "semantic"],
+  "properties": {
+    "version": { "const": 1 },
+    "meta": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "csharpPrefix": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+        "colorSpace": { "enum": ["oklch", "srgb"] }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": false
+    },
+    "outputs": {
+      "type": "object",
+      "properties": {
+        "css": { "$ref": "#/$defs/path" },
+        "csharp": {
+          "type": "object",
+          "required": ["path", "namespace"],
+          "properties": {
+            "path": { "$ref": "#/$defs/path" },
+            "namespace": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$" },
+            "scale": { "type": "array", "items": { "$ref": "#/$defs/name" }, "uniqueItems": true }
+          },
+          "patternProperties": { "^\\$": {} },
+          "additionalProperties": false
+        },
+        "design": { "$ref": "#/$defs/path" },
+        "macosAccent": {
+          "type": "object",
+          "required": ["path", "role"],
+          "properties": {
+            "path": { "$ref": "#/$defs/path" },
+            "role": { "$ref": "#/$defs/name" }
+          },
+          "patternProperties": { "^\\$": {} },
+          "additionalProperties": false
+        },
+        "ignored": {
+          "type": "array",
+          "items": { "enum": ["css", "csharp", "design", "macosAccent"] },
+          "uniqueItems": true
+        }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": false
+    },
+    "root": { "type": "string", "minLength": 1, "pattern": "^[^,{}]+$" },
+    "primitives": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {},
+        "^[A-Za-z0-9][A-Za-z0-9_.-]*$": { "$ref": "#/$defs/color" }
+      },
+      "additionalProperties": false
+    },
+    "semantic": {
+      "type": "object",
+      "required": ["light", "dark"],
+      "properties": {
+        "light": { "$ref": "#/$defs/roles" },
+        "dark": { "$ref": "#/$defs/roles" }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": false
+    },
+    "effects": { "$ref": "#/$defs/themedEffects" },
+    "scale": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {},
+        "^[a-z][a-z0-9-]*$": { "$ref": "#/$defs/scaleGroup" }
+      },
+      "additionalProperties": false
+    },
+    "modes": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {},
+        "^[a-z][a-z0-9-]*$": {
+          "type": "object",
+          "required": ["default", "selector", "values"],
+          "properties": {
+            "default": { "$ref": "#/$defs/name" },
+            "selector": { "type": "string", "pattern": "\\{mode\\}" },
+            "values": {
+              "type": "object",
+              "patternProperties": {
+                "^\\$": {},
+                "^[a-z][a-z0-9-]*$": {
+                  "type": "object",
+                  "patternProperties": {
+                    "^\\$": {},
+                    "^[a-z][a-z0-9-]*$": { "$ref": "#/$defs/scalar" }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "patternProperties": { "^\\$": {} },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "platforms": {
+      "type": "object",
+      "properties": {
+        "macos": { "$ref": "#/$defs/platform" },
+        "windows": { "$ref": "#/$defs/platform" },
+        "linux": { "$ref": "#/$defs/platform" },
+        "web": { "$ref": "#/$defs/platform" }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": false
+    },
+    "contrast": {
+      "type": "object",
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["fg", "bg", "min"],
+            "properties": {
+              "fg": { "$ref": "#/$defs/name" },
+              "bg": { "$ref": "#/$defs/name" },
+              "min": { "type": "number", "minimum": 1, "maximum": 21 },
+              "label": { "type": "string" }
+            },
+            "patternProperties": { "^\\$": {} },
+            "additionalProperties": false
+          }
+        },
+        "separation": {
+          "type": "object",
+          "properties": {
+            "minHueDelta": { "type": "number", "minimum": 0, "maximum": 180 },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["a", "b", "min"],
+                "properties": {
+                  "a": { "$ref": "#/$defs/name" },
+                  "b": { "$ref": "#/$defs/name" },
+                  "min": { "type": "number", "minimum": 1, "maximum": 21 },
+                  "label": { "type": "string" }
+                },
+                "patternProperties": { "^\\$": {} },
+                "additionalProperties": false
+              }
+            }
+          },
+          "patternProperties": { "^\\$": {} },
+          "additionalProperties": false
+        },
+        "exceptions": {
+          "type": "object",
+          "patternProperties": {
+            "^\\$": {},
+            "^[A-Za-z0-9][A-Za-z0-9_.-]*$": {
+              "type": "object",
+              "required": ["applies", "rule", "reason", "control"],
+              "properties": {
+                "applies": { "enum": ["light", "dark", "light+dark"] },
+                "rule": { "type": "string", "minLength": 1 },
+                "platforms": {
+                  "type": "array",
+                  "items": { "enum": ["macos", "windows", "linux", "web"] },
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "reason": { "type": "string", "minLength": 1 },
+                "control": { "type": "string", "minLength": 1 }
+              },
+              "patternProperties": { "^\\$": {} },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": false
+    },
+    "lint": {
+      "type": "object",
+      "properties": {
+        "scan": { "type": "array", "items": { "$ref": "#/$defs/path" } },
+        "extensions": { "type": "array", "items": { "type": "string", "pattern": "^\\.[A-Za-z0-9.]+$" } },
+        "skip": { "type": "array", "items": { "$ref": "#/$defs/path" } },
+        "rules": {
+          "type": "object",
+          "properties": {
+            "raw-hex": { "type": "boolean" },
+            "raw-rgb-hsl": { "type": "boolean" },
+            "raw-modern-color": { "type": "boolean" },
+            "named-color": { "type": "boolean" },
+            "px-font-size": { "type": "boolean" },
+            "magic-z-index": { "type": "boolean" },
+            "raw-radius": { "type": "boolean" },
+            "native-select": { "type": "boolean" }
+          },
+          "patternProperties": { "^\\$": {} },
+          "additionalProperties": false
+        },
+        "baseline": { "$ref": "#/$defs/path" }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": false
+    }
+  },
+  "patternProperties": { "^\\$": {} },
+  "additionalProperties": false,
+  "$defs": {
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "path": { "type": "string", "minLength": 1 },
+    "scalar": {
+      "anyOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "number" }
+      ]
+    },
+    "color": {
+      "anyOf": [
+        { "type": "string", "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$" },
+        {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 4,
+          "prefixItems": [
+            { "type": "number", "minimum": 0, "maximum": 1 },
+            { "type": "number", "minimum": 0 },
+            { "type": "number" },
+            { "type": "number", "minimum": 0, "maximum": 1 }
+          ]
+        }
+      ]
+    },
+    "roleRef": {
+      "anyOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "required": ["mix", "into", "amount"],
+          "properties": {
+            "mix": { "type": "string", "minLength": 1 },
+            "into": { "type": "string", "minLength": 1 },
+            "amount": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "patternProperties": { "^\\$": {} },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "roles": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {},
+        "^[a-z][a-z0-9-]*$": { "$ref": "#/$defs/roleRef" }
+      },
+      "additionalProperties": false
+    },
+    "effects": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {},
+        "^[a-z][a-z0-9-]*$": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "themedEffects": {
+      "type": "object",
+      "properties": {
+        "light": { "$ref": "#/$defs/effects" },
+        "dark": { "$ref": "#/$defs/effects" }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": false
+    },
+    "scaleEntry": {
+      "anyOf": [
+        { "$ref": "#/$defs/scalar" },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^\\$": {},
+            "^[a-z][a-z0-9-]*$": { "$ref": "#/$defs/scalar" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "scaleGroup": {
+      "type": "object",
+      "properties": {
+        "$prefix": { "type": "string", "pattern": "^([a-z][a-z0-9-]*)?$" },
+        "$base": { "$ref": "#/$defs/name" }
+      },
+      "patternProperties": {
+        "^\\$": {},
+        "^[a-z0-9][a-z0-9-]*$": { "$ref": "#/$defs/scaleEntry" }
+      },
+      "additionalProperties": false
+    },
+    "platformScale": {
+      "type": "object",
+      "patternProperties": {
+        "^\\$": {},
+        "^[a-z][a-z0-9-]*$": {
+          "type": "object",
+          "patternProperties": {
+            "^\\$": {},
+            "^[a-z0-9][a-z0-9-]*$": { "$ref": "#/$defs/scaleEntry" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "platform": {
+      "type": "object",
+      "properties": {
+        "attribute": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "scale": { "$ref": "#/$defs/platformScale" },
+        "semantic": {
+          "type": "object",
+          "properties": {
+            "light": { "$ref": "#/$defs/roles" },
+            "dark": { "$ref": "#/$defs/roles" }
+          },
+          "patternProperties": { "^\\$": {} },
+          "additionalProperties": false
+        },
+        "effects": { "$ref": "#/$defs/themedEffects" }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": false
+    }
+  }
+}

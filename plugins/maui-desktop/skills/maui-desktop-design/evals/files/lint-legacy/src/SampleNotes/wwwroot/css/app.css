@@ -1,0 +1,19 @@
+.toolbar {
+  background: rgba(0, 0, 0, 0.04);
+  font-size: 13px;
+  z-index: 999;
+  border-radius: var(--radius-md);
+}
+
+.overlay {
+  z-index: var(--z-overlay);
+  color: white;
+}
+
+/* Windows high contrast draws the focus ring in the system highlight.
+ * design-lint-ok: matches the system colour, not a design choice. */
+.focus-ring { outline-color: #0067c0; }
+
+.legacy { background-color: oklch(0.6 0.1 250); border-radius: 6px; }
+
+.avatar { border-radius: 50%; }

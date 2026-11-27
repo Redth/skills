@@ -21,7 +21,7 @@ template code into your app.
 | Skill | Status | What it does | Issue |
 |---|---|---|---|
 | [`maui-desktop-blueprint`](./skills/maui-desktop-blueprint/) | 0.1.0 | reads the project (`detect.py`), drafts a blueprint from defaults for the kind of app (tool, monitor, document, launcher, dashboard), interviews the user in one message, records answers with reasons in a dated decisions log, checks consistency (macOS always has a menu bar; a tray on stock GNOME; an in-app updater on a store build), and writes a gap report for an existing app | [#39](https://github.com/Redth/skills/issues/39) |
-| `maui-desktop-design` | next | the design language: `DESIGN.md` from a template, tokens with per-platform blocks and run-time overrides, generated CSS and C#, icons per platform, the seam checklist, CSS that works in WKWebView, WebView2 and WebKitGTK, contrast and lint gates with a baseline ratchet for existing apps | [#40](https://github.com/Redth/skills/issues/40) |
+| [`maui-desktop-design`](./skills/maui-desktop-design/) | 0.1.0 | the design language: `DESIGN.md` from a template, tokens with per-platform blocks and run-time overrides, generated CSS and C#, icons per platform, the seam checklist, CSS that works in WKWebView, WebView2 and WebKitGTK, contrast and lint gates with a baseline ratchet for existing apps | [#40](https://github.com/Redth/skills/issues/40) |
 | `maui-desktop-shell` | to follow | solution layout, navigation manifest, declared page chrome, commands projected to menus, shortcuts and a palette, windows, per-backend recipes | |
 | `maui-desktop-dialogs` | to follow | native frames around web bodies: a session the body drives, typed header and footer controls, presentation per platform | |
 | `maui-desktop-integrations` | to follow | tray, notifications, single instance, deep links, file types, window state, updates, per platform | |
@@ -46,7 +46,9 @@ Each works alone, and reads what the others wrote: the blueprint's decisions, th
 >
 > Should we add a tray icon and notifications? What does it cost on Linux?
 >
-> Add Linux to our Mac and Windows MAUI app: what do we need to decide?
+> Set up a design system our Blazor content and native chrome both use.
+>
+> Dark mode has a seam where our content meets the native sidebar.
 
 The usual flow:
 
@@ -58,6 +60,13 @@ python3 <blueprint>/scripts/blueprint.py set chrome.sidebar.linux=web --reason "
 python3 <blueprint>/scripts/blueprint.py check                 # contradictions and costs
 python3 <blueprint>/scripts/blueprint.py gaps                  # existing app: docs/desktop/gap-report.md
 python3 <blueprint>/scripts/blueprint.py confirm --note "the user's words"
+
+python3 <design>/scripts/tokens.py init --blueprint desktop-blueprint.json
+python3 <design>/scripts/tokens.py build                       # CSS, C#, macOS accent, DESIGN.md tables
+python3 <design>/scripts/tokens.py contrast                    # every pair, per theme and platform
+python3 <design>/scripts/icons.py init && python3 <design>/scripts/icons.py build
+python3 <design>/scripts/lint.py --write-baseline              # existing app: only new raw values fail
+python3 <design>/scripts/install.py --into build/design        # so the app's CI can run the gates
 ```
 
 ### Prerequisites

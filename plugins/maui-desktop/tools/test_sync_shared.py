@@ -51,9 +51,9 @@ class SyncTests(unittest.TestCase):
         with open(self.path(rel), encoding="utf-8") as f:
             return f.read()
 
-    def test_the_table_gives_every_skill_the_package(self):
+    def test_the_table_gives_both_skills_the_package(self):
         self.assertEqual(sync_shared.ITEMS["mauidesktop_lib"][2], ("test_*.py",))
-        self.assertEqual(sorted(sync_shared.SYNC), ["maui-desktop-blueprint"])
+        self.assertEqual(sorted(sync_shared.SYNC), ["maui-desktop-blueprint", "maui-desktop-design"])
 
     def test_sync_copies_the_package_without_tests_into_every_skill(self):
         changes = sync_shared.sync(self.root, self.table)

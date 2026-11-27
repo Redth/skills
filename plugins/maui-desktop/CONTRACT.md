@@ -10,7 +10,7 @@ frames, tray), web content (Blazor Hybrid by default) everywhere else. Six skill
 | Skill | Status | Issue |
 |---|---|---|
 | `maui-desktop-blueprint` | 0.1.0 | [#39](https://github.com/Redth/skills/issues/39) |
-| `maui-desktop-design` | next | [#40](https://github.com/Redth/skills/issues/40) |
+| `maui-desktop-design` | 0.1.0 | [#40](https://github.com/Redth/skills/issues/40) |
 | `maui-desktop-shell` | to follow | |
 | `maui-desktop-dialogs` | to follow | |
 | `maui-desktop-integrations` | to follow | |
