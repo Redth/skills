@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <MauiDesktopVersion>0.1.0-preview.16.26575.3</MauiDesktopVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="11.0.10" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="11.0.10" />
+    <PackageVersion Include="Microsoft.Maui.Platforms.MacOS" Version="$(MauiDesktopVersion)" />
+    <PackageVersion Include="Microsoft.Maui.Platforms.MacOS.BlazorWebView" Version="$(MauiDesktopVersion)" />
+    <PackageVersion Include="Microsoft.Maui.Platforms.Linux.Gtk4" Version="$(MauiDesktopVersion)" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+  </ItemGroup>
+</Project>

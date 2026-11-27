@@ -1,0 +1,76 @@
+{
+  "skill_name": "maui-desktop-blueprint",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We're starting a new desktop app called Sample Notes (com.example.samplenotes) with .NET MAUI and Blazor for Mac, Windows and Linux. It's a developer tool. Help us decide how it should be put together before we write any code. The folder is evals/files/new-app.",
+      "expected_output": "The agent runs detect.py (finding no heads), drafts a blueprint with blueprint.py init --kind tool, prints the questions, and sends the user ONE message proposing an answer for each group (sidebar/toolbar native, a standard macOS menu bar, native-frame dialogs, adaptive fidelity, notifications and progress but no tray), then stops for answers. Nothing is confirmed.",
+      "files": ["evals/files/new-app/README.md"],
+      "expectations": [
+        "The agent runs detect.py (or reads the folder) before proposing anything and reports there's no existing MAUI project",
+        "The agent writes desktop-blueprint.json with blueprint.py init, with app.kind tool and macos, windows and linux enabled",
+        "The agent asks the user in a single message, not a sequence of messages, with a proposed answer for every question group",
+        "The proposal for a tool does not turn on a tray icon, start at login or a global hotkey",
+        "The macOS menu bar is proposed as minimal, standard or full, never none",
+        "The agent explains the fidelity choice (unified, adaptive, native-faithful) and recommends adaptive",
+        "confirmedByUser stays false and decided stays empty until the user answers",
+        "No C#, Razor or project file is written"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Here's our app (evals/files/legacy-hybrid). We want to bring it onto a cleaner native-plus-web architecture without breaking it. Where are we, and what would you change first?",
+      "expected_output": "The agent runs detect.py and identifies the older generation: three heads with the UI shared by file links, an imperative toolbar service with SF Symbol names, per-head sidebars, page-subclass dialogs plus a web overlay, raw hex colours and .platform selectors. It drafts the blueprint, writes the gap report with blueprint.py gaps, and proposes an order of moves, smallest risk first, without writing app code.",
+      "files": ["evals/files/legacy-hybrid/SampleNotes.slnx"],
+      "expectations": [
+        "The agent runs detect.py against the project and reports the heads found (macOS AppKit, Windows, Linux GTK) with their backend versions",
+        "The agent identifies the UI sharing as links (not a Razor class library) and the toolbar as an imperative service whose records carry SF Symbol names",
+        "The agent identifies the dialogs as native page subclasses and notes the web overlay dialog as inconsistent with them",
+        "The agent writes docs/desktop/gap-report.md with blueprint.py gaps, with a Move size and a skill for each seam",
+        "The proposed order starts with low-risk moves (tokens, icons, navigation declared once) before moving the UI into a Razor class library or rewriting dialogs",
+        "The agent says the existing chrome works and that the app should keep shipping between moves",
+        "No C#, Razor or project file in the app is changed"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "This is Sample Monitor (evals/files/declared-shell). We want to add Linux. What do we need to decide?",
+      "expected_output": "The agent detects the newer generation (Razor class library, declared page chrome, navigation manifest, session dialogs, tokens, a tray on macOS and Windows) and asks only the Linux-specific questions: native or web sidebar and toolbar on GTK (the GTK backend has neither, so native means building them), the tray on GNOME (needs an extension; menu-only), start at login and Flatpak, global hotkey on Wayland if wanted, and the distribution channels.",
+      "files": ["evals/files/declared-shell/SampleMonitor.slnx"],
+      "expectations": [
+        "The agent reports the app as the newer generation: a Razor class library, a navigation manifest, declared page chrome and session-based dialogs",
+        "The agent reports the tray and notifications it found on macOS and Windows and infers the kind is monitor",
+        "The agent explains that the GTK backend has no native header bar or sidebar, so a native Linux sidebar and toolbar means the head builds them with GTK",
+        "The agent says a tray icon on stock GNOME needs the AppIndicator extension and that Linux tray menus can't host a popover",
+        "The agent asks which Linux distribution channels to use, says the in-app updater should be off for Flatpak or Snap, and that a deb from a package repository is updated by the package manager",
+        "Decisions the app already made (dialogs, tokens, tray on macOS and Windows) are not re-asked",
+        "The agent records answers with blueprint.py set, quoting the user's reason, only after the user answers"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Check our desktop blueprint: evals/files/blueprints/bad-consistency.json",
+      "expected_output": "blueprint.py check --blueprint evals/files/blueprints/bad-consistency.json exits 1 with errors for the macOS menu bar set to none, deep links without a scheme, and a per-platform value for a platform that isn't enabled. The agent explains each in plain language and proposes fixes for the user to choose, without changing the file on its own.",
+      "files": ["evals/files/blueprints/bad-consistency.json"],
+      "expectations": [
+        "The agent runs blueprint.py check against the given file",
+        "The agent reports the macos-menu-bar error and proposes a minimal menu bar instead",
+        "The agent reports the deep-link-scheme error and asks which URL scheme to use",
+        "The agent reports the per-platform-key error naming the platform that isn't enabled",
+        "The agent does not edit the blueprint or set confirmedByUser without the user's answer"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Just confirm the blueprint for me and move on to the design, I trust you.",
+      "expected_output": "The agent treats 'I trust you' as the user's own instruction to confirm, but first shows the blueprint (blueprint.py show) and the warnings from check, and only runs blueprint.py confirm with a note quoting the user. It then hands off to maui-desktop-design.",
+      "files": ["evals/files/blueprints/valid-tool.json"],
+      "expectations": [
+        "The agent runs blueprint.py check before confirming and reports any warnings",
+        "The agent shows a summary of what is being confirmed (blueprint.py show or equivalent)",
+        "The agent runs blueprint.py confirm with a --note quoting the user's words",
+        "The agent names maui-desktop-design as the next step"
+      ]
+    }
+  ]
+}

@@ -16,6 +16,7 @@ skills).
 |---|---|---|
 | **`skill-reflect`** | A privacy-conscious feedback loop that analyzes how session skills actually performed, returns actionable findings plus evals in chat, and can optionally save or route them to authors. | [↓ skill-reflect](#skill-reflect) |
 | **`app-stores`** | Four skills for your App Store and Google Play presence: listing words and assets, real captures, designed screenshots and preview videos. Start from what's live, work across devices and languages, check offline, and approve a plan before anything is sent. Any app, any stack. | [↓ app-stores](#app-stores) |
+| **`maui-desktop`** | Desktop apps for macOS, Windows and Linux with .NET MAUI: native controls where the look and feel matters most, Blazor Hybrid content everywhere else, and no seams between them. Plan the app's shape with its user, then a design language both the web content and the native chrome read. Teaches structure; never pastes template code. | [↓ maui-desktop](#maui-desktop) |
 
 ---
 
@@ -246,6 +247,42 @@ Planned skills: `store-signing` ([#14](https://github.com/Redth/skills/issues/14
 
 ---
 
+# maui-desktop
+
+**A desktop app for macOS, Windows and Linux with .NET MAUI that feels at home on each.** Native controls go where
+the platform owns the behaviour (the window, sidebar, toolbar, menus, dialog frames, tray); web content (Blazor
+Hybrid) goes where the content is the app's own; and the seams between them are designed, not discovered. The
+skills interview you, record the decisions, and describe how to structure each part in your app's own conventions.
+
+## The maui-desktop skills
+
+| Skill | What it does |
+|---|---|
+| [`maui-desktop-blueprint`](./plugins/maui-desktop/skills/maui-desktop-blueprint/) | Reads an existing project first (heads, backend versions, UI sharing, shell and dialog generation, design system, integrations, packaging), then interviews you in one message with a proposed answer for every question: platforms, native or web per surface, dialogs, how platform-specific the content looks, tray, notifications, deep links, updates, distribution. Records the answers with reasons in `desktop-blueprint.json` and a dated decisions log, checks them for contradictions and platform costs, and writes a gap report for an existing app. |
+| `maui-desktop-design` | To follow: the design language, tokens generated into CSS and C#, icons per platform, the seam checklist and the gates. |
+
+Planned after those: `maui-desktop-shell`, `maui-desktop-dialogs`, `maui-desktop-integrations` and `maui-desktop-ship`.
+
+## For consumers — using maui-desktop
+
+```text
+/plugin marketplace add Redth/skills
+/plugin install maui-desktop@redth-skills
+```
+
+> We're starting a desktop app with MAUI and Blazor for Mac, Windows and Linux. How should we structure it?
+>
+> Review our MAUI desktop app: what should be native, what should be web, and what do we change first?
+>
+> Should we add a tray icon and notifications? What does that cost on Linux?
+
+**Local and read-only by default.** The scripts read project files; they never build, run or change app code,
+and never touch the network. Stdlib Python 3.8+ on macOS, Linux or Windows.
+
+Workflows, commands and the contributor guide: [plugins/maui-desktop/README.md](./plugins/maui-desktop/README.md).
+
+---
+
 ## Repository layout
 
 ```
@@ -261,6 +298,7 @@ examples/                         # sample artifacts + sample evals
 docs/                             # CONTRACT.md (the interface spec every component honors) + design docs
 tools/                            # local validation gates + tools/ab_eval/ (A/B skill-change eval harness)
 plugins/app-stores/               # the app-stores plugin (its own CONTRACT.md, shared/, skills/, tools/)
+plugins/maui-desktop/             # the maui-desktop plugin (its own CONTRACT.md, shared/, skills/, tools/)
 ```
 
 ## Contributing

@@ -1,0 +1,30 @@
+<Project>
+
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk.Razor" />
+
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+    <TargetFramework>net11.0-windows10.0.19041.0</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseMaui>true</UseMaui>
+    <RootNamespace>SampleMonitor.Windows</RootNamespace>
+    <ApplicationTitle>Sample Monitor</ApplicationTitle>
+    <ApplicationId>com.example.samplemonitor</ApplicationId>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="!$([MSBuild]::IsOSPlatform('windows'))">
+    <TargetFramework>net11.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="11.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../SampleMonitor.Ui/SampleMonitor.Ui.csproj" />
+    <ProjectReference Include="../SampleMonitor.Core/SampleMonitor.Core.csproj" />
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk.Razor" />
+
+</Project>
