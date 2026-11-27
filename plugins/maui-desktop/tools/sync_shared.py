@@ -31,6 +31,7 @@ ITEMS = {
 # Which skills get which shared items.
 SYNC = {
     "maui-desktop-blueprint": ("mauidesktop_lib",),
+    "maui-desktop-design": ("mauidesktop_lib",),
 }
 
 # Never copied, never counted as drift.

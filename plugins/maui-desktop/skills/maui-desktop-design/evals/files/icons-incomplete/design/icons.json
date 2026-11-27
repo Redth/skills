@@ -1,0 +1,16 @@
+{
+  "$comment": "refresh has no gtk name, so the Linux toolbar would show a blank button: icons.py build fails and writes nothing.",
+  "version": 1,
+  "meta": { "name": "Sample Notes", "windows": "svg" },
+  "platforms": ["macos", "windows", "linux", "web"],
+  "outputs": {
+    "csharp": { "path": "src/SampleNotes.Core/Shell/Icons.g.cs", "namespace": "SampleNotes.Core.Shell" },
+    "sprite": "src/SampleNotes/wwwroot/icons/sprite.svg"
+  },
+  "geometry": { "viewBox": "0 0 24 24", "strokeWidth": 1.75, "linecap": "round", "linejoin": "round" },
+  "icons": {
+    "add": { "sf": "plus", "gtk": "list-add-symbolic", "svg": "<path d='M12 5v14M5 12h14'/>" },
+    "refresh": { "sf": "arrow.clockwise", "svg": "<path d='M20 11a8 8 0 1 0-2.3 5.7'/><path d='M20 4v7h-7'/>" },
+    "close": { "sf": "xmark", "gtk": "window-close-symbolic", "svg": "<path d='m6 6 12 12M18 6 6 18'/>" }
+  }
+}

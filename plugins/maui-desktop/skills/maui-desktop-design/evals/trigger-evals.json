@@ -1,0 +1,19 @@
+[
+  { "query": "Create a design system for our .NET MAUI Blazor Hybrid desktop app.", "should_trigger": true },
+  { "query": "Make our MAUI app's Blazor content feel native on macOS, Windows and Linux.", "should_trigger": true },
+  { "query": "Generate CSS variables and C# color constants from one design tokens file for our MAUI app.", "should_trigger": true },
+  { "query": "Dark mode looks off where our Blazor content meets the native macOS toolbar.", "should_trigger": true },
+  { "query": "Map our icons to SF Symbols, Adwaita icon names and Segoe Fluent for our desktop MAUI app.", "should_trigger": true },
+  { "query": "Write a DESIGN.md for our hybrid desktop app with per-platform differences.", "should_trigger": true },
+  { "query": "Check the color contrast of our MAUI app's design tokens in light and dark mode.", "should_trigger": true },
+  { "query": "Stop people hard-coding hex colors in our Razor files: add a lint to CI.", "should_trigger": true },
+  { "query": "Which CSS features can we use in WKWebView, WebView2 and WebKitGTK?", "should_trigger": true },
+  { "query": "Our Windows title bar is purple but the web accent is blue. Make them match.", "should_trigger": true },
+  { "query": "Should our MAUI app's sidebar be native or web on Linux?", "should_trigger": false },
+  { "query": "Plan which desktop integrations our MAUI app needs: tray, notifications, deep links.", "should_trigger": false },
+  { "query": "Design App Store screenshots with captions for our app.", "should_trigger": false },
+  { "query": "Build a Tailwind design system for our marketing website.", "should_trigger": false },
+  { "query": "Create a Figma component library from our React app.", "should_trigger": false },
+  { "query": "Fix our MAUI Android app's splash screen colors.", "should_trigger": false },
+  { "query": "Sign and notarize our macOS app.", "should_trigger": false }
+]

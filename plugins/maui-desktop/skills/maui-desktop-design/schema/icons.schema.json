@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "design/icons.json",
+  "description": "Every icon an app's chrome and content use, mapped per platform (maui-desktop CONTRACT.md section 5). Keys starting with $ are ignored.",
+  "type": "object",
+  "required": ["version", "icons"],
+  "properties": {
+    "version": { "const": 1 },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "csharpPrefix": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+        "windows": { "enum": ["svg", "fluent"] }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": false
+    },
+    "platforms": {
+      "type": "array",
+      "items": { "enum": ["macos", "windows", "linux", "web"] },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "outputs": {
+      "type": "object",
+      "properties": {
+        "csharp": {
+          "type": "object",
+          "required": ["path", "namespace"],
+          "properties": {
+            "path": { "$ref": "#/$defs/path" },
+            "namespace": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$" }
+          },
+          "patternProperties": { "^\\$": {} },
+          "additionalProperties": false
+        },
+        "sprite": { "$ref": "#/$defs/path" },
+        "razor": { "$ref": "#/$defs/path" },
+        "macosMarks": { "$ref": "#/$defs/path" },
+        "ignored": {
+          "type": "array",
+          "items": { "enum": ["csharp", "sprite", "razor", "macosMarks"] },
+          "uniqueItems": true
+        }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": false
+    },
+    "geometry": {
+      "type": "object",
+      "properties": {
+        "viewBox": { "type": "string", "pattern": "^-?[0-9.]+ -?[0-9.]+ [0-9.]+ [0-9.]+$" },
+        "strokeWidth": { "type": "number", "exclusiveMinimum": 0 },
+        "linecap": { "enum": ["butt", "round", "square"] },
+        "linejoin": { "enum": ["miter", "round", "bevel"] }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": false
+    },
+    "icons": {
+      "type": "object",
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": { "$ref": "#/$defs/icon" }
+    },
+    "marks": {
+      "type": "object",
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": { "$ref": "#/$defs/mark" }
+    }
+  },
+  "patternProperties": { "^\\$": {} },
+  "additionalProperties": false,
+  "$defs": {
+    "path": { "type": "string", "minLength": 1 },
+    "icon": {
+      "type": "object",
+      "properties": {
+        "sf": { "type": "string" },
+        "gtk": { "type": "string" },
+        "fluent": { "type": "string", "pattern": "^[0-9A-Fa-f]{4,5}$" },
+        "svg": { "type": "string" }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": false
+    },
+    "mark": {
+      "type": "object",
+      "required": ["svg"],
+      "properties": {
+        "svg": { "type": "string", "minLength": 1 }
+      },
+      "patternProperties": { "^\\$": {} },
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}

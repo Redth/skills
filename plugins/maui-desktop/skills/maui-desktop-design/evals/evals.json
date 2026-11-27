@@ -1,0 +1,73 @@
+{
+  "skill_name": "maui-desktop-design",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We've agreed our blueprint (Sample Notes, macOS, Windows and Linux, adaptive fidelity, brand accent). Now set up the design language and the tokens so our Blazor content and native chrome use the same colours.",
+      "expected_output": "Before writing tokens, the agent proposes a direction (character, neutrals, accent colour, density, the per-platform matrix) and stops for agreement. After agreement it runs tokens.py init --blueprint, edits the roles, runs tokens.py build and tokens.py contrast, starts DESIGN.md from the template, and explains what each head must do (stamp data-platform/data-theme, read native colours from the generated C#, push the window background).",
+      "files": [],
+      "expectations": [
+        "The agent proposes a direction with reasons and asks for agreement before writing design/tokens.json",
+        "The proposal includes a per-platform matrix (font, base size, radii, control height) for macOS, Windows and Linux",
+        "The agent uses tokens.py init (not a hand-written CSS variables file) and keeps roles semantic",
+        "The agent runs tokens.py build and tokens.py contrast and reports the results",
+        "The agent explains that native chrome reads colours from the generated C# rather than hex literals",
+        "The agent says each web view (main window, dialogs, extra windows) needs data-platform and data-theme before first paint",
+        "No page or component is given platform-specific CSS"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Run the contrast check on evals/files/tokens-bad-contrast and fix it.",
+      "expected_output": "tokens.py contrast --root evals/files/tokens-bad-contrast fails on four things: muted text on bg at 2.48:1 (needs 4.5:1), an out-of-gamut primitive (neon-green), accent and danger too close in both luminance and hue, and an exception for ink on bg that now passes. The agent changes tokens (not the rules' minimums), deletes the stale exception, and re-runs the check to show it passes; the accent/danger change is proposed to the user because it changes the brand.",
+      "files": ["evals/files/tokens-bad-contrast/design/tokens.json"],
+      "expectations": [
+        "The agent runs tokens.py contrast against the fixture",
+        "The agent reports muted on bg at 2.48:1 against the required 4.5:1",
+        "The agent reports the out-of-gamut primitive and lowers its chroma or lightness",
+        "The agent reports the accent versus danger separation failure and proposes a hue or lightness change rather than deleting the rule",
+        "The agent reports the stale ink-on-bg exception and deletes it",
+        "No rule's min is lowered and no new exception is added without the user's agreement",
+        "The agent re-runs tokens.py contrast and it passes"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Our app (evals/files/lint-legacy) has colours hard-coded all over the Razor files. We want to move to tokens without a big-bang rewrite. How do we start?",
+      "expected_output": "The agent runs lint.py to measure, explains the ratchet (capture the current palette in tokens.json, generate, swap the source, baseline the lint, then clean file by file), writes the baseline with lint.py --write-baseline only after explaining it, and does not rewrite every file at once.",
+      "files": ["evals/files/lint-legacy/design/tokens.json"],
+      "expectations": [
+        "The agent runs lint.py and reports the counts by rule and file",
+        "The agent recognises the suppressed line (design-lint-ok) as allowed",
+        "The agent proposes capturing the existing palette first so the app looks identical after the swap",
+        "The agent explains the baseline ratchet and uses lint.py --write-baseline",
+        "The agent does not rewrite all the Razor files in one change"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Generate our icons from evals/files/icons-incomplete/design/icons.json.",
+      "expected_output": "icons.py build fails naming the icon missing its gtk mapping. The agent adds a plausible Adwaita symbolic name, says it must be checked against the icon theme, and rebuilds.",
+      "files": ["evals/files/icons-incomplete/design/icons.json"],
+      "expectations": [
+        "The agent runs icons.py build and reports the missing gtk mapping by icon name",
+        "The agent adds a *-symbolic icon name rather than removing linux from platforms",
+        "The agent says the name should be checked in the icon theme",
+        "The agent rebuilds and the build succeeds"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "In dark mode there's a light strip around our Blazor content next to the native macOS sidebar, and the dialogs flash white when they open. What's wrong?",
+      "expected_output": "The agent diagnoses seams: the web view paints its own background instead of being transparent or matching the window colour, and dialog web views don't get the theme before first paint. It points to the seam checklist (transparent web view or matching blank-page colour, native placeholder until ready, data-theme in every web view, window background pushed as --bg) without changing tokens.",
+      "files": [],
+      "expectations": [
+        "The agent identifies the web view's own background as the cause of the strip",
+        "The agent recommends a transparent web view (or matching its blank-page colour) and pushing the window background as --bg",
+        "The agent identifies that each dialog is a separate web view needing the theme before first paint",
+        "The agent recommends hiding the web view behind a native placeholder until content is ready, with a timeout",
+        "The agent does not propose changing colours in a page's styles"
+      ]
+    }
+  ]
+}

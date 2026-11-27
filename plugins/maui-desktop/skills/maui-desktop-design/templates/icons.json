@@ -1,0 +1,187 @@
+{
+  "$comment": [
+    "Every icon the app's chrome and content use, mapped per platform (CONTRACT.md section 5). icons.py build",
+    "generates Icons.g.cs (IconRef and the resolution tables), the SVG sprite and IconSprite.razor from it.",
+    "sf: an SF Symbol name (macOS). gtk: an Adwaita icon name (GTK). fluent: a Segoe Fluent Icons codepoint in hex",
+    "(Windows, when meta.windows is fluent; with svg, Windows draws the sprite geometry). svg: stroke geometry on",
+    "the 24x24 viewBox, painted with currentColor.",
+    "These names and codepoints are a best-effort starting set: check each in the SF Symbols app, in the icon",
+    "theme the Linux build ships with (adwaita-icon-theme) and in the Segoe Fluent Icons reference before relying",
+    "on it. Add the app's own icons the same way; a platform listed in platforms with no mapping fails the build."
+  ],
+  "version": 1,
+  "meta": {"name": "App", "csharpPrefix": "App", "windows": "svg"},
+  "platforms": ["macos", "windows", "linux", "web"],
+  "outputs": {
+    "$comment": "icons.py init fills these from the project's layout. Paths are relative to the project root."
+  },
+  "geometry": {"viewBox": "0 0 24 24", "strokeWidth": 1.75, "linecap": "round", "linejoin": "round"},
+  "icons": {
+    "add": {
+      "sf": "plus",
+      "gtk": "list-add-symbolic",
+      "fluent": "E710",
+      "svg": "<path d='M12 5v14M5 12h14'/>"
+    },
+    "remove": {"sf": "minus", "gtk": "list-remove-symbolic", "fluent": "E738", "svg": "<path d='M5 12h14'/>"},
+    "edit": {
+      "sf": "pencil",
+      "gtk": "document-edit-symbolic",
+      "fluent": "E70F",
+      "svg": "<path d='M4 20h4L19 9a2.12 2.12 0 0 0-3-3L5 17v3Z'/><path d='m14.5 7.5 3 3'/>"
+    },
+    "refresh": {
+      "sf": "arrow.clockwise",
+      "gtk": "view-refresh-symbolic",
+      "fluent": "E72C",
+      "svg": "<path d='M20 11a8 8 0 1 0-2.3 5.7'/><path d='M20 4v7h-7'/>"
+    },
+    "search": {
+      "sf": "magnifyingglass",
+      "gtk": "system-search-symbolic",
+      "fluent": "E721",
+      "svg": "<circle cx='11' cy='11' r='6.5'/><path d='m16 16 4.5 4.5'/>"
+    },
+    "settings": {
+      "sf": "gearshape",
+      "gtk": "emblem-system-symbolic",
+      "fluent": "E713",
+      "svg": "<circle cx='12' cy='12' r='3'/><circle cx='12' cy='12' r='6.5'/><path d='M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1'/>"
+    },
+    "close": {
+      "sf": "xmark",
+      "gtk": "window-close-symbolic",
+      "fluent": "E711",
+      "svg": "<path d='m6 6 12 12M18 6 6 18'/>"
+    },
+    "chevron-left": {
+      "sf": "chevron.left",
+      "gtk": "go-previous-symbolic",
+      "fluent": "E76B",
+      "svg": "<path d='m15 5-7 7 7 7'/>"
+    },
+    "chevron-right": {
+      "sf": "chevron.right",
+      "gtk": "go-next-symbolic",
+      "fluent": "E76C",
+      "svg": "<path d='m9 5 7 7-7 7'/>"
+    },
+    "chevron-up": {
+      "sf": "chevron.up",
+      "gtk": "go-up-symbolic",
+      "fluent": "E70E",
+      "svg": "<path d='m5 15 7-7 7 7'/>"
+    },
+    "chevron-down": {
+      "sf": "chevron.down",
+      "gtk": "go-down-symbolic",
+      "fluent": "E70D",
+      "svg": "<path d='m5 9 7 7 7-7'/>"
+    },
+    "more": {
+      "sf": "ellipsis",
+      "gtk": "view-more-symbolic",
+      "fluent": "E712",
+      "svg": "<circle cx='5' cy='12' r='1.25'/><circle cx='12' cy='12' r='1.25'/><circle cx='19' cy='12' r='1.25'/>"
+    },
+    "filter": {
+      "sf": "line.3.horizontal.decrease",
+      "gtk": "funnel-symbolic",
+      "fluent": "E71C",
+      "svg": "<path d='M4 6h16M7 12h10M10 18h4'/>"
+    },
+    "sort": {
+      "sf": "arrow.up.arrow.down",
+      "gtk": "view-sort-ascending-symbolic",
+      "fluent": "E8CB",
+      "svg": "<path d='M8 20V4M4 8l4-4 4 4M16 4v16M12 16l4 4 4-4'/>"
+    },
+    "copy": {
+      "sf": "doc.on.doc",
+      "gtk": "edit-copy-symbolic",
+      "fluent": "E8C8",
+      "svg": "<rect x='9' y='9' width='11' height='11' rx='2'/><path d='M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3'/>"
+    },
+    "folder": {
+      "sf": "folder",
+      "gtk": "folder-symbolic",
+      "fluent": "E8B7",
+      "svg": "<path d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z'/>"
+    },
+    "file": {
+      "sf": "doc",
+      "gtk": "text-x-generic-symbolic",
+      "fluent": "E8A5",
+      "svg": "<path d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z'/><path d='M14 3v5h5'/>"
+    },
+    "open-external": {
+      "sf": "arrow.up.right.square",
+      "gtk": "external-link-symbolic",
+      "fluent": "E8A7",
+      "svg": "<path d='M14 4h6v6'/><path d='m20 4-9 9'/><path d='M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4'/>"
+    },
+    "info": {
+      "sf": "info.circle",
+      "gtk": "dialog-information-symbolic",
+      "fluent": "E946",
+      "svg": "<circle cx='12' cy='12' r='9'/><path d='M12 11v6M12 7.5h.01'/>"
+    },
+    "warning": {
+      "sf": "exclamationmark.triangle",
+      "gtk": "dialog-warning-symbolic",
+      "fluent": "E7BA",
+      "svg": "<path d='M12 3.5 21.5 20h-19Z'/><path d='M12 10v4.5M12 17.5h.01'/>"
+    },
+    "error": {
+      "sf": "xmark.octagon",
+      "gtk": "dialog-error-symbolic",
+      "fluent": "EA39",
+      "svg": "<circle cx='12' cy='12' r='9'/><path d='m9 9 6 6M15 9l-6 6'/>"
+    },
+    "success": {
+      "sf": "checkmark.circle",
+      "gtk": "emblem-ok-symbolic",
+      "fluent": "E930",
+      "svg": "<circle cx='12' cy='12' r='9'/><path d='m8 12.5 2.5 2.5L16 9.5'/>"
+    },
+    "play": {
+      "sf": "play.fill",
+      "gtk": "media-playback-start-symbolic",
+      "fluent": "E768",
+      "svg": "<path d='M7.5 5v14l11-7Z'/>"
+    },
+    "stop": {
+      "sf": "stop.fill",
+      "gtk": "media-playback-stop-symbolic",
+      "fluent": "E71A",
+      "svg": "<rect x='6' y='6' width='12' height='12' rx='1.5'/>"
+    },
+    "download": {
+      "sf": "arrow.down.circle",
+      "gtk": "folder-download-symbolic",
+      "fluent": "E896",
+      "svg": "<path d='M12 4v11M7 10.5l5 5 5-5M5 20h14'/>"
+    },
+    "upload": {
+      "sf": "arrow.up.circle",
+      "gtk": "send-to-symbolic",
+      "fluent": "E898",
+      "svg": "<path d='M12 15.5V4M7 9l5-5 5 5M5 20h14'/>"
+    },
+    "sidebar-toggle": {
+      "sf": "sidebar.left",
+      "gtk": "sidebar-show-symbolic",
+      "fluent": "E700",
+      "svg": "<rect x='3' y='4' width='18' height='16' rx='2'/><path d='M9 4v16'/>"
+    },
+    "trash": {
+      "sf": "trash",
+      "gtk": "user-trash-symbolic",
+      "fluent": "E74D",
+      "svg": "<path d='M4 7h16M10 7V4.5h4V7M6.5 7l1 12.5h9l1-12.5M10.5 11v5M13.5 11v5'/>"
+    }
+  },
+  "marks": {
+    "$comment": "The app's own marks, which no platform names (a status-item or tray glyph): {\"svg\": \"<path d='…'/>\"}, same geometry rules. Each becomes a mark-<name> sprite symbol, Icons.MarkSvg(name, stroke) and, with outputs.macosMarks, a template image set."
+  }
+}

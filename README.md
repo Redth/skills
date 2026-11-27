@@ -259,7 +259,7 @@ skills interview you, record the decisions, and describe how to structure each p
 | Skill | What it does |
 |---|---|
 | [`maui-desktop-blueprint`](./plugins/maui-desktop/skills/maui-desktop-blueprint/) | Reads an existing project first (heads, backend versions, UI sharing, shell and dialog generation, design system, integrations, packaging), then interviews you in one message with a proposed answer for every question: platforms, native or web per surface, dialogs, how platform-specific the content looks, tray, notifications, deep links, updates, distribution. Records the answers with reasons in `desktop-blueprint.json` and a dated decisions log, checks them for contradictions and platform costs, and writes a gap report for an existing app. |
-| `maui-desktop-design` | To follow: the design language, tokens generated into CSS and C#, icons per platform, the seam checklist and the gates. |
+| [`maui-desktop-design`](./plugins/maui-desktop/skills/maui-desktop-design/) | Agrees a direction with you, then makes the design language executable: `DESIGN.md` from a template, one `design/tokens.json` generating the CSS custom properties and the C# palette and scale the native chrome reads (so the two can't disagree), per-platform type, radii and density, and one `design/icons.json` mapped to SF Symbols, Adwaita, Segoe Fluent and an SVG sprite. Checks contrast and gamut per theme and platform, lints raw values with a baseline an existing app can ratchet down, and carries the seam checklist and the CSS that works in all three web engines. |
 
 Planned after those: `maui-desktop-shell`, `maui-desktop-dialogs`, `maui-desktop-integrations` and `maui-desktop-ship`.
 
